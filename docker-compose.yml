@@ -23,6 +23,12 @@ services:
     image: mysql:8.0
     container_name: laya-mysql
     restart: unless-stopped
+    # MySQL 8.0 configuration for Gibbon CMS compatibility
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=caching_sha2_password
+      - --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-laya_root_password}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-gibbon}
@@ -38,6 +44,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     networks:
       - laya-network
 
