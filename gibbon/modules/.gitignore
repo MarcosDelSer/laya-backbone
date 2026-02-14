@@ -60,6 +60,10 @@
 !/User Admin
 !/User Admin/**
 
+# LAYA custom modules
+!/CareTracking
+!/CareTracking/**
+
 # black list some files and folders
 # in the module folders
 **/.DS_Store

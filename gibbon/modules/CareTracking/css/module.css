@@ -1,0 +1,263 @@
+/*
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* Care Tracking Module Styles */
+
+/* Status indicators for check-in/out */
+.status-checked-in {
+    color: #390;
+    background: #D4F6DC !important;
+    border: 1px solid #390 !important;
+}
+
+.status-checked-out {
+    color: #555;
+    background: #eeeeee !important;
+    border: 1px solid #555 !important;
+}
+
+.status-not-arrived {
+    color: #c00;
+    background: #F6CECB !important;
+    border: 1px solid #c00 !important;
+}
+
+/* Meal quantity indicators */
+.meal-none {
+    color: #c00;
+    background: #F6CECB;
+}
+
+.meal-little {
+    color: #d45602;
+    background: #ffedd5;
+}
+
+.meal-some {
+    color: #555;
+    background: #eeeeee;
+}
+
+.meal-most {
+    color: #3B73AF;
+    background: #DDF0FD;
+}
+
+.meal-all {
+    color: #390;
+    background: #D4F6DC;
+}
+
+/* Nap quality indicators */
+.nap-restless {
+    color: #d45602;
+    background: #ffedd5;
+}
+
+.nap-light {
+    color: #3B73AF;
+    background: #DDF0FD;
+}
+
+.nap-sound {
+    color: #390;
+    background: #D4F6DC;
+}
+
+/* Incident severity badges */
+.incident-minor {
+    color: #d45602;
+    background: #ffedd5;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.incident-major {
+    color: #c00;
+    background: #F6CECB;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.incident-illness {
+    color: #7c3aed;
+    background: #ede9fe;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.incident-behavioral {
+    color: #ea580c;
+    background: #ffedd5;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+/* Activity participation indicators */
+.participation-not-interested {
+    color: #555;
+    background: #eeeeee;
+}
+
+.participation-observing {
+    color: #3B73AF;
+    background: #DDF0FD;
+}
+
+.participation-participating {
+    color: #390;
+    background: #D4F6DC;
+}
+
+.participation-leading {
+    color: #7c3aed;
+    background: #ede9fe;
+}
+
+/* Care dashboard grid */
+.care-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.care-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.care-card-header {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.care-card-content {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* Quick action buttons */
+.quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.quick-action-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+/* Timeline styles for daily report */
+.care-timeline {
+    position: relative;
+    padding-left: 24px;
+    margin: 16px 0;
+}
+
+.care-timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e5e7eb;
+}
+
+.care-timeline-item {
+    position: relative;
+    padding: 8px 0 8px 16px;
+    margin-bottom: 8px;
+}
+
+.care-timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    top: 12px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #3B73AF;
+    border: 2px solid #ffffff;
+}
+
+.care-timeline-time {
+    font-size: 11px;
+    color: #6b7280;
+    margin-bottom: 4px;
+}
+
+.care-timeline-content {
+    font-size: 13px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .care-dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-actions {
+        flex-direction: column;
+    }
+
+    .quick-action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Print styles for daily reports */
+@media print {
+    .care-dashboard {
+        display: block;
+    }
+
+    .care-card {
+        page-break-inside: avoid;
+        margin-bottom: 16px;
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+
+    .quick-actions,
+    .no-print {
+        display: none !important;
+    }
+}
