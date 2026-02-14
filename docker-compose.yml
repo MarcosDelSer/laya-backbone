@@ -88,6 +88,7 @@ services:
       - laya-network
 
   # PHP-FPM 8.3 for Gibbon CMS
+  # Includes automatic database installation on first run
   php-fpm:
     build:
       context: ./docker/php
@@ -95,10 +96,23 @@ services:
     container_name: laya-php
     restart: unless-stopped
     environment:
+      # Database connection
       DB_HOST: mysql
+      DB_PORT: 3306
       DB_NAME: ${MYSQL_DATABASE:-gibbon}
       DB_USER: ${MYSQL_USER:-gibbon}
       DB_PASSWORD: ${MYSQL_PASSWORD:-gibbon_password}
+      # Gibbon admin credentials (for automatic installation)
+      GIBBON_ADMIN_USERNAME: ${GIBBON_ADMIN_USERNAME:-admin}
+      GIBBON_ADMIN_PASSWORD: ${GIBBON_ADMIN_PASSWORD:-laya_admin_2026}
+      GIBBON_ADMIN_EMAIL: ${GIBBON_ADMIN_EMAIL:-admin@laya.local}
+      GIBBON_ADMIN_FIRSTNAME: ${GIBBON_ADMIN_FIRSTNAME:-System}
+      GIBBON_ADMIN_SURNAME: ${GIBBON_ADMIN_SURNAME:-Administrator}
+      # Gibbon configuration
+      GIBBON_ORG_NAME: ${GIBBON_ORG_NAME:-LAYA Childcare}
+      GIBBON_TIMEZONE: ${GIBBON_TIMEZONE:-America/Toronto}
+      GIBBON_LOCALE: ${GIBBON_LOCALE:-en_GB}
+      GIBBON_GUID: ${GIBBON_GUID:-}
     volumes:
       - ./gibbon:/var/www/html/gibbon
       - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
@@ -110,7 +124,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 60s
     networks:
       - laya-network
 

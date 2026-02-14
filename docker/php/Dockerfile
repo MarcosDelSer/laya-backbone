@@ -100,6 +100,14 @@ RUN echo 'pm.max_children = 50' >> /usr/local/etc/php-fpm.d/www.conf \
 RUN printf '#!/bin/sh\nSCRIPT_NAME=/ping SCRIPT_FILENAME=/ping REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 | grep -q pong\n' > /usr/local/bin/php-fpm-healthcheck \
     && chmod +x /usr/local/bin/php-fpm-healthcheck
 
+# Install bash for entrypoint script
+RUN apk add --no-cache bash
+
+# Copy and configure entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 9000
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["php-fpm"]
