@@ -7,4 +7,6 @@ Modules:
     coaching: Router for special needs coaching guidance endpoints
 """
 
-__all__: list[str] = []
+from app.routers.coaching import router as coaching_router
+
+__all__: list[str] = ["coaching_router"]
