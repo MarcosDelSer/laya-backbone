@@ -9,25 +9,14 @@
  */
 
 import React, {useEffect} from 'react';
-import {StatusBar, BackHandler, Platform, View, Text, StyleSheet} from 'react-native';
+import {StatusBar, BackHandler, Platform} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
+import TabNavigator from './src/navigation/TabNavigator';
+
 // Platform detection helper
 const isAndroid = Platform.OS === 'android';
-
-/**
- * Placeholder screen until TabNavigator is implemented
- * This will be replaced with proper navigation in subsequent subtasks
- */
-function PlaceholderScreen(): React.JSX.Element {
-  return (
-    <View style={styles.placeholder}>
-      <Text style={styles.placeholderText}>LAYA Parent App</Text>
-      <Text style={styles.placeholderSubtext}>Navigation coming soon...</Text>
-    </View>
-  );
-}
 
 /**
  * Main App component with platform-specific configurations for Android/iOS
@@ -86,30 +75,10 @@ function App(): React.JSX.Element {
         translucent={isAndroid}
       />
       <NavigationContainer>
-        {/* TabNavigator will be added in subsequent subtasks */}
-        <PlaceholderScreen />
+        <TabNavigator />
       </NavigationContainer>
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  placeholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#6B5B95',
-  },
-  placeholderText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  placeholderSubtext: {
-    fontSize: 16,
-    color: '#E0D8E8',
-  },
-});
 
 export default App;
