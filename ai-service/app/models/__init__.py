@@ -1,15 +1,22 @@
 """SQLAlchemy models for LAYA AI Service.
 
-This package contains all SQLAlchemy model definitions for database tables
-used by the AI service for analytics and business intelligence.
+This package contains all SQLAlchemy ORM model definitions for the AI service
+database tables.
 
 Modules:
-    analytics: Analytics, forecasting, and compliance models
+    base: Base declarative class for all models
+    coaching: Models for special needs coaching domain
+    analytics: Models for analytics, forecasting, and compliance
 """
 
+from app.models.base import Base
+from app.models.coaching import (
+    CoachingRecommendation,
+    CoachingSession,
+    EvidenceSource,
+)
 from app.models.analytics import (
     AnalyticsMetric,
-    Base,
     ComplianceCheck,
     ComplianceCheckType,
     ComplianceStatus,
@@ -18,13 +25,16 @@ from app.models.analytics import (
 )
 
 __all__ = [
-    # Base model
     "Base",
+    # Coaching models
+    "CoachingSession",
+    "CoachingRecommendation",
+    "EvidenceSource",
     # Analytics models
     "AnalyticsMetric",
     "EnrollmentForecast",
     "ComplianceCheck",
-    # Enums
+    # Analytics enums
     "MetricCategory",
     "ComplianceStatus",
     "ComplianceCheckType",

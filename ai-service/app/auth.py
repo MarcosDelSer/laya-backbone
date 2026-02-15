@@ -6,7 +6,7 @@ Provides token verification and user extraction from JWT tokens.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 import jwt
 from fastapi import HTTPException, status
@@ -34,9 +34,9 @@ class TokenPayload:
         Args:
             payload: Decoded JWT payload dictionary
         """
-        self.sub: str | None = payload.get("sub")
-        self.exp: int | None = payload.get("exp")
-        self.iat: int | None = payload.get("iat")
+        self.sub: Optional[str] = payload.get("sub")
+        self.exp: Optional[int] = payload.get("exp")
+        self.iat: Optional[int] = payload.get("iat")
         self.data: dict[str, Any] = payload
 
 
@@ -82,7 +82,7 @@ async def verify_token(
 def create_token(
     subject: str,
     expires_delta_seconds: int = 3600,
-    additional_claims: dict[str, Any] | None = None,
+    additional_claims: Optional[dict[str, Any]] = None,
 ) -> str:
     """Create a JWT token for testing purposes.
 
