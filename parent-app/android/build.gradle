@@ -1,0 +1,55 @@
+// LAYA Parent App - Project-level build.gradle
+//
+// Top-level build file for the Parent Android app.
+// Includes React Native and Firebase configuration.
+
+// Check if React Native node_modules exist
+def reactNativeModulesExist = file("$rootDir/../node_modules/@react-native/gradle-plugin").exists()
+
+buildscript {
+    ext {
+        // Build configuration
+        buildToolsVersion = "35.0.0"
+        minSdkVersion = 29 // Android 10
+        compileSdkVersion = 35
+        targetSdkVersion = 34 // Android 14
+        ndkVersion = "26.1.10909125"
+        kotlinVersion = "1.9.24"
+
+        // React Native new architecture (disabled by default for stability)
+        newArchEnabled = false
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.6.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+
+        // Firebase Cloud Messaging for push notifications
+        // Note: google-services.json must be placed in android/app/
+        // Download from Firebase Console: https://console.firebase.google.com/
+        classpath("com.google.gms:google-services:4.4.2")
+    }
+}
+
+// Add React Native gradle plugin classpath only if node_modules exist
+if (reactNativeModulesExist) {
+    buildscript {
+        dependencies {
+            classpath("com.facebook.react:react-native-gradle-plugin")
+        }
+    }
+}
+
+// Note: Repository configuration is handled in settings.gradle
+// using dependencyResolutionManagement with PREFER_SETTINGS mode.
+// Do not add allprojects.repositories here to avoid conflicts.
+
+// Clean task configuration
+tasks.register('clean', Delete) {
+    delete rootProject.buildDir
+}
