@@ -388,18 +388,23 @@ struct AnalyticsDashboardView: View {
     private var complianceTabContent: some View {
         VStack(alignment: .leading, spacing: 24) {
             if let compliance = viewModel.compliance {
-                // Overall compliance status
+                // Comprehensive compliance view
                 sectionHeader(
                     title: String(localized: "Compliance Status"),
                     subtitle: String(localized: "Quebec regulatory compliance monitoring"),
                     icon: "checkmark.shield.fill"
                 )
 
-                ComplianceOverviewCard(compliance: compliance)
+                ComplianceView(
+                    compliance: compliance,
+                    onSelectCheck: { check in
+                        // Handle check selection for drill-down
+                    }
+                )
 
-                // Individual compliance checks
+                // Individual compliance checks list
                 sectionHeader(
-                    title: String(localized: "Compliance Checks"),
+                    title: String(localized: "Detailed Checks"),
                     subtitle: String(localized: "\(viewModel.filteredComplianceChecks.count) checks"),
                     icon: "checklist"
                 )
@@ -410,17 +415,6 @@ struct AnalyticsDashboardView: View {
                         // Handle check selection for drill-down
                     }
                 )
-
-                // Issues requiring attention
-                if !viewModel.complianceIssues.isEmpty {
-                    sectionHeader(
-                        title: String(localized: "Action Required"),
-                        subtitle: String(localized: "\(viewModel.complianceIssues.count) items need attention"),
-                        icon: "exclamationmark.triangle.fill"
-                    )
-
-                    ComplianceIssuesList(issues: viewModel.complianceIssues)
-                }
             } else {
                 emptyStateView(
                     title: String(localized: "No Compliance Data"),
