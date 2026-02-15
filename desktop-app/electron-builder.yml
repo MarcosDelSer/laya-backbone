@@ -22,7 +22,7 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: build/icon.ico
+  # icon: build/icon.ico  # TODO: Add icon when available
   artifactName: "${productName}-${version}-Setup.${ext}"
 
   # =====================================================
