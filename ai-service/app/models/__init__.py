@@ -8,6 +8,7 @@ Modules:
     coaching: Models for special needs coaching domain
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
+    communication: Models for parent communication domain
 """
 
 from app.models.base import Base
@@ -31,6 +32,11 @@ from app.models.analytics import (
     EnrollmentForecast,
     MetricCategory,
 )
+from app.models.communication import (
+    CommunicationPreference,
+    HomeActivity,
+    ParentReport,
+)
 
 __all__ = [
     "Base",
@@ -51,4 +57,8 @@ __all__ = [
     "MetricCategory",
     "ComplianceStatus",
     "ComplianceCheckType",
+    # Communication models
+    "ParentReport",
+    "HomeActivity",
+    "CommunicationPreference",
 ]

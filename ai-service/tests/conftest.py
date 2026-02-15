@@ -1,7 +1,7 @@
 """Pytest fixtures and test configuration for LAYA AI Service.
 
 Provides reusable fixtures for async testing, database sessions,
-test data, and authentication mocking for both coaching and activity domains.
+test data, and authentication mocking for coaching, activity, and communication domains.
 """
 
 from __future__ import annotations
@@ -194,6 +194,106 @@ CREATE INDEX IF NOT EXISTS idx_participations_activity ON activity_participation
 """
 
 
+# SQLite-compatible communication tables (PostgreSQL ARRAY not supported in SQLite)
+SQLITE_CREATE_COMMUNICATION_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS parent_reports (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    report_date DATE NOT NULL,
+    language VARCHAR(2) NOT NULL DEFAULT 'en',
+    summary TEXT NOT NULL,
+    activities_summary TEXT,
+    mood_summary TEXT,
+    meals_summary TEXT,
+    milestones TEXT,
+    educator_notes TEXT,
+    generated_by TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS home_activities (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    activity_name VARCHAR(200) NOT NULL,
+    activity_description TEXT NOT NULL,
+    materials_needed TEXT,
+    estimated_duration_minutes INTEGER,
+    developmental_area VARCHAR(50),
+    language VARCHAR(2) NOT NULL DEFAULT 'en',
+    based_on_activity_id TEXT,
+    is_completed INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS communication_preferences (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT NOT NULL UNIQUE,
+    child_id TEXT NOT NULL,
+    preferred_language VARCHAR(2) NOT NULL DEFAULT 'en',
+    report_frequency VARCHAR(20) NOT NULL DEFAULT 'daily',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_parent_reports_child ON parent_reports(child_id);
+CREATE INDEX IF NOT EXISTS idx_parent_reports_child_date ON parent_reports(child_id, report_date);
+CREATE INDEX IF NOT EXISTS idx_home_activities_child ON home_activities(child_id);
+CREATE INDEX IF NOT EXISTS idx_comm_prefs_parent ON communication_preferences(parent_id);
+CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(child_id);
+"""
+
+
+# SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
+SQLITE_CREATE_COACHING_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS coaching_sessions (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    context TEXT,
+    special_need_types TEXT,
+    category VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coaching_recommendations (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES coaching_sessions(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    priority VARCHAR(20) NOT NULL DEFAULT 'medium',
+    relevance_score REAL NOT NULL DEFAULT 0.0,
+    target_audience VARCHAR(100) NOT NULL DEFAULT 'educator',
+    prerequisites TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS evidence_sources (
+    id TEXT PRIMARY KEY,
+    recommendation_id TEXT NOT NULL REFERENCES coaching_recommendations(id) ON DELETE CASCADE,
+    source_type VARCHAR(50) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    authors TEXT,
+    publication VARCHAR(200),
+    year INTEGER,
+    doi VARCHAR(100),
+    url VARCHAR(500),
+    isbn VARCHAR(20),
+    accessed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_sessions_child ON coaching_sessions(child_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_sessions_user ON coaching_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_recommendations_session ON coaching_recommendations(session_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_sources_recommendation ON evidence_sources(recommendation_id);
+"""
+
+
 @pytest.fixture(scope="session")
 def event_loop_policy():
     """Use default event loop policy for tests."""
@@ -226,6 +326,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
+    # Create communication tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_COMMUNICATION_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     async with TestAsyncSessionLocal() as session:
         try:
             yield session
@@ -234,12 +341,20 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
     # Drop all tables after test
     async with test_engine.begin() as conn:
+        # Drop evidence sources (foreign key to recommendations)
+        await conn.execute(text("DROP TABLE IF EXISTS evidence_sources"))
+        # Drop coaching recommendations (foreign key to sessions)
+        await conn.execute(text("DROP TABLE IF EXISTS coaching_recommendations"))
+        # Drop coaching sessions
+        await conn.execute(text("DROP TABLE IF EXISTS coaching_sessions"))
+        # Drop communication tables
+        await conn.execute(text("DROP TABLE IF EXISTS communication_preferences"))
+        await conn.execute(text("DROP TABLE IF EXISTS home_activities"))
+        await conn.execute(text("DROP TABLE IF EXISTS parent_reports"))
+        # Drop activity tables
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
-        await conn.execute(text("DROP TABLE IF EXISTS evidence_sources"))
-        await conn.execute(text("DROP TABLE IF EXISTS coaching_recommendations"))
-        await conn.execute(text("DROP TABLE IF EXISTS coaching_sessions"))
 
 
 @pytest_asyncio.fixture
@@ -441,9 +556,9 @@ def sample_child_id_activity() -> UUID:
 
 
 @pytest.fixture
-def sample_child_id() -> UUID:
-    """Fixture for a sample child UUID used in activity tests."""
-    return uuid4()
+def sample_child_id(sample_child_id_activity: UUID) -> UUID:
+    """Alias for sample_child_id_activity for backward compatibility."""
+    return sample_child_id_activity
 
 
 @pytest.fixture
@@ -507,7 +622,7 @@ class MockActivityParticipation:
         self.updated_at = updated_at
 
     def __repr__(self) -> str:
-        return f"<ActivityParticipation(id={self.id}, child_id={self.child_id}, activity_id={self.activity_id})>"
+        return f"<ActivityParticipation(id={self.id}, child_id={self.child_id}, status={self.completion_status})>"
 
 
 class MockActivityRecommendation:
@@ -526,7 +641,7 @@ class MockActivityRecommendation:
         self.updated_at = updated_at
 
     def __repr__(self) -> str:
-        return f"<ActivityRecommendation(id={self.id}, child_id={self.child_id}, activity_id={self.activity_id})>"
+        return f"<ActivityRecommendation(id={self.id}, child_id={self.child_id}, score={self.relevance_score})>"
 
 
 async def create_activity_in_db(
@@ -890,3 +1005,543 @@ def sunny_weather() -> str:
 def rainy_weather() -> str:
     """Rainy weather condition."""
     return "rainy"
+
+
+# ============================================================================
+# Communication fixtures
+# ============================================================================
+
+
+class MockParentReport:
+    """Mock ParentReport object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        child_id,
+        report_date,
+        language,
+        summary,
+        activities_summary,
+        mood_summary,
+        meals_summary,
+        milestones,
+        educator_notes,
+        generated_by,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.child_id = child_id
+        self.report_date = report_date
+        self.language = language
+        self.summary = summary
+        self.activities_summary = activities_summary
+        self.mood_summary = mood_summary
+        self.meals_summary = meals_summary
+        self.milestones = milestones
+        self.educator_notes = educator_notes
+        self.generated_by = generated_by
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<ParentReport(id={self.id}, child_id={self.child_id}, date={self.report_date})>"
+
+
+class MockHomeActivity:
+    """Mock HomeActivity object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        child_id,
+        activity_name,
+        activity_description,
+        materials_needed,
+        estimated_duration_minutes,
+        developmental_area,
+        language,
+        based_on_activity_id,
+        is_completed,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.child_id = child_id
+        self.activity_name = activity_name
+        self.activity_description = activity_description
+        self.materials_needed = materials_needed
+        self.estimated_duration_minutes = estimated_duration_minutes
+        self.developmental_area = developmental_area
+        self.language = language
+        self.based_on_activity_id = based_on_activity_id
+        self.is_completed = is_completed
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<HomeActivity(id={self.id}, name='{self.activity_name}', language={self.language})>"
+
+
+class MockCommunicationPreference:
+    """Mock CommunicationPreference object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        parent_id,
+        child_id,
+        preferred_language,
+        report_frequency,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.parent_id = parent_id
+        self.child_id = child_id
+        self.preferred_language = preferred_language
+        self.report_frequency = report_frequency
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<CommunicationPreference(id={self.id}, parent_id={self.parent_id}, language={self.preferred_language})>"
+
+
+async def create_parent_report_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    report_date: datetime,
+    generated_by: UUID,
+    language: str = "en",
+    summary: str = "Today was a great day!",
+    activities_summary: Optional[str] = None,
+    mood_summary: Optional[str] = None,
+    meals_summary: Optional[str] = None,
+    milestones: Optional[str] = None,
+    educator_notes: Optional[str] = None,
+) -> MockParentReport:
+    """Helper function to create a parent report directly in SQLite database."""
+    report_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO parent_reports (
+                id, child_id, report_date, language, summary, activities_summary,
+                mood_summary, meals_summary, milestones, educator_notes,
+                generated_by, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :report_date, :language, :summary, :activities_summary,
+                :mood_summary, :meals_summary, :milestones, :educator_notes,
+                :generated_by, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": report_id,
+            "child_id": str(child_id),
+            "report_date": report_date.strftime("%Y-%m-%d") if hasattr(report_date, 'strftime') else str(report_date),
+            "language": language,
+            "summary": summary,
+            "activities_summary": activities_summary,
+            "mood_summary": mood_summary,
+            "meals_summary": meals_summary,
+            "milestones": milestones,
+            "educator_notes": educator_notes,
+            "generated_by": str(generated_by),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockParentReport(
+        id=UUID(report_id),
+        child_id=child_id,
+        report_date=report_date,
+        language=language,
+        summary=summary,
+        activities_summary=activities_summary,
+        mood_summary=mood_summary,
+        meals_summary=meals_summary,
+        milestones=milestones,
+        educator_notes=educator_notes,
+        generated_by=generated_by,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_home_activity_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    activity_name: str,
+    activity_description: str,
+    language: str = "en",
+    materials_needed: Optional[List[str]] = None,
+    estimated_duration_minutes: Optional[int] = None,
+    developmental_area: Optional[str] = None,
+    based_on_activity_id: Optional[UUID] = None,
+    is_completed: bool = False,
+) -> MockHomeActivity:
+    """Helper function to create a home activity directly in SQLite database."""
+    import json
+
+    activity_id = str(uuid4())
+    materials_json = json.dumps(materials_needed or [])
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO home_activities (
+                id, child_id, activity_name, activity_description, materials_needed,
+                estimated_duration_minutes, developmental_area, language,
+                based_on_activity_id, is_completed, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :activity_name, :activity_description, :materials_needed,
+                :estimated_duration_minutes, :developmental_area, :language,
+                :based_on_activity_id, :is_completed, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": activity_id,
+            "child_id": str(child_id),
+            "activity_name": activity_name,
+            "activity_description": activity_description,
+            "materials_needed": materials_json,
+            "estimated_duration_minutes": estimated_duration_minutes,
+            "developmental_area": developmental_area,
+            "language": language,
+            "based_on_activity_id": str(based_on_activity_id) if based_on_activity_id else None,
+            "is_completed": 1 if is_completed else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockHomeActivity(
+        id=UUID(activity_id),
+        child_id=child_id,
+        activity_name=activity_name,
+        activity_description=activity_description,
+        materials_needed=materials_needed or [],
+        estimated_duration_minutes=estimated_duration_minutes,
+        developmental_area=developmental_area,
+        language=language,
+        based_on_activity_id=based_on_activity_id,
+        is_completed=is_completed,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_communication_preference_in_db(
+    session: AsyncSession,
+    parent_id: UUID,
+    child_id: UUID,
+    preferred_language: str = "en",
+    report_frequency: str = "daily",
+) -> MockCommunicationPreference:
+    """Helper function to create a communication preference directly in SQLite database."""
+    pref_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO communication_preferences (
+                id, parent_id, child_id, preferred_language, report_frequency,
+                created_at, updated_at
+            ) VALUES (
+                :id, :parent_id, :child_id, :preferred_language, :report_frequency,
+                :created_at, :updated_at
+            )
+        """),
+        {
+            "id": pref_id,
+            "parent_id": str(parent_id),
+            "child_id": str(child_id),
+            "preferred_language": preferred_language,
+            "report_frequency": report_frequency,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockCommunicationPreference(
+        id=UUID(pref_id),
+        parent_id=parent_id,
+        child_id=child_id,
+        preferred_language=preferred_language,
+        report_frequency=report_frequency,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def test_parent_id() -> UUID:
+    """Generate a consistent test parent ID."""
+    return UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+
+
+@pytest.fixture
+def sample_report_request(test_child_id: UUID) -> Dict[str, Any]:
+    """Create a sample report generation request in English."""
+    return {
+        "child_id": str(test_child_id),
+        "report_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "language": "en",
+        "educator_notes": "Great day overall!",
+    }
+
+
+@pytest.fixture
+def sample_french_report_request(test_child_id: UUID) -> Dict[str, Any]:
+    """Create a sample report generation request in French."""
+    return {
+        "child_id": str(test_child_id),
+        "report_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "language": "fr",
+        "educator_notes": "Une excellente journée!",
+    }
+
+
+@pytest.fixture
+def sample_home_activity_data(test_child_id: UUID) -> Dict[str, Any]:
+    """Create sample home activity data for testing."""
+    return {
+        "child_id": test_child_id,
+        "activity_name": "Building Blocks at Home",
+        "activity_description": "Continue developing motor skills by building towers with blocks at home.",
+        "materials_needed": ["wooden blocks", "flat surface"],
+        "estimated_duration_minutes": 20,
+        "developmental_area": "motor",
+        "language": "en",
+        "is_completed": False,
+    }
+
+
+@pytest.fixture
+def sample_french_home_activity_data(test_child_id: UUID) -> Dict[str, Any]:
+    """Create sample home activity data in French for testing."""
+    return {
+        "child_id": test_child_id,
+        "activity_name": "Construction de blocs à la maison",
+        "activity_description": "Continuez à développer la motricité fine en construisant des tours avec des blocs à la maison.",
+        "materials_needed": ["blocs en bois", "surface plane"],
+        "estimated_duration_minutes": 20,
+        "developmental_area": "motor",
+        "language": "fr",
+        "is_completed": False,
+    }
+
+
+@pytest.fixture
+def sample_communication_preference_request(
+    test_parent_id: UUID,
+    test_child_id: UUID,
+) -> Dict[str, Any]:
+    """Create a sample communication preference request."""
+    return {
+        "parent_id": str(test_parent_id),
+        "child_id": str(test_child_id),
+        "preferred_language": "en",
+        "report_frequency": "daily",
+    }
+
+
+@pytest.fixture
+def sample_french_communication_preference_request(
+    test_parent_id: UUID,
+    test_child_id: UUID,
+) -> Dict[str, Any]:
+    """Create a sample French communication preference request."""
+    return {
+        "parent_id": str(test_parent_id),
+        "child_id": str(test_child_id),
+        "preferred_language": "fr",
+        "report_frequency": "daily",
+    }
+
+
+@pytest_asyncio.fixture
+async def sample_parent_report(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+    test_user_id: UUID,
+) -> MockParentReport:
+    """Create a sample parent report in the database."""
+    return await create_parent_report_in_db(
+        db_session,
+        child_id=test_child_id,
+        report_date=datetime.now(timezone.utc),
+        generated_by=test_user_id,
+        language="en",
+        summary="Today was a wonderful day at the daycare! Your child participated in several engaging activities.",
+        activities_summary="Participated in building blocks, story time, and outdoor play.",
+        mood_summary="Happy and energetic throughout the day.",
+        meals_summary="Ate well at both snack time and lunch.",
+        milestones="Showed improved fine motor skills while stacking blocks.",
+        educator_notes="Great progress this week!",
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_french_parent_report(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+    test_user_id: UUID,
+) -> MockParentReport:
+    """Create a sample French parent report in the database."""
+    return await create_parent_report_in_db(
+        db_session,
+        child_id=test_child_id,
+        report_date=datetime.now(timezone.utc),
+        generated_by=test_user_id,
+        language="fr",
+        summary="Aujourd'hui a été une merveilleuse journée à la garderie! Votre enfant a participé à plusieurs activités enrichissantes.",
+        activities_summary="A participé aux blocs de construction, à l'heure du conte et aux jeux extérieurs.",
+        mood_summary="Joyeux et énergique tout au long de la journée.",
+        meals_summary="A bien mangé lors de la collation et du déjeuner.",
+        milestones="A montré une amélioration de la motricité fine en empilant des blocs.",
+        educator_notes="Excellents progrès cette semaine!",
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_home_activity(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+) -> MockHomeActivity:
+    """Create a sample home activity in the database."""
+    return await create_home_activity_in_db(
+        db_session,
+        child_id=test_child_id,
+        activity_name="Building Blocks at Home",
+        activity_description="Continue developing motor skills by building towers with blocks at home. Start with 3-4 blocks and gradually increase.",
+        materials_needed=["wooden blocks", "flat surface"],
+        estimated_duration_minutes=20,
+        developmental_area="motor",
+        language="en",
+        is_completed=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_french_home_activity(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+) -> MockHomeActivity:
+    """Create a sample French home activity in the database."""
+    return await create_home_activity_in_db(
+        db_session,
+        child_id=test_child_id,
+        activity_name="Construction de blocs à la maison",
+        activity_description="Continuez à développer la motricité fine en construisant des tours avec des blocs. Commencez avec 3-4 blocs et augmentez progressivement.",
+        materials_needed=["blocs en bois", "surface plane"],
+        estimated_duration_minutes=20,
+        developmental_area="motor",
+        language="fr",
+        is_completed=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_communication_preference(
+    db_session: AsyncSession,
+    test_parent_id: UUID,
+    test_child_id: UUID,
+) -> MockCommunicationPreference:
+    """Create a sample communication preference in the database."""
+    return await create_communication_preference_in_db(
+        db_session,
+        parent_id=test_parent_id,
+        child_id=test_child_id,
+        preferred_language="en",
+        report_frequency="daily",
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_french_communication_preference(
+    db_session: AsyncSession,
+    test_parent_id: UUID,
+    test_child_id: UUID,
+) -> MockCommunicationPreference:
+    """Create a sample French communication preference in the database.
+
+    Note: Uses a different parent_id to avoid unique constraint violation
+    with sample_communication_preference fixture.
+    """
+    french_parent_id = UUID("ffffffff-ffff-ffff-ffff-ffffffffffff")
+    return await create_communication_preference_in_db(
+        db_session,
+        parent_id=french_parent_id,
+        child_id=test_child_id,
+        preferred_language="fr",
+        report_frequency="daily",
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_home_activities(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+) -> List[MockHomeActivity]:
+    """Create multiple sample home activities with varied properties."""
+    activities_data = [
+        {
+            "activity_name": "Building Blocks at Home",
+            "activity_description": "Continue motor skills development by building towers.",
+            "materials_needed": ["wooden blocks", "flat surface"],
+            "estimated_duration_minutes": 20,
+            "developmental_area": "motor",
+            "language": "en",
+        },
+        {
+            "activity_name": "Story Time Together",
+            "activity_description": "Read age-appropriate stories together and discuss the pictures.",
+            "materials_needed": ["picture books"],
+            "estimated_duration_minutes": 15,
+            "developmental_area": "language",
+            "language": "en",
+        },
+        {
+            "activity_name": "Sensory Play",
+            "activity_description": "Explore different textures with rice or sand in a bin.",
+            "materials_needed": ["bin", "rice or sand", "scoops"],
+            "estimated_duration_minutes": 25,
+            "developmental_area": "sensory",
+            "language": "en",
+        },
+        {
+            "activity_name": "Counting Games",
+            "activity_description": "Practice counting objects around the house.",
+            "materials_needed": ["toys", "snacks for counting"],
+            "estimated_duration_minutes": 10,
+            "developmental_area": "cognitive",
+            "language": "en",
+        },
+        {
+            "activity_name": "Dance Party",
+            "activity_description": "Put on music and dance together for fun exercise.",
+            "materials_needed": ["music player"],
+            "estimated_duration_minutes": 15,
+            "developmental_area": "social",
+            "language": "en",
+        },
+    ]
+
+    activities = []
+    for data in activities_data:
+        activity = await create_home_activity_in_db(
+            db_session,
+            child_id=test_child_id,
+            **data,
+        )
+        activities.append(activity)
+
+    return activities
