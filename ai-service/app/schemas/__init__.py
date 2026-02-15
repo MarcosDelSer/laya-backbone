@@ -1,0 +1,75 @@
+"""Pydantic schemas for LAYA AI Service.
+
+This package contains all Pydantic schema definitions for request/response
+validation and serialization across the AI service domains.
+
+Modules:
+    base: Base schema classes and common mixins
+    activity: Activity recommendation schemas
+    coaching: Special needs coaching guidance schemas
+"""
+
+from app.schemas.activity import (
+    ActivityBase,
+    ActivityDifficulty,
+    ActivityListResponse,
+    ActivityRecommendation,
+    ActivityRecommendationRequest,
+    ActivityRecommendationResponse,
+    ActivityRequest,
+    ActivityResponse,
+    ActivityType,
+    AgeRange,
+)
+from app.schemas.base import (
+    BaseResponse,
+    BaseSchema,
+    IDMixin,
+    PaginatedResponse,
+    PaginationParams,
+    TimestampMixin,
+)
+from app.schemas.coaching import (
+    CoachingBase,
+    CoachingCategory,
+    CoachingGuidance,
+    CoachingGuidanceRequest,
+    CoachingGuidanceResponse,
+    CoachingListResponse,
+    CoachingPriority,
+    CoachingRequest,
+    CoachingResponse,
+    SpecialNeedType,
+)
+
+__all__ = [
+    # Base schemas
+    "BaseSchema",
+    "BaseResponse",
+    "TimestampMixin",
+    "IDMixin",
+    "PaginationParams",
+    "PaginatedResponse",
+    # Activity schemas
+    "ActivityType",
+    "ActivityDifficulty",
+    "AgeRange",
+    "ActivityBase",
+    "ActivityRequest",
+    "ActivityResponse",
+    "ActivityRecommendationRequest",
+    "ActivityRecommendation",
+    "ActivityRecommendationResponse",
+    "ActivityListResponse",
+    # Coaching schemas
+    "SpecialNeedType",
+    "CoachingCategory",
+    "CoachingPriority",
+    "CoachingBase",
+    "CoachingRequest",
+    "CoachingResponse",
+    "CoachingGuidanceRequest",
+    "CoachingGuidance",
+    "CoachingGuidanceResponse",
+    "CoachingListResponse",
+]
