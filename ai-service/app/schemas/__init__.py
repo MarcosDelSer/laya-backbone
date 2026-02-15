@@ -6,6 +6,7 @@ validation and serialization across the AI service domains.
 Modules:
     base: Base schema classes and common mixins
     activity: Activity recommendation schemas
+    analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
 """
 
@@ -28,6 +29,21 @@ from app.schemas.base import (
     PaginatedResponse,
     PaginationParams,
     TimestampMixin,
+)
+from app.schemas.analytics import (
+    ComplianceCheckResponse,
+    ComplianceCheckType,
+    ComplianceCheckWithID,
+    ComplianceListResponse,
+    ComplianceStatus,
+    DashboardResponse,
+    DashboardSummary,
+    ForecastData,
+    ForecastDataPoint,
+    KPIMetric,
+    KPIMetricResponse,
+    KPIMetricsListResponse,
+    MetricCategory,
 )
 from app.schemas.coaching import (
     CoachingBase,
@@ -61,6 +77,20 @@ __all__ = [
     "ActivityRecommendation",
     "ActivityRecommendationResponse",
     "ActivityListResponse",
+    # Analytics schemas
+    "MetricCategory",
+    "ComplianceStatus",
+    "ComplianceCheckType",
+    "KPIMetric",
+    "KPIMetricResponse",
+    "KPIMetricsListResponse",
+    "ForecastDataPoint",
+    "ForecastData",
+    "ComplianceCheckResponse",
+    "ComplianceCheckWithID",
+    "ComplianceListResponse",
+    "DashboardSummary",
+    "DashboardResponse",
     # Coaching schemas
     "SpecialNeedType",
     "CoachingCategory",
