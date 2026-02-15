@@ -294,3 +294,31 @@ INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `val
 INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'patternDetectionThreshold', 'Pattern Detection Threshold', 'Number of incidents within period to trigger pattern alert', '3') ON DUPLICATE KEY UPDATE scope=scope;end
 INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'patternDetectionPeriodDays', 'Pattern Detection Period', 'Number of days to look back for pattern detection', '30') ON DUPLICATE KEY UPDATE scope=scope;end
 ";
+
+// v1.6.00 - Incident pattern detection and alerts
+++$count;
+$sql[$count][0] = '1.6.00';
+$sql[$count][1] = "
+CREATE TABLE IF NOT EXISTS `gibbonCareIncidentPattern` (
+    `gibbonCareIncidentPatternID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonPersonID` INT UNSIGNED NOT NULL COMMENT 'Child with detected pattern',
+    `gibbonSchoolYearID` INT UNSIGNED NOT NULL,
+    `patternType` ENUM('Frequency','Severity','Category','Location','Time','Behavioral') NOT NULL COMMENT 'Type of pattern detected',
+    `detectedAt` DATETIME NOT NULL COMMENT 'When pattern was detected',
+    `incidentCount` INT UNSIGNED NOT NULL COMMENT 'Number of incidents in pattern',
+    `periodDays` INT UNSIGNED NOT NULL COMMENT 'Number of days pattern spans',
+    `incidentIDs` TEXT NOT NULL COMMENT 'JSON array of related incident IDs',
+    `patternDescription` TEXT NULL COMMENT 'Description of detected pattern',
+    `reviewStatus` ENUM('Pending','Reviewed','Dismissed','ActionTaken') NOT NULL DEFAULT 'Pending',
+    `reviewedByID` INT UNSIGNED NULL COMMENT 'Staff who reviewed the pattern',
+    `reviewedAt` DATETIME NULL COMMENT 'When pattern was reviewed',
+    `notes` TEXT NULL COMMENT 'Review notes or action taken',
+    `timestampCreated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY `gibbonPersonID` (`gibbonPersonID`),
+    KEY `gibbonSchoolYearID` (`gibbonSchoolYearID`),
+    KEY `patternType` (`patternType`),
+    KEY `reviewStatus` (`reviewStatus`),
+    KEY `detectedAt` (`detectedAt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+";
