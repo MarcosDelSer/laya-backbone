@@ -1,121 +1,85 @@
 /**
- * LAYA Parent App - Message Bubble Component
+ * LAYA Parent App - MessageBubble Component
  *
- * Displays a single message in a conversation thread with proper styling
- * based on whether it's from the current user or another participant.
- *
- * Adapted from parent-portal/components/MessageBubble.tsx for React Native.
+ * Displays a single message bubble with sender info, content, and timestamp.
+ * Styled differently for messages sent by the current user vs others.
  */
 
 import React from 'react';
-import {View, Text, StyleSheet} from 'react-native';
-
+import {StyleSheet, Text, View} from 'react-native';
 import type {Message} from '../types';
+import {formatMessageTime} from '../api/messagingApi';
 
-// ============================================================================
-// Props Interface
-// ============================================================================
-
+/**
+ * Props for MessageBubble component
+ */
 interface MessageBubbleProps {
-  /** The message to display */
   message: Message;
-  /** Whether the message is from the current user */
   isCurrentUser: boolean;
+  showSenderName?: boolean;
 }
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
 /**
- * Format a timestamp to a readable time string.
+ * Theme colors used across the app
  */
-function formatTime(timestamp: string): string {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
+const COLORS = {
+  primary: '#4A90D9',
+  primaryLight: 'rgba(74, 144, 217, 0.1)',
+  background: '#F5F5F5',
+  cardBackground: '#FFFFFF',
+  text: '#333333',
+  textSecondary: '#666666',
+  textLight: '#999999',
+  messageSent: '#4A90D9',
+  messageReceived: '#F0F0F0',
+};
 
 /**
- * Format a timestamp to a readable date string.
- * Returns 'Today', 'Yesterday', or a formatted date.
- */
-function formatDate(timestamp: string): string {
-  const date = new Date(timestamp);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (date.toDateString() === today.toDateString()) {
-    return 'Today';
-  } else if (date.toDateString() === yesterday.toDateString()) {
-    return 'Yesterday';
-  } else {
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
-    });
-  }
-}
-
-// ============================================================================
-// Component
-// ============================================================================
-
-/**
- * MessageBubble - displays a single message with appropriate styling.
- *
- * Shows the message content, sender name (for received messages), timestamp,
- * and read status indicator (for sent messages).
+ * MessageBubble displays a single message with appropriate styling
+ * based on whether it was sent by the current user or received.
  */
 function MessageBubble({
   message,
   isCurrentUser,
+  showSenderName = true,
 }: MessageBubbleProps): React.JSX.Element {
+  const isRead = message.readAt !== null;
+
   return (
     <View
       style={[
         styles.container,
-        isCurrentUser ? styles.containerRight : styles.containerLeft,
+        isCurrentUser ? styles.containerSent : styles.containerReceived,
       ]}>
       <View
         style={[
           styles.bubble,
           isCurrentUser ? styles.bubbleSent : styles.bubbleReceived,
         ]}>
-        {/* Sender name for received messages */}
-        {!isCurrentUser && (
+        {!isCurrentUser && showSenderName && (
           <Text style={styles.senderName}>{message.senderName}</Text>
         )}
-
-        {/* Message content */}
         <Text
           style={[
-            styles.content,
+            styles.messageContent,
             isCurrentUser ? styles.contentSent : styles.contentReceived,
           ]}>
           {message.content}
         </Text>
-
-        {/* Footer with timestamp and read status */}
-        <View style={styles.footer}>
+        <View style={styles.metaRow}>
           <Text
             style={[
               styles.timestamp,
               isCurrentUser ? styles.timestampSent : styles.timestampReceived,
             ]}>
-            {formatTime(message.timestamp)}
+            {formatMessageTime(message.sentAt)}
           </Text>
           {isCurrentUser && (
             <View style={styles.readIndicator}>
-              {message.read ? (
-                <Text style={styles.readIcon}>✓✓</Text>
+              {isRead ? (
+                <Text style={styles.readIcon}>{'\u2713\u2713'}</Text>
               ) : (
-                <Text style={styles.unreadIcon}>✓</Text>
+                <Text style={styles.unreadIcon}>{'\u2713'}</Text>
               )}
             </View>
           )}
@@ -125,48 +89,43 @@ function MessageBubble({
   );
 }
 
-// ============================================================================
-// Styles
-// ============================================================================
-
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    marginBottom: 16,
+    marginVertical: 4,
     paddingHorizontal: 16,
   },
-  containerLeft: {
-    justifyContent: 'flex-start',
+  containerSent: {
+    alignItems: 'flex-end',
   },
-  containerRight: {
-    justifyContent: 'flex-end',
+  containerReceived: {
+    alignItems: 'flex-start',
   },
   bubble: {
-    maxWidth: '75%',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    maxWidth: '80%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   bubbleSent: {
-    backgroundColor: '#3B82F6',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderBottomLeftRadius: 16,
+    backgroundColor: COLORS.messageSent,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: 18,
     borderBottomRightRadius: 4,
   },
   bubbleReceived: {
-    backgroundColor: '#F3F4F6',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: COLORS.messageReceived,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 16,
+    borderBottomRightRadius: 18,
   },
   senderName: {
     fontSize: 12,
-    fontWeight: '500',
-    color: '#6B7280',
+    fontWeight: '600',
+    color: COLORS.textSecondary,
     marginBottom: 4,
   },
-  content: {
+  messageContent: {
     fontSize: 15,
     lineHeight: 20,
   },
@@ -174,12 +133,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   contentReceived: {
-    color: '#111827',
+    color: COLORS.text,
   },
-  footer: {
+  metaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'flex-end',
+    alignItems: 'center',
     marginTop: 4,
   },
   timestamp: {
@@ -189,22 +148,19 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.7)',
   },
   timestampReceived: {
-    color: '#6B7280',
+    color: COLORS.textLight,
   },
   readIndicator: {
     marginLeft: 4,
   },
   readIcon: {
-    fontSize: 11,
+    fontSize: 12,
     color: 'rgba(255, 255, 255, 0.7)',
-    letterSpacing: -2,
   },
   unreadIcon: {
-    fontSize: 11,
+    fontSize: 12,
     color: 'rgba(255, 255, 255, 0.5)',
   },
 });
 
-// Export helper functions for use in other components
-export {formatDate, formatTime};
 export default MessageBubble;

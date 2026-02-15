@@ -1,316 +1,267 @@
 /**
  * LAYA Parent App - Photo API
  *
- * API functions for fetching, downloading, and managing photos.
- * Provides photo gallery data, individual photo details, and download URLs
- * for parents to view and save their children's photos.
+ * API functions for fetching photos from the PhotoManagement module.
+ * Parents can view photos of their children taken at the school.
  */
 
 import {api} from './client';
 import {API_CONFIG} from './config';
-import type {
-  ApiResponse,
-  Photo,
-  Child,
-  PaginatedResponse,
-} from '../types';
-
-// ============================================================================
-// Response Types
-// ============================================================================
+import type {ApiResponse, Photo, PaginatedResponse} from '../types';
 
 /**
- * Response type for photos list endpoint
+ * Response type for photo list endpoint
  */
-export interface PhotosListResponse {
-  photos: PhotoWithMetadata[];
-  children: Child[];
+interface PhotoListResponse {
+  photos: Photo[];
+  total: number;
 }
 
 /**
- * Photo with additional metadata
+ * Parameters for fetching photos
  */
-export interface PhotoWithMetadata {
-  photo: Photo;
-  child: Child;
-  uploadedAt: string;
-  reportId?: string;
-  reportDate?: string;
-}
-
-/**
- * Filter options for fetching photos
- */
-export interface PhotosFilter {
+interface FetchPhotosParams {
   childId?: string;
+  date?: string;
   startDate?: string;
   endDate?: string;
-  limit?: number;
-  offset?: number;
+  page?: number;
+  pageSize?: number;
 }
 
 /**
- * Photo download response with URL and filename
+ * Fetch photos for the parent's children
  */
-export interface PhotoDownloadResponse {
-  downloadUrl: string;
-  filename: string;
-  contentType: string;
-  size: number;
+export async function fetchPhotos(
+  params?: FetchPhotosParams,
+): Promise<ApiResponse<PhotoListResponse>> {
+  const queryParams: Record<string, string> = {};
+
+  if (params?.childId) {
+    queryParams.childId = params.childId;
+  }
+  if (params?.date) {
+    queryParams.date = params.date;
+  }
+  if (params?.startDate) {
+    queryParams.startDate = params.startDate;
+  }
+  if (params?.endDate) {
+    queryParams.endDate = params.endDate;
+  }
+  if (params?.page !== undefined) {
+    queryParams.page = params.page.toString();
+  }
+  if (params?.pageSize !== undefined) {
+    queryParams.pageSize = params.pageSize.toString();
+  }
+
+  return api.get<PhotoListResponse>(
+    API_CONFIG.endpoints.photos.list,
+    queryParams,
+  );
 }
 
 /**
- * Grouped photos by date
+ * Fetch a single photo by ID
  */
-export interface PhotosByDate {
-  date: string;
-  displayDate: string;
-  photos: PhotoWithMetadata[];
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Get the current date in YYYY-MM-DD format
- */
-function getCurrentDate(): string {
-  const now = new Date();
-  return now.toISOString().split('T')[0];
+export async function fetchPhotoById(
+  photoId: string,
+): Promise<ApiResponse<Photo>> {
+  const endpoint = API_CONFIG.endpoints.photos.details.replace(':id', photoId);
+  return api.get<Photo>(endpoint);
 }
 
 /**
- * Format date for display (e.g., "January 15, 2024")
+ * Fetch paginated photos
  */
-export function formatDateForDisplay(dateString: string): string {
+export async function fetchPhotosPaginated(
+  page: number = 1,
+  pageSize: number = 20,
+  childId?: string,
+): Promise<ApiResponse<PaginatedResponse<Photo>>> {
+  const queryParams: Record<string, string> = {
+    page: page.toString(),
+    pageSize: pageSize.toString(),
+  };
+
+  if (childId) {
+    queryParams.childId = childId;
+  }
+
+  return api.get<PaginatedResponse<Photo>>(
+    API_CONFIG.endpoints.photos.list,
+    queryParams,
+  );
+}
+
+/**
+ * Get photo download URL
+ */
+export function getPhotoDownloadUrl(photoId: string): string {
+  const endpoint = API_CONFIG.endpoints.photos.download.replace(':id', photoId);
+  return `${API_CONFIG.baseUrl}${endpoint}`;
+}
+
+/**
+ * Format photo date for display
+ */
+export function formatPhotoDate(dateString: string): string {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return date.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+  }
+
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday ${date.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}`;
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Group photos by date
+ */
+export function groupPhotosByDate(
+  photos: Photo[],
+): Map<string, Photo[]> {
+  const grouped = new Map<string, Photo[]>();
+
+  photos.forEach(photo => {
+    const dateKey = new Date(photo.takenAt).toISOString().split('T')[0];
+    const existing = grouped.get(dateKey) || [];
+    grouped.set(dateKey, [...existing, photo]);
+  });
+
+  return grouped;
+}
+
+/**
+ * Format date for section headers
+ */
+export function formatSectionDate(dateString: string): string {
+  const date = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return 'Today';
+  }
+
+  if (date.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  }
+
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
     month: 'long',
     day: 'numeric',
   });
 }
 
 /**
- * Check if a date is today
+ * Generate mock photo data for development
  */
-export function isToday(dateString: string): boolean {
-  return dateString === getCurrentDate();
-}
+export function getMockPhotos(): PhotoListResponse {
+  const today = new Date().toISOString();
+  const yesterday = new Date(Date.now() - 86400000).toISOString();
+  const twoDaysAgo = new Date(Date.now() - 172800000).toISOString();
 
-/**
- * Check if a date is yesterday
- */
-export function isYesterday(dateString: string): boolean {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  return dateString === yesterday.toISOString().split('T')[0];
-}
+  const mockPhotos: Photo[] = [
+    {
+      id: 'photo-1',
+      uri: 'https://picsum.photos/seed/photo1/800/600',
+      thumbnailUri: 'https://picsum.photos/seed/photo1/200/150',
+      childIds: ['child-1'],
+      caption: 'Playing in the sandbox during outdoor time',
+      takenAt: today,
+      takenBy: 'Ms. Johnson',
+      downloadUrl: 'https://picsum.photos/seed/photo1/800/600',
+    },
+    {
+      id: 'photo-2',
+      uri: 'https://picsum.photos/seed/photo2/800/600',
+      thumbnailUri: 'https://picsum.photos/seed/photo2/200/150',
+      childIds: ['child-1'],
+      caption: 'Art project - finger painting',
+      takenAt: today,
+      takenBy: 'Ms. Johnson',
+      downloadUrl: 'https://picsum.photos/seed/photo2/800/600',
+    },
+    {
+      id: 'photo-3',
+      uri: 'https://picsum.photos/seed/photo3/800/600',
+      thumbnailUri: 'https://picsum.photos/seed/photo3/200/150',
+      childIds: ['child-1'],
+      caption: 'Story time with friends',
+      takenAt: yesterday,
+      takenBy: 'Ms. Smith',
+      downloadUrl: 'https://picsum.photos/seed/photo3/800/600',
+    },
+    {
+      id: 'photo-4',
+      uri: 'https://picsum.photos/seed/photo4/800/600',
+      thumbnailUri: 'https://picsum.photos/seed/photo4/200/150',
+      childIds: ['child-1'],
+      caption: 'Building blocks tower',
+      takenAt: yesterday,
+      takenBy: 'Ms. Johnson',
+      downloadUrl: 'https://picsum.photos/seed/photo4/800/600',
+    },
+    {
+      id: 'photo-5',
+      uri: 'https://picsum.photos/seed/photo5/800/600',
+      thumbnailUri: 'https://picsum.photos/seed/photo5/200/150',
+      childIds: ['child-1'],
+      caption: 'Music class - playing drums',
+      takenAt: yesterday,
+      takenBy: 'Ms. Davis',
+      downloadUrl: 'https://picsum.photos/seed/photo5/800/600',
+    },
+    {
+      id: 'photo-6',
+      uri: 'https://picsum.photos/seed/photo6/800/600',
+      thumbnailUri: 'https://picsum.photos/seed/photo6/200/150',
+      childIds: ['child-1'],
+      caption: 'Snack time smiles',
+      takenAt: twoDaysAgo,
+      takenBy: 'Ms. Johnson',
+      downloadUrl: 'https://picsum.photos/seed/photo6/800/600',
+    },
+    {
+      id: 'photo-7',
+      uri: 'https://picsum.photos/seed/photo7/800/600',
+      thumbnailUri: 'https://picsum.photos/seed/photo7/200/150',
+      childIds: ['child-1'],
+      caption: 'Learning letters',
+      takenAt: twoDaysAgo,
+      takenBy: 'Ms. Smith',
+      downloadUrl: 'https://picsum.photos/seed/photo7/800/600',
+    },
+    {
+      id: 'photo-8',
+      uri: 'https://picsum.photos/seed/photo8/800/600',
+      thumbnailUri: 'https://picsum.photos/seed/photo8/200/150',
+      childIds: ['child-1'],
+      caption: 'Outdoor exploration',
+      takenAt: twoDaysAgo,
+      takenBy: 'Ms. Johnson',
+      downloadUrl: 'https://picsum.photos/seed/photo8/800/600',
+    },
+  ];
 
-/**
- * Get relative date display (e.g., "Today", "Yesterday", or formatted date)
- */
-export function getRelativeDateDisplay(dateString: string): string {
-  if (isToday(dateString)) {
-    return 'Today';
-  }
-  if (isYesterday(dateString)) {
-    return 'Yesterday';
-  }
-  return formatDateForDisplay(dateString);
-}
-
-/**
- * Generate a filename for a photo download
- */
-export function generatePhotoFilename(photo: Photo, date?: string): string {
-  const timestamp = date || new Date().toISOString().split('T')[0];
-  const sanitizedCaption = photo.caption
-    ? photo.caption.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '_')
-    : 'photo';
-  return `laya_${sanitizedCaption}_${timestamp}_${photo.id.slice(-6)}.jpg`;
-}
-
-// ============================================================================
-// API Functions
-// ============================================================================
-
-/**
- * Fetch all photos for the parent's children
- */
-export async function fetchPhotos(
-  options?: PhotosFilter,
-): Promise<ApiResponse<PaginatedResponse<PhotoWithMetadata>>> {
-  const params: Record<string, string> = {};
-
-  if (options?.childId) {
-    params.childId = options.childId;
-  }
-  if (options?.startDate) {
-    params.startDate = options.startDate;
-  }
-  if (options?.endDate) {
-    params.endDate = options.endDate;
-  }
-  if (options?.limit !== undefined) {
-    params.limit = String(options.limit);
-  }
-  if (options?.offset !== undefined) {
-    params.offset = String(options.offset);
-  }
-
-  return api.get<PaginatedResponse<PhotoWithMetadata>>(
-    API_CONFIG.endpoints.photos.list,
-    params,
-  );
-}
-
-/**
- * Fetch photos for a specific child
- */
-export async function fetchPhotosByChild(
-  childId: string,
-  options?: {
-    startDate?: string;
-    endDate?: string;
-    limit?: number;
-    offset?: number;
-  },
-): Promise<ApiResponse<PaginatedResponse<PhotoWithMetadata>>> {
-  const params: Record<string, string> = {
-    childId,
+  return {
+    photos: mockPhotos,
+    total: mockPhotos.length,
   };
-
-  if (options?.startDate) {
-    params.startDate = options.startDate;
-  }
-  if (options?.endDate) {
-    params.endDate = options.endDate;
-  }
-  if (options?.limit !== undefined) {
-    params.limit = String(options.limit);
-  }
-  if (options?.offset !== undefined) {
-    params.offset = String(options.offset);
-  }
-
-  return api.get<PaginatedResponse<PhotoWithMetadata>>(
-    API_CONFIG.endpoints.photos.byChild,
-    params,
-  );
-}
-
-/**
- * Get download URL for a specific photo
- */
-export async function getPhotoDownloadUrl(
-  photoId: string,
-): Promise<ApiResponse<PhotoDownloadResponse>> {
-  return api.get<PhotoDownloadResponse>(
-    API_CONFIG.endpoints.photos.download,
-    {id: photoId},
-  );
-}
-
-// ============================================================================
-// Data Processing Functions
-// ============================================================================
-
-/**
- * Group photos by date
- */
-export function groupPhotosByDate(
-  photos: PhotoWithMetadata[],
-): PhotosByDate[] {
-  const grouped = new Map<string, PhotoWithMetadata[]>();
-
-  for (const photo of photos) {
-    const date = photo.reportDate || photo.uploadedAt.split('T')[0];
-    const existing = grouped.get(date) || [];
-    existing.push(photo);
-    grouped.set(date, existing);
-  }
-
-  // Convert to array and sort by date (most recent first)
-  const result: PhotosByDate[] = [];
-  const sortedDates = Array.from(grouped.keys()).sort((a, b) => {
-    return new Date(b).getTime() - new Date(a).getTime();
-  });
-
-  for (const date of sortedDates) {
-    const datePhotos = grouped.get(date) || [];
-    result.push({
-      date,
-      displayDate: getRelativeDateDisplay(date),
-      photos: datePhotos,
-    });
-  }
-
-  return result;
-}
-
-/**
- * Sort photos by upload date (most recent first)
- */
-export function sortPhotosByDate(
-  photos: PhotoWithMetadata[],
-): PhotoWithMetadata[] {
-  return [...photos].sort((a, b) => {
-    return new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime();
-  });
-}
-
-/**
- * Filter photos by child ID
- */
-export function filterPhotosByChild(
-  photos: PhotoWithMetadata[],
-  childId: string,
-): PhotoWithMetadata[] {
-  return photos.filter(p => p.child.id === childId);
-}
-
-/**
- * Extract unique children from photos
- */
-export function extractUniqueChildren(photos: PhotoWithMetadata[]): Child[] {
-  const childMap = new Map<string, Child>();
-  for (const photo of photos) {
-    if (!childMap.has(photo.child.id)) {
-      childMap.set(photo.child.id, photo.child);
-    }
-  }
-  return Array.from(childMap.values());
-}
-
-/**
- * Count photos per child
- */
-export function countPhotosPerChild(
-  photos: PhotoWithMetadata[],
-): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const photo of photos) {
-    const current = counts.get(photo.child.id) || 0;
-    counts.set(photo.child.id, current + 1);
-  }
-  return counts;
-}
-
-/**
- * Get photos from the last N days
- */
-export function getRecentPhotos(
-  photos: PhotoWithMetadata[],
-  days: number = 7,
-): PhotoWithMetadata[] {
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
-  const cutoffString = cutoffDate.toISOString().split('T')[0];
-
-  return photos.filter(photo => {
-    const photoDate = photo.reportDate || photo.uploadedAt.split('T')[0];
-    return photoDate >= cutoffString;
-  });
 }

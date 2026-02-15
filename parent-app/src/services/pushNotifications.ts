@@ -10,6 +10,8 @@
  */
 
 import {Platform, Alert} from 'react-native';
+import messaging from '@react-native-firebase/messaging';
+import type {FirebaseMessagingTypes} from '@react-native-firebase/messaging';
 import {api} from '../api/client';
 import {API_CONFIG} from '../api/config';
 
@@ -81,19 +83,21 @@ export type NotificationEventHandler = (payload: NotificationPayload) => void;
 // Internal state
 let isInitialized = false;
 let currentToken: string | null = null;
-// Reserved for future use when Firebase messaging is integrated
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let foregroundHandler: NotificationEventHandler | null = null;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let backgroundHandler: NotificationEventHandler | null = null;
+let messageUnsubscribe: (() => void) | null = null;
+let notificationOpenedUnsubscribe: (() => void) | null = null;
+let tokenRefreshUnsubscribe: (() => void) | null = null;
 
 /**
- * Mock FCM SDK check - in production, this would check if Firebase is properly configured
+ * Check if Firebase Messaging SDK is available
  */
 function isFCMSDKAvailable(): boolean {
-  // Mock implementation - in production would check:
-  // return typeof messaging !== 'undefined' && messaging !== null;
-  return true;
+  try {
+    return messaging !== undefined && messaging !== null;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -104,19 +108,52 @@ export function isPushNotificationSupported(): boolean {
 }
 
 /**
+ * Map Firebase auth status to our permission status type
+ */
+function mapAuthStatusToPermissionStatus(
+  authStatus: FirebaseMessagingTypes.AuthorizationStatus,
+): NotificationPermissionStatus {
+  switch (authStatus) {
+    case messaging.AuthorizationStatus.AUTHORIZED:
+    case messaging.AuthorizationStatus.PROVISIONAL:
+      return 'granted';
+    case messaging.AuthorizationStatus.DENIED:
+      return 'denied';
+    case messaging.AuthorizationStatus.NOT_DETERMINED:
+    default:
+      return 'not_determined';
+  }
+}
+
+/**
+ * Parse remote message to notification payload
+ */
+function parseRemoteMessage(
+  remoteMessage: FirebaseMessagingTypes.RemoteMessage,
+): NotificationPayload {
+  return {
+    type: remoteMessage.data?.type || 'general',
+    title: remoteMessage.notification?.title || '',
+    body: remoteMessage.notification?.body || '',
+    data: remoteMessage.data as Record<string, string> | undefined,
+    notificationId: remoteMessage.messageId,
+  };
+}
+
+/**
  * Get current push notification permission status
- *
- * In production, this would use @react-native-firebase/messaging
- * to check actual permission status
  */
 export async function getPermissionStatus(): Promise<NotificationPermissionStatus> {
-  // Mock implementation - in production would use:
-  // import messaging from '@react-native-firebase/messaging';
-  // const authStatus = await messaging().hasPermission();
-  // return mapAuthStatusToPermissionStatus(authStatus);
+  if (!isFCMSDKAvailable()) {
+    return 'not_determined';
+  }
 
-  // For development, simulate granted permission
-  return 'granted';
+  try {
+    const authStatus = await messaging().hasPermission();
+    return mapAuthStatusToPermissionStatus(authStatus);
+  } catch {
+    return 'not_determined';
+  }
 }
 
 /**
@@ -135,14 +172,19 @@ export async function requestPermission(): Promise<PushNotificationResult<Notifi
     };
   }
 
-  try {
-    // Mock implementation - in production would use:
-    // import messaging from '@react-native-firebase/messaging';
-    // const authStatus = await messaging().requestPermission();
-    // const status = mapAuthStatusToPermissionStatus(authStatus);
+  if (!isFCMSDKAvailable()) {
+    return {
+      success: false,
+      error: {
+        code: 'SDK_NOT_AVAILABLE',
+        message: 'Firebase Cloud Messaging SDK is not available',
+      },
+    };
+  }
 
-    // For development, simulate granted permission
-    const status: NotificationPermissionStatus = 'granted';
+  try {
+    const authStatus = await messaging().requestPermission();
+    const status = mapAuthStatusToPermissionStatus(authStatus);
 
     return {
       success: status === 'granted',
@@ -181,32 +223,41 @@ export async function initializePushNotifications(): Promise<PushNotificationRes
   }
 
   try {
-    // Mock implementation - in production would:
-    // 1. Set up foreground message handler
-    // import messaging from '@react-native-firebase/messaging';
-    // messaging().onMessage(async remoteMessage => {
-    //   if (foregroundHandler) {
-    //     foregroundHandler(parseRemoteMessage(remoteMessage));
-    //   }
-    // });
+    // Set up foreground message handler
+    messageUnsubscribe = messaging().onMessage(async remoteMessage => {
+      if (foregroundHandler) {
+        foregroundHandler(parseRemoteMessage(remoteMessage));
+      }
+    });
 
-    // 2. Set up background message handler
-    // messaging().setBackgroundMessageHandler(async remoteMessage => {
-    //   if (backgroundHandler) {
-    //     backgroundHandler(parseRemoteMessage(remoteMessage));
-    //   }
-    // });
+    // Set up background message handler
+    messaging().setBackgroundMessageHandler(async remoteMessage => {
+      if (backgroundHandler) {
+        backgroundHandler(parseRemoteMessage(remoteMessage));
+      }
+    });
 
-    // 3. Handle notification open events
-    // messaging().onNotificationOpenedApp(remoteMessage => {
-    //   // Handle navigation based on notification type
-    // });
+    // Handle notification open events (app in background)
+    notificationOpenedUnsubscribe = messaging().onNotificationOpenedApp(
+      remoteMessage => {
+        if (foregroundHandler) {
+          foregroundHandler(parseRemoteMessage(remoteMessage));
+        }
+      },
+    );
 
-    // 4. Check if app was opened from a notification
-    // const initialNotification = await messaging().getInitialNotification();
-    // if (initialNotification) {
-    //   // Handle initial notification
-    // }
+    // Handle token refresh
+    tokenRefreshUnsubscribe = messaging().onTokenRefresh(async newToken => {
+      currentToken = newToken;
+      // Re-register with backend when token refreshes
+      await registerTokenWithBackend(newToken);
+    });
+
+    // Check if app was opened from a notification (app was terminated)
+    const initialNotification = await messaging().getInitialNotification();
+    if (initialNotification && foregroundHandler) {
+      foregroundHandler(parseRemoteMessage(initialNotification));
+    }
 
     isInitialized = true;
 
@@ -240,17 +291,12 @@ export async function getDeviceToken(): Promise<PushNotificationResult<string>> 
   }
 
   try {
-    // Mock implementation - in production would use:
-    // import messaging from '@react-native-firebase/messaging';
-    // const token = await messaging().getToken();
-
-    // For development, generate a mock token
-    const mockToken = `mock_fcm_token_${Date.now()}_${Platform.OS}`;
-    currentToken = mockToken;
+    const token = await messaging().getToken();
+    currentToken = token;
 
     return {
       success: true,
-      data: mockToken,
+      data: token,
     };
   } catch (error) {
     return {
@@ -276,7 +322,7 @@ export async function registerTokenWithBackend(
     deviceToken: token,
     platform: Platform.OS as 'ios' | 'android',
     deviceInfo: {
-      model: 'iOS Device', // In production, use device-info package
+      model: 'Device', // In production, use device-info package
       osVersion: Platform.Version.toString(),
       appVersion: '1.0.0', // In production, get from app config
     },
@@ -401,7 +447,7 @@ export function setBackgroundNotificationHandler(
  * Topics allow sending notifications to groups of users.
  */
 export async function subscribeToTopic(
-  _topic: string,
+  topic: string,
 ): Promise<PushNotificationResult> {
   if (!isFCMSDKAvailable()) {
     return {
@@ -413,18 +459,25 @@ export async function subscribeToTopic(
     };
   }
 
-  // Mock implementation - in production would use:
-  // import messaging from '@react-native-firebase/messaging';
-  // await messaging().subscribeToTopic(_topic);
-
-  return {success: true};
+  try {
+    await messaging().subscribeToTopic(topic);
+    return {success: true};
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        code: 'TOKEN_REGISTRATION_FAILED',
+        message: error instanceof Error ? error.message : 'Failed to subscribe to topic',
+      },
+    };
+  }
 }
 
 /**
  * Unsubscribe from a notification topic
  */
 export async function unsubscribeFromTopic(
-  _topic: string,
+  topic: string,
 ): Promise<PushNotificationResult> {
   if (!isFCMSDKAvailable()) {
     return {
@@ -436,11 +489,18 @@ export async function unsubscribeFromTopic(
     };
   }
 
-  // Mock implementation - in production would use:
-  // import messaging from '@react-native-firebase/messaging';
-  // await messaging().unsubscribeFromTopic(_topic);
-
-  return {success: true};
+  try {
+    await messaging().unsubscribeFromTopic(topic);
+    return {success: true};
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        code: 'TOKEN_REGISTRATION_FAILED',
+        message: error instanceof Error ? error.message : 'Failed to unsubscribe from topic',
+      },
+    };
+  }
 }
 
 /**
@@ -460,10 +520,7 @@ export async function deleteToken(): Promise<PushNotificationResult> {
   }
 
   try {
-    // Mock implementation - in production would use:
-    // import messaging from '@react-native-firebase/messaging';
-    // await messaging().deleteToken();
-
+    await messaging().deleteToken();
     currentToken = null;
     return {success: true};
   } catch (error) {
@@ -478,24 +535,39 @@ export async function deleteToken(): Promise<PushNotificationResult> {
 }
 
 /**
+ * Cleanup push notification listeners
+ *
+ * Call this when the app is unmounting or when cleaning up.
+ */
+export function cleanup(): void {
+  if (messageUnsubscribe) {
+    messageUnsubscribe();
+    messageUnsubscribe = null;
+  }
+  if (notificationOpenedUnsubscribe) {
+    notificationOpenedUnsubscribe();
+    notificationOpenedUnsubscribe = null;
+  }
+  if (tokenRefreshUnsubscribe) {
+    tokenRefreshUnsubscribe();
+    tokenRefreshUnsubscribe = null;
+  }
+  isInitialized = false;
+}
+
+/**
  * Show a local notification
  *
  * Used to display notifications when the app is in the foreground.
- * In production, this would use a local notification library.
+ * Note: For production, consider using @notifee/react-native for
+ * better local notification support.
  */
 export function showLocalNotification(
   title: string,
   body: string,
 ): void {
-  // Mock implementation - in production would use:
-  // import notifee from '@notifee/react-native';
-  // await notifee.displayNotification({
-  //   title,
-  //   body,
-  //   android: { channelId: 'default' },
-  // });
-
   // For development, show an alert
+  // In production, use @notifee/react-native for proper local notifications
   Alert.alert(title, body);
 }
 
@@ -513,5 +585,6 @@ export default {
   subscribeToTopic,
   unsubscribeFromTopic,
   deleteToken,
+  cleanup,
   showLocalNotification,
 };

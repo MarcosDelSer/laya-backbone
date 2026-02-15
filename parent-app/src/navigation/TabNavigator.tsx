@@ -10,16 +10,12 @@ import React from 'react';
 import {StyleSheet, View, Text} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
+import type {RootTabParamList} from './types';
 import DailyFeedScreen from '../screens/DailyFeedScreen';
-import PhotoGalleryScreen from '../screens/PhotoGalleryScreen';
-import MessagesScreen from '../screens/MessagesScreen';
-import InvoicesScreen from '../screens/InvoicesScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-
-import type {MainTabParamList} from '../types/navigation';
+import MessagingScreen from '../screens/MessagingScreen';
 
 /**
- * Props for tab bar icon function
+ * Tab icon properties
  */
 interface TabIconProps {
   focused: boolean;
@@ -28,18 +24,18 @@ interface TabIconProps {
 }
 
 /**
- * Theme colors used across the parent app
+ * Theme colors used across the app
  */
 const COLORS = {
-  primary: '#5B8DEF',
+  primary: '#4A90D9',
   tabBarBackground: '#FFFFFF',
-  tabBarBorder: '#E5E5E5',
-  inactive: '#9CA3AF',
-  dailyFeed: '#10B981',
-  photos: '#F59E0B',
-  messages: '#6366F1',
-  invoices: '#8B5CF6',
-  profile: '#EC4899',
+  tabBarBorder: '#E0E0E0',
+  inactive: '#999999',
+  feed: '#4CAF50',
+  photos: '#E91E63',
+  invoices: '#FF9800',
+  messages: '#2196F3',
+  signatures: '#9C27B0',
 };
 
 /**
@@ -68,14 +64,73 @@ function TabIcon({
  * These are simple and work without additional dependencies
  */
 const TAB_ICONS = {
-  DailyFeed: '\u2606', // Star outline (daily activities)
-  Photos: '\u25A1', // Square (photo frame)
+  DailyFeed: '\u2302', // House/home
+  PhotoGallery: '\u25A1', // Square (gallery)
+  Invoices: '\u2750', // Document
   Messages: '\u2709', // Envelope
-  Invoices: '\u2630', // Trigram (document)
-  Profile: '\u263A', // Smiling face
+  Signatures: '\u270D', // Writing hand
 };
 
-const Tab = createBottomTabNavigator<MainTabParamList>();
+/**
+ * Placeholder screen component for screens not yet implemented
+ * These will be replaced with actual screen components in later phases
+ */
+function PlaceholderScreen({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}): React.JSX.Element {
+  return (
+    <View style={styles.placeholderContainer}>
+      <Text style={styles.placeholderTitle}>{title}</Text>
+      <Text style={styles.placeholderDescription}>{description}</Text>
+    </View>
+  );
+}
+
+/**
+ * Temporary placeholder screens
+ * TODO: Replace with actual screen imports once created in phase 6 & 7:
+ * - PhotoGalleryScreen (subtask-6-2) - needs import
+ * - InvoicesScreen (subtask-6-3) - needs import
+ * - DocumentsScreen (subtask-7-2)
+ *
+ * COMPLETED:
+ * - MessagingScreen (subtask-7-1) - imported above
+ */
+
+function PhotoGalleryScreen(): React.JSX.Element {
+  return (
+    <PlaceholderScreen
+      title="Photo Gallery"
+      description="Browse and download photos of your child"
+    />
+  );
+}
+
+function InvoicesScreen(): React.JSX.Element {
+  return (
+    <PlaceholderScreen
+      title="Invoices"
+      description="View and manage your invoices"
+    />
+  );
+}
+
+// MessagingScreen is imported from screens - placeholder removed
+
+function SignaturesScreen(): React.JSX.Element {
+  return (
+    <PlaceholderScreen
+      title="Documents"
+      description="Sign and view important documents"
+    />
+  );
+}
+
+const Tab = createBottomTabNavigator<RootTabParamList>();
 
 /**
  * TabNavigator provides the main navigation structure for the parent app.
@@ -103,48 +158,32 @@ function TabNavigator(): React.JSX.Element {
         name="DailyFeed"
         component={DailyFeedScreen}
         options={{
-          title: 'Daily Feed',
+          title: 'Feed',
           tabBarLabel: 'Feed',
           tabBarIcon: ({color, focused}: TabIconProps) => (
             <TabIcon
               iconText={TAB_ICONS.DailyFeed}
-              color={focused ? COLORS.dailyFeed : color}
+              color={focused ? COLORS.feed : color}
               focused={focused}
             />
           ),
-          tabBarAccessibilityLabel: 'Daily Feed tab',
+          tabBarAccessibilityLabel: 'Daily feed tab',
         }}
       />
       <Tab.Screen
-        name="Photos"
+        name="PhotoGallery"
         component={PhotoGalleryScreen}
         options={{
           title: 'Photos',
           tabBarLabel: 'Photos',
           tabBarIcon: ({color, focused}: TabIconProps) => (
             <TabIcon
-              iconText={TAB_ICONS.Photos}
+              iconText={TAB_ICONS.PhotoGallery}
               color={focused ? COLORS.photos : color}
               focused={focused}
             />
           ),
-          tabBarAccessibilityLabel: 'Photos tab',
-        }}
-      />
-      <Tab.Screen
-        name="Messages"
-        component={MessagesScreen}
-        options={{
-          title: 'Messages',
-          tabBarLabel: 'Messages',
-          tabBarIcon: ({color, focused}: TabIconProps) => (
-            <TabIcon
-              iconText={TAB_ICONS.Messages}
-              color={focused ? COLORS.messages : color}
-              focused={focused}
-            />
-          ),
-          tabBarAccessibilityLabel: 'Messages tab',
+          tabBarAccessibilityLabel: 'Photo gallery tab',
         }}
       />
       <Tab.Screen
@@ -164,19 +203,35 @@ function TabNavigator(): React.JSX.Element {
         }}
       />
       <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
+        name="Messages"
+        component={MessagingScreen}
         options={{
-          title: 'Profile',
-          tabBarLabel: 'Profile',
+          title: 'Messages',
+          tabBarLabel: 'Messages',
           tabBarIcon: ({color, focused}: TabIconProps) => (
             <TabIcon
-              iconText={TAB_ICONS.Profile}
-              color={focused ? COLORS.profile : color}
+              iconText={TAB_ICONS.Messages}
+              color={focused ? COLORS.messages : color}
               focused={focused}
             />
           ),
-          tabBarAccessibilityLabel: 'Profile tab',
+          tabBarAccessibilityLabel: 'Messages tab',
+        }}
+      />
+      <Tab.Screen
+        name="Signatures"
+        component={SignaturesScreen}
+        options={{
+          title: 'Documents',
+          tabBarLabel: 'Documents',
+          tabBarIcon: ({color, focused}: TabIconProps) => (
+            <TabIcon
+              iconText={TAB_ICONS.Signatures}
+              color={focused ? COLORS.signatures : color}
+              focused={focused}
+            />
+          ),
+          tabBarAccessibilityLabel: 'Documents tab',
         }}
       />
     </Tab.Navigator>
@@ -205,11 +260,29 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   iconContainerFocused: {
-    backgroundColor: 'rgba(91, 141, 239, 0.1)',
+    backgroundColor: 'rgba(74, 144, 217, 0.1)',
   },
   iconText: {
     fontSize: 18,
     fontWeight: '600',
+  },
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    padding: 20,
+  },
+  placeholderTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 12,
+  },
+  placeholderDescription: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
   },
 });
 

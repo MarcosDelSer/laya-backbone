@@ -1,576 +1,374 @@
 /**
- * LAYA Parent App - Daily Feed Screen
+ * LAYA Parent App - DailyFeedScreen
  *
- * Displays daily reports for child(ren) with meals, naps, activities, and photos.
- * Supports pull-to-refresh for real-time updates using FlatList with RefreshControl.
- *
- * Adapted from parent-portal/app/daily-reports/page.tsx for React Native.
+ * Main screen displaying a timeline of child activities throughout the day.
+ * Shows meals, naps, activities, photos, and other events in chronological
+ * order with pull-to-refresh functionality.
  */
 
-import React, {useEffect, useCallback} from 'react';
+import React, {useState, useCallback, useEffect} from 'react';
 import {
-  SafeAreaView,
-  View,
-  Text,
-  FlatList,
-  RefreshControl,
   StyleSheet,
+  Text,
+  View,
+  SectionList,
+  RefreshControl,
   ActivityIndicator,
-  TouchableOpacity,
 } from 'react-native';
-
-import type {DailyFeedScreenProps} from '../types/navigation';
-import type {DailyReport} from '../types';
-import {useRefresh} from '../hooks/useRefresh';
-import DailyReportCard from '../components/DailyReportCard';
-import {sortReportsByDate} from '../api/dailyReportsApi';
-
-// ============================================================================
-// Mock Data (for development until API is connected)
-// ============================================================================
-
-const mockReports: DailyReport[] = [
-  {
-    id: 'report-1',
-    date: new Date().toISOString().split('T')[0], // Today
-    childId: 'child-1',
-    meals: [
-      {
-        id: 'meal-1',
-        type: 'breakfast',
-        time: '8:45 AM',
-        notes: 'Ate all of their oatmeal and fruit',
-        amount: 'all',
-      },
-      {
-        id: 'meal-2',
-        type: 'snack',
-        time: '10:30 AM',
-        notes: 'Apple slices and crackers',
-        amount: 'most',
-      },
-      {
-        id: 'meal-3',
-        type: 'lunch',
-        time: '12:00 PM',
-        notes: 'Chicken nuggets, vegetables, and milk',
-        amount: 'some',
-      },
-    ],
-    naps: [
-      {
-        id: 'nap-1',
-        startTime: '12:30 PM',
-        endTime: '2:00 PM',
-        quality: 'good',
-      },
-    ],
-    activities: [
-      {
-        id: 'activity-1',
-        name: 'Art Time',
-        time: '9:00 AM',
-        description: 'Finger painting with watercolors',
-      },
-      {
-        id: 'activity-2',
-        name: 'Story Circle',
-        time: '11:00 AM',
-        description: 'Read "The Very Hungry Caterpillar"',
-      },
-      {
-        id: 'activity-3',
-        name: 'Music & Movement',
-        time: '2:30 PM',
-        description: 'Dancing and singing songs',
-      },
-      {
-        id: 'activity-4',
-        name: 'Outdoor Play',
-        time: '3:30 PM',
-        description: 'Playing on the playground',
-      },
-    ],
-    photos: [
-      {
-        id: 'photo-1',
-        url: '',
-        caption: 'Finger painting during art time',
-        taggedChildren: ['child-1'],
-      },
-      {
-        id: 'photo-2',
-        url: '',
-        caption: 'Playing on the playground',
-        taggedChildren: ['child-1'],
-      },
-    ],
-  },
-  {
-    id: 'report-2',
-    date: new Date(Date.now() - 86400000).toISOString().split('T')[0], // Yesterday
-    childId: 'child-1',
-    meals: [
-      {
-        id: 'meal-4',
-        type: 'breakfast',
-        time: '8:30 AM',
-        notes: 'Scrambled eggs and toast',
-        amount: 'all',
-      },
-      {
-        id: 'meal-5',
-        type: 'snack',
-        time: '10:15 AM',
-        notes: 'Cheese and grapes',
-        amount: 'all',
-      },
-      {
-        id: 'meal-6',
-        type: 'lunch',
-        time: '12:00 PM',
-        notes: 'Pasta with marinara sauce',
-        amount: 'most',
-      },
-    ],
-    naps: [
-      {
-        id: 'nap-2',
-        startTime: '1:00 PM',
-        endTime: '2:30 PM',
-        quality: 'fair',
-      },
-    ],
-    activities: [
-      {
-        id: 'activity-5',
-        name: 'Building Blocks',
-        time: '9:30 AM',
-        description: 'Built a tall tower with friends',
-      },
-      {
-        id: 'activity-6',
-        name: 'Science Exploration',
-        time: '11:00 AM',
-        description: 'Learned about butterflies',
-      },
-      {
-        id: 'activity-7',
-        name: 'Outdoor Play',
-        time: '3:00 PM',
-        description: 'Sandbox and swing time',
-      },
-    ],
-    photos: [
-      {
-        id: 'photo-3',
-        url: '',
-        caption: 'Building blocks activity',
-        taggedChildren: ['child-1'],
-      },
-    ],
-  },
-  {
-    id: 'report-3',
-    date: new Date(Date.now() - 172800000).toISOString().split('T')[0], // 2 days ago
-    childId: 'child-1',
-    meals: [
-      {
-        id: 'meal-7',
-        type: 'breakfast',
-        time: '8:40 AM',
-        notes: 'Pancakes and fruit',
-        amount: 'most',
-      },
-      {
-        id: 'meal-8',
-        type: 'snack',
-        time: '10:30 AM',
-        notes: 'Yogurt and berries',
-        amount: 'all',
-      },
-      {
-        id: 'meal-9',
-        type: 'lunch',
-        time: '12:15 PM',
-        notes: 'Turkey sandwich and veggies',
-        amount: 'some',
-      },
-    ],
-    naps: [
-      {
-        id: 'nap-3',
-        startTime: '12:45 PM',
-        endTime: '2:15 PM',
-        quality: 'good',
-      },
-    ],
-    activities: [
-      {
-        id: 'activity-8',
-        name: 'Circle Time',
-        time: '9:00 AM',
-        description: 'Morning songs and calendar',
-      },
-      {
-        id: 'activity-9',
-        name: 'Sensory Play',
-        time: '10:00 AM',
-        description: 'Playing with playdough',
-      },
-    ],
-    photos: [],
-  },
-];
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
+import ActivityCard from '../components/ActivityCard';
+import {
+  fetchDailyFeed,
+  getMockFeedData,
+  formatDateHeader,
+} from '../api/feedApi';
+import type {FeedEvent, DailyFeed, DailySummary} from '../types';
 
 /**
- * Fetches daily reports data.
- * Uses mock data in development, will connect to API in production.
+ * Section data structure for SectionList
  */
-async function fetchReports(): Promise<DailyReport[]> {
-  // TODO: Replace with actual API call when backend is connected
-  // const response = await fetchTodayReports();
-  // if (response.success && response.data) {
-  //   return response.data.reports.map(r => r.report);
-  // }
-  // throw new Error(response.error?.message || 'Failed to fetch reports');
-
-  // Simulate network delay for realistic UX
-  await new Promise<void>(resolve => setTimeout(resolve, 800));
-
-  // Return sorted mock data
-  return sortReportsByDate(mockReports);
-}
-
-// ============================================================================
-// Sub-components
-// ============================================================================
-
-interface HeaderProps {
-  subtitle: string;
+interface FeedSection {
+  title: string;
+  date: string;
+  summary: DailySummary | null;
+  data: FeedEvent[];
 }
 
 /**
- * Header component with title and subtitle.
+ * Theme colors used across the app
  */
-function Header({subtitle}: HeaderProps): React.JSX.Element {
-  return (
-    <View style={headerStyles.container}>
-      <Text style={headerStyles.title}>Daily Reports</Text>
-      <Text style={headerStyles.subtitle}>{subtitle}</Text>
+const COLORS = {
+  primary: '#4A90D9',
+  background: '#F5F5F5',
+  cardBackground: '#FFFFFF',
+  text: '#333333',
+  textSecondary: '#666666',
+  textLight: '#999999',
+  border: '#E0E0E0',
+  success: '#4CAF50',
+  warning: '#FF9800',
+  info: '#2196F3',
+  purple: '#9C27B0',
+};
+
+/**
+ * DailyFeedScreen displays all child activities in a timeline format
+ */
+function DailyFeedScreen(): React.JSX.Element {
+  const [sections, setSections] = useState<FeedSection[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Load feed data from API
+   */
+  const loadFeed = useCallback(async (showRefreshIndicator = false) => {
+    if (showRefreshIndicator) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+    setError(null);
+
+    try {
+      const response = await fetchDailyFeed();
+
+      if (response.success && response.data) {
+        const feedSections = transformFeedToSections(response.data.feeds);
+        setSections(feedSections);
+      } else {
+        // Use mock data for development
+        const mockData = getMockFeedData();
+        const feedSections = transformFeedToSections(mockData.feeds);
+        setSections(feedSections);
+      }
+    } catch (err) {
+      // Use mock data for development when API is not available
+      const mockData = getMockFeedData();
+      const feedSections = transformFeedToSections(mockData.feeds);
+      setSections(feedSections);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  /**
+   * Transform feed data into section list format
+   */
+  const transformFeedToSections = (feeds: DailyFeed[]): FeedSection[] => {
+    return feeds.map(feed => ({
+      title: formatDateHeader(feed.date),
+      date: feed.date,
+      summary: feed.summary,
+      data: [...feed.events].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      ),
+    }));
+  };
+
+  /**
+   * Initial load
+   */
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
+
+  /**
+   * Handle pull-to-refresh
+   */
+  const handleRefresh = useCallback(() => {
+    loadFeed(true);
+  }, [loadFeed]);
+
+  /**
+   * Handle event card press
+   */
+  const handleEventPress = useCallback((event: FeedEvent) => {
+    // Navigate to event detail or expand - to be implemented
+    // For now, this is a placeholder for future functionality
+  }, []);
+
+  /**
+   * Render section header with date and summary
+   */
+  const renderSectionHeader = ({
+    section,
+  }: {
+    section: FeedSection;
+  }): React.JSX.Element => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{section.title}</Text>
+      {section.summary && (
+        <View style={styles.summaryRow}>
+          {section.summary.mealsCount > 0 && (
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryIcon}>🍽️</Text>
+              <Text style={styles.summaryText}>{section.summary.mealsCount}</Text>
+            </View>
+          )}
+          {section.summary.napMinutes > 0 && (
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryIcon}>😴</Text>
+              <Text style={styles.summaryText}>
+                {section.summary.napMinutes >= 60
+                  ? `${Math.floor(section.summary.napMinutes / 60)}h ${section.summary.napMinutes % 60}m`
+                  : `${section.summary.napMinutes}m`}
+              </Text>
+            </View>
+          )}
+          {section.summary.activitiesCount > 0 && (
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryIcon}>🎨</Text>
+              <Text style={styles.summaryText}>{section.summary.activitiesCount}</Text>
+            </View>
+          )}
+          {section.summary.photosCount > 0 && (
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryIcon}>📷</Text>
+              <Text style={styles.summaryText}>{section.summary.photosCount}</Text>
+            </View>
+          )}
+        </View>
+      )}
     </View>
   );
-}
 
-const headerStyles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: '#6B7280',
-  },
-});
+  /**
+   * Render an activity card item
+   */
+  const renderItem = ({
+    item,
+    index,
+    section,
+  }: {
+    item: FeedEvent;
+    index: number;
+    section: FeedSection;
+  }): React.JSX.Element => (
+    <ActivityCard
+      event={item}
+      showConnector={true}
+      isFirst={index === 0}
+      isLast={index === section.data.length - 1}
+      onPress={handleEventPress}
+    />
+  );
 
-/**
- * Empty state component when no reports are available.
- */
-function EmptyState(): React.JSX.Element {
-  return (
-    <View style={emptyStyles.container}>
-      <View style={emptyStyles.iconContainer}>
-        <Text style={emptyStyles.icon}>📋</Text>
-      </View>
-      <Text style={emptyStyles.title}>No reports available</Text>
-      <Text style={emptyStyles.message}>
-        Daily reports will appear here once they are created by your child's
-        teacher.
+  /**
+   * Render empty state
+   */
+  const renderEmptyState = (): React.JSX.Element => (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyStateIcon}>📋</Text>
+      <Text style={styles.emptyStateTitle}>No Activities Yet</Text>
+      <Text style={styles.emptyStateText}>
+        Check back later to see your child's daily activities and updates.
       </Text>
     </View>
   );
-}
 
-const emptyStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    marginTop: 48,
-  },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  icon: {
-    fontSize: 40,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: 15,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-});
-
-interface ErrorStateProps {
-  message: string;
-  onRetry: () => void;
-}
-
-/**
- * Error state component with retry button.
- */
-function ErrorState({message, onRetry}: ErrorStateProps): React.JSX.Element {
-  return (
-    <View style={errorStyles.container}>
-      <View style={errorStyles.iconContainer}>
-        <Text style={errorStyles.icon}>!</Text>
-      </View>
-      <Text style={errorStyles.title}>Unable to load reports</Text>
-      <Text style={errorStyles.message}>{message}</Text>
-      <TouchableOpacity
-        style={errorStyles.retryButton}
-        onPress={onRetry}
-        activeOpacity={0.7}>
-        <Text style={errorStyles.retryText}>Try Again</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const errorStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    marginTop: 48,
-  },
-  iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#FEE2E2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  icon: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: 15,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  retryButton: {
-    backgroundColor: '#6366F1',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
-
-/**
- * Loading state component.
- */
-function LoadingState(): React.JSX.Element {
-  return (
-    <View style={loadingStyles.container}>
-      <ActivityIndicator size="large" color="#6366F1" />
-      <Text style={loadingStyles.text}>Loading reports...</Text>
-    </View>
-  );
-}
-
-const loadingStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  text: {
-    marginTop: 16,
-    fontSize: 15,
-    color: '#6B7280',
-  },
-});
-
-// ============================================================================
-// Main Component
-// ============================================================================
-
-/**
- * Daily Feed Screen - displays daily reports for children with pull-to-refresh.
- *
- * Features:
- * - FlatList for performant scrolling through reports
- * - Pull-to-refresh using RefreshControl
- * - Loading, empty, and error states
- * - Automatic initial data load
- */
-function DailyFeedScreen(_props: DailyFeedScreenProps): React.JSX.Element {
-  const {refreshing, data, error, onRefresh} = useRefresh<DailyReport[]>(
-    fetchReports,
+  /**
+   * Render section footer spacing
+   */
+  const renderSectionFooter = (): React.JSX.Element => (
+    <View style={styles.sectionFooter} />
   );
 
-  // Initial load on mount
-  useEffect(() => {
-    onRefresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  /**
+   * Key extractor for list items
+   */
+  const keyExtractor = useCallback((item: FeedEvent) => item.id, []);
 
-  // Render individual report card
-  const renderReport = useCallback(
-    ({item}: {item: DailyReport}) => (
-      <View style={styles.reportContainer}>
-        <DailyReportCard report={item} />
-      </View>
-    ),
-    [],
-  );
-
-  // Key extractor for FlatList
-  const keyExtractor = useCallback((item: DailyReport) => item.id, []);
-
-  // List header component
-  const ListHeaderComponent = useCallback(
-    () => (
-      <Header subtitle="View your child's daily activities, meals, and naps" />
-    ),
-    [],
-  );
-
-  // List empty component (shown when data is empty array, not null)
-  const ListEmptyComponent = useCallback(() => {
-    // Don't show empty state while loading or if we haven't fetched yet
-    if (refreshing || data === null) {
-      return null;
-    }
-    return <EmptyState />;
-  }, [refreshing, data]);
-
-  // List footer for spacing
-  const ListFooterComponent = useCallback(
-    () => <View style={styles.listFooter} />,
-    [],
-  );
-
-  // Show loading state on initial load
-  if (data === null && refreshing && !error) {
+  if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Header subtitle="View your child's daily activities, meals, and naps" />
-        <LoadingState />
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading activities...</Text>
+      </View>
     );
   }
 
-  // Show error state if fetch failed and no cached data
-  if (error && data === null) {
+  if (error) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Header subtitle="View your child's daily activities, meals, and naps" />
-        <ErrorState
-          message={error.message || 'Please check your connection and try again.'}
-          onRetry={onRefresh}
-        />
-      </SafeAreaView>
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorIcon}>!</Text>
+        <Text style={styles.errorTitle}>Something went wrong</Text>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <FlatList
-        data={data || []}
-        renderItem={renderReport}
+    <View style={styles.container}>
+      <SectionList
+        sections={sections}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        renderSectionFooter={renderSectionFooter}
         keyExtractor={keyExtractor}
+        ListEmptyComponent={renderEmptyState}
         contentContainerStyle={styles.listContent}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
+        stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#6366F1"
-            colors={['#6366F1']}
-            title="Pull to refresh"
-            titleColor="#6B7280"
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
           />
         }
-        // Performance optimizations
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={5}
-        initialNumToRender={3}
       />
-    </SafeAreaView>
+    </View>
   );
 }
-
-// ============================================================================
-// Styles
-// ============================================================================
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: COLORS.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    padding: 20,
+  },
+  errorIcon: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#C62828',
+    marginBottom: 12,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
   listContent: {
-    flexGrow: 1,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
-  reportContainer: {
+  sectionHeader: {
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: COLORS.background,
   },
-  listFooter: {
-    height: 24,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  summaryIcon: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  summaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  sectionFooter: {
+    height: 8,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    marginTop: 60,
+  },
+  emptyStateIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

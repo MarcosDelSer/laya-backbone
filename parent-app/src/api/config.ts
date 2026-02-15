@@ -1,97 +1,66 @@
 /**
  * LAYA Parent App - API Configuration
  *
- * Configuration for connecting to the backend APIs (AI Service and Gibbon).
- * Configuration can be overridden at build time via react-native-config or similar.
+ * Configuration for connecting to the Gibbon backend API.
+ * Configuration is set at build time via react-native-config or similar.
  */
 
 // Development configuration - can be overridden at build time
-const DEFAULT_AI_SERVICE_URL = 'http://localhost:8000';
-const DEFAULT_GIBBON_URL = 'http://localhost:8080/gibbon';
+const DEFAULT_API_BASE_URL = 'http://localhost/gibbon';
 
-// In production, these would be replaced by environment configuration
-const AI_SERVICE_URL = DEFAULT_AI_SERVICE_URL;
-const GIBBON_URL = DEFAULT_GIBBON_URL;
+// In production, this would be replaced by environment configuration
+// For now, use default development URL
+const API_BASE_URL = DEFAULT_API_BASE_URL;
 
 export const API_CONFIG = {
-  aiServiceUrl: AI_SERVICE_URL,
-  gibbonUrl: GIBBON_URL,
+  baseUrl: API_BASE_URL,
   timeout: 30000, // 30 seconds
-  retryConfig: {
-    maxRetries: 3,
-    initialDelayMs: 1000, // 1 second
-    maxDelayMs: 10000, // 10 seconds
-    backoffMultiplier: 2,
-  },
   endpoints: {
-    // Health check
-    health: '/health',
-
-    // Children endpoints
-    children: {
-      list: '/api/parent/children',
-      details: '/api/parent/children/:id',
-    },
-
-    // Daily reports endpoints
-    dailyReports: {
-      list: '/api/parent/daily-reports',
-      byChild: '/api/parent/children/:childId/daily-reports',
-      details: '/api/parent/daily-reports/:id',
-    },
-
-    // Photo endpoints
-    photos: {
-      list: '/api/parent/photos',
-      byChild: '/api/parent/children/:childId/photos',
-      download: '/api/parent/photos/:id/download',
-    },
-
-    // Message endpoints
-    messages: {
-      threads: '/api/parent/messages/threads',
-      threadMessages: '/api/parent/messages/threads/:threadId/messages',
-      send: '/api/parent/messages/send',
-      createThread: '/api/parent/messages/threads',
-      markRead: '/api/parent/messages/:id/read',
-    },
-
-    // Invoice endpoints
-    invoices: {
-      list: '/api/parent/invoices',
-      details: '/api/parent/invoices/:id',
-      downloadPdf: '/api/parent/invoices/:id/pdf',
-    },
-
-    // Document endpoints
-    documents: {
-      list: '/api/parent/documents',
-      details: '/api/parent/documents/:id',
-      sign: '/api/parent/documents/:id/sign',
-    },
-
-    // Activity recommendations endpoints (AI Service)
-    activities: {
-      recommendations: '/api/parent/activities/recommendations',
-    },
-
-    // Coaching guidance endpoints (AI Service)
-    coaching: {
-      guidance: '/api/parent/coaching/guidance',
-    },
-
-    // Push notification endpoints
-    notifications: {
-      registerToken: '/api/notifications/register-token',
-      unregisterToken: '/api/notifications/unregister-token',
-    },
-
     // Authentication endpoints
     auth: {
-      login: '/api/auth/login',
-      logout: '/api/auth/logout',
-      refresh: '/api/auth/refresh',
-      me: '/api/auth/me',
+      login: '/modules/ParentPortal/api/auth/login',
+      logout: '/modules/ParentPortal/api/auth/logout',
+      refreshToken: '/modules/ParentPortal/api/auth/refresh',
+    },
+    // Daily feed endpoints
+    feed: {
+      list: '/modules/ParentPortal/api/feed',
+      details: '/modules/ParentPortal/api/feed/:id',
+    },
+    // Child endpoints
+    children: {
+      list: '/modules/ParentPortal/api/children',
+      details: '/modules/ParentPortal/api/children/:id',
+    },
+    // Photo gallery endpoints
+    photos: {
+      list: '/modules/PhotoManagement/api/photos',
+      details: '/modules/PhotoManagement/api/photos/:id',
+      download: '/modules/PhotoManagement/api/photos/:id/download',
+    },
+    // Invoice endpoints
+    invoices: {
+      list: '/modules/Finance/api/invoices',
+      details: '/modules/Finance/api/invoices/:id',
+      downloadPdf: '/modules/Finance/api/invoices/:id/pdf',
+    },
+    // Messaging endpoints
+    messaging: {
+      conversations: '/modules/Messenger/api/conversations',
+      messages: '/modules/Messenger/api/conversations/:conversationId/messages',
+      send: '/modules/Messenger/api/conversations/:conversationId/messages',
+      markRead: '/modules/Messenger/api/conversations/:conversationId/read',
+    },
+    // E-Signature endpoints
+    signatures: {
+      pending: '/modules/DataUpdater/api/signatures/pending',
+      document: '/modules/DataUpdater/api/signatures/:id/document',
+      sign: '/modules/DataUpdater/api/signatures/:id/sign',
+    },
+    // Push notification endpoints
+    notifications: {
+      registerToken: '/modules/NotificationEngine/api/register-token',
+      preferences: '/modules/NotificationEngine/api/preferences',
     },
   },
 } as const;
@@ -100,29 +69,19 @@ export type ApiEndpoints = typeof API_CONFIG.endpoints;
 
 /**
  * Build a full URL for an API endpoint
- * @param baseUrl - The base URL (AI service or Gibbon)
- * @param endpoint - The endpoint path
- * @param params - Path and query parameters
  */
-export function buildApiUrl(
-  baseUrl: string,
-  endpoint: string,
-  params?: Record<string, string>,
-): string {
-  let url = `${baseUrl}${endpoint}`;
+export function buildApiUrl(endpoint: string, params?: Record<string, string>): string {
+  let url = `${API_CONFIG.baseUrl}${endpoint}`;
 
   if (params) {
-    // Replace path parameters like :id, :childId, etc.
+    // Replace path parameters like :id
     Object.entries(params).forEach(([key, value]) => {
-      const pathParam = `:${key}`;
-      if (url.includes(pathParam)) {
-        url = url.replace(pathParam, encodeURIComponent(value));
-      }
+      url = url.replace(`:${key}`, encodeURIComponent(value));
     });
 
-    // Add remaining parameters as query string
+    // Add query parameters
     const queryParams = Object.entries(params)
-      .filter(([key]) => !endpoint.includes(`:${key}`))
+      .filter(([key]) => !url.includes(`:${key}`))
       .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
       .join('&');
 
@@ -132,18 +91,4 @@ export function buildApiUrl(
   }
 
   return url;
-}
-
-/**
- * Build URL for AI Service endpoints
- */
-export function buildAiServiceUrl(endpoint: string, params?: Record<string, string>): string {
-  return buildApiUrl(API_CONFIG.aiServiceUrl, endpoint, params);
-}
-
-/**
- * Build URL for Gibbon endpoints
- */
-export function buildGibbonUrl(endpoint: string, params?: Record<string, string>): string {
-  return buildApiUrl(API_CONFIG.gibbonUrl, endpoint, params);
 }

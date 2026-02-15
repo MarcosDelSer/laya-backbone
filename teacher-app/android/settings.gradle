@@ -1,0 +1,58 @@
+// LAYA Teacher App - settings.gradle
+//
+// Gradle settings for the Teacher Android app.
+// Configures plugin management and project structure.
+
+pluginManagement {
+    // Include build scripts from React Native (if available)
+    def reactNativeGradlePlugin = new File(settingsDir, "../node_modules/@react-native/gradle-plugin")
+    if (reactNativeGradlePlugin.exists()) {
+        includeBuild("../node_modules/@react-native/gradle-plugin")
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+// Only apply React Native plugin if node_modules exists
+def reactNativeGradlePluginPath = new File(settings.settingsDir, "../node_modules/@react-native/gradle-plugin")
+if (reactNativeGradlePluginPath.exists()) {
+    plugins {
+        // Apply React Native Gradle Plugin for autolinking and Codegen
+        id("com.facebook.react.settings")
+    }
+
+    // Configure React Native autolinking
+    extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+        ex.autolinkLibrariesFromCommand()
+    }
+}
+
+rootProject.name = 'TeacherApp'
+
+// Include the main app module
+include ':app'
+
+// Apply dependency resolution management
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+
+        // React Native repositories (if node_modules exist)
+        def nodeModulesPath = new File(settings.settingsDir, "../node_modules")
+        if (nodeModulesPath.exists()) {
+            maven {
+                url(new File(nodeModulesPath, "react-native/android"))
+            }
+            maven {
+                url(new File(nodeModulesPath, "jsc-android/dist"))
+            }
+        }
+    }
+}

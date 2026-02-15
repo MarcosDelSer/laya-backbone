@@ -1,138 +1,82 @@
 /**
  * LAYA Parent App - Main Entry Point
  *
- * React Native iOS application for parents to view their children's
- * daily reports, photos, messages, and invoices.
+ * React Native application for parents to view their child's daily
+ * activities, photos, invoices, messages, and receive push notifications.
  *
- * This component wraps the app with necessary providers and
- * initializes the navigation structure.
+ * Supports both iOS and Android with platform-specific adaptations.
+ * Features bottom tab navigation for quick access to all screens.
  */
 
-import React, {useCallback} from 'react';
+import React, {useEffect} from 'react';
+import {StatusBar, BackHandler, Platform} from 'react-native';
+import {NavigationContainer} from '@react-navigation/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
-import AppNavigator from './src/navigation/AppNavigator';
-import {AuthProvider} from './src/contexts/AuthContext';
-import {NotificationProvider} from './src/contexts/NotificationContext';
-import {NotificationPayload} from './src/services/pushNotifications';
+import RootNavigator from './src/navigation/RootNavigator';
+
+// Platform detection helper
+const isAndroid = Platform.OS === 'android';
 
 /**
- * Get stored authentication tokens.
+ * Main App component with platform-specific configurations for Android/iOS
  *
- * In a production app, this should use secure storage like:
- * - react-native-keychain
- * - expo-secure-store
- * - @react-native-async-storage/async-storage (for non-sensitive data)
- *
- * For now, this returns null to require fresh login.
- * TODO: Implement secure token storage
- */
-async function getStoredTokens(): Promise<{
-  accessToken: string | null;
-  refreshToken: string | null;
-}> {
-  // TODO: Implement secure token retrieval
-  // Example with react-native-keychain:
-  // const credentials = await Keychain.getGenericPassword();
-  // if (credentials) {
-  //   const tokens = JSON.parse(credentials.password);
-  //   return {
-  //     accessToken: tokens.accessToken,
-  //     refreshToken: tokens.refreshToken,
-  //   };
-  // }
-  return {accessToken: null, refreshToken: null};
-}
-
-/**
- * Store authentication tokens securely.
- *
- * In a production app, this should use secure storage like:
- * - react-native-keychain
- * - expo-secure-store
- *
- * TODO: Implement secure token storage
- *
- * @param _accessToken - Access token to store (unused pending implementation)
- * @param _refreshToken - Refresh token to store (unused pending implementation)
- */
-async function setStoredTokens(
-  _accessToken: string | null,
-  _refreshToken: string | null,
-): Promise<void> {
-  // TODO: Implement secure token storage
-  // Example with react-native-keychain:
-  // if (_accessToken && _refreshToken) {
-  //   await Keychain.setGenericPassword(
-  //     'laya_parent',
-  //     JSON.stringify({ accessToken: _accessToken, refreshToken: _refreshToken })
-  //   );
-  // } else {
-  //   await Keychain.resetGenericPassword();
-  // }
-}
-
-/**
- * Main App component - entry point for the parent application.
- *
- * Wraps the entire app with:
- * - SafeAreaProvider: Handles safe area insets for iOS devices
- * - AuthProvider: App-wide authentication state management
- * - NotificationProvider: App-wide push notification state management
- * - AppNavigator: Root navigation structure
- *
- * Future additions:
- * - Error boundary
- * - Splash screen handling
+ * Features:
+ * - Platform-specific status bar configuration
+ * - Android hardware back button handling
+ * - SafeArea support for notch/cutout displays
+ * - Navigation container for screen management
  */
 function App(): React.JSX.Element {
   /**
-   * Handle authentication state changes.
-   *
-   * This callback is called when the user logs in or logs out.
-   * Use this for analytics or navigation handling.
-   *
-   * @param _isAuthenticated - Whether the user is authenticated (unused pending implementation)
+   * Configure platform-specific status bar appearance
+   * Android uses translucent status bar with dark background
+   * iOS relies on SafeAreaView for proper layout
    */
-  const handleAuthStateChange = useCallback((_isAuthenticated: boolean) => {
-    // Handle auth state changes
-    // In the future, this can:
-    // - Log analytics events
-    // - Navigate to login screen when logged out
-    // - Register push notifications when logged in
+  useEffect(() => {
+    // Android-specific: Set status bar to translucent for immersive UI
+    if (Platform.OS === 'android') {
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor('transparent');
+      StatusBar.setBarStyle('light-content');
+    }
   }, []);
 
   /**
-   * Handle received push notifications.
+   * Handle Android hardware back button
    *
-   * This callback is called when a notification is received while
-   * the app is in the foreground. Use this to navigate to the
-   * relevant screen based on notification type.
-   *
-   * @param _payload - Notification payload (unused pending implementation)
+   * Returns false to allow default navigation behavior.
+   * In screens where custom handling is needed (e.g., modals, forms),
+   * this can be overridden at the screen level.
    */
-  const handleNotificationReceived = useCallback(
-    (_payload: NotificationPayload) => {
-      // Handle navigation based on notification type
-      // In the future, this can navigate to specific screens:
-      // - 'daily_report' -> DailyFeedScreen
-      // - 'message' -> MessagesScreen
-      // - 'invoice' -> InvoicesScreen
-      // - 'photo' -> PhotosScreen
-    },
-    [],
-  );
+  useEffect(() => {
+    if (!isAndroid) {
+      return;
+    }
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        // Return false to let React Navigation handle the back action
+        // Screens that need custom behavior should add their own handlers
+        return false;
+      },
+    );
+
+    return () => backHandler.remove();
+  }, []);
 
   return (
     <SafeAreaProvider>
-      <AuthProvider
-        getStoredTokens={getStoredTokens}
-        setStoredTokens={setStoredTokens}
-        onAuthStateChange={handleAuthStateChange}>
-        <NotificationProvider onNotificationReceived={handleNotificationReceived}>
-          <AppNavigator />
-        </NotificationProvider>
-      </AuthProvider>
+      {/* Platform-specific status bar configuration */}
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={isAndroid ? '#6B5B95' : 'transparent'}
+        translucent={isAndroid}
+      />
+      <NavigationContainer>
+        <RootNavigator />
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }

@@ -1,0 +1,317 @@
+# LAYA Teacher App - Fastlane Fastfile
+#
+# Automated build and deployment configuration for Android.
+# See https://docs.fastlane.tools for documentation.
+#
+# Usage:
+#   bundle exec fastlane android build_debug    # Build debug APK
+#   bundle exec fastlane android build_release  # Build release APK
+#   bundle exec fastlane android beta           # Deploy to internal track
+#   bundle exec fastlane android production     # Deploy to production
+#
+# Prerequisites:
+#   - Ruby and Bundler installed
+#   - Android SDK configured
+#   - For Play Store deployment: google-services.json configured
+#   - Release keystore configured in gradle.properties
+
+# ==============================================================================
+# CONFIGURATION
+# ==============================================================================
+
+default_platform(:android)
+
+# Disable Fastlane automatic update check for CI environments
+ENV["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
+
+# ==============================================================================
+# ANDROID LANES
+# ==============================================================================
+
+platform :android do
+
+  # ============================================================================
+  # PRE-BUILD HOOKS
+  # ============================================================================
+
+  before_all do |lane|
+    # Ensure we're on a clean working directory for release builds
+    if [:beta, :production].include?(lane)
+      ensure_git_status_clean unless ENV["SKIP_GIT_CHECK"]
+    end
+  end
+
+  # ============================================================================
+  # BUILD LANES
+  # ============================================================================
+
+  desc "Build debug APK for development testing"
+  lane :build_debug do
+    gradle(
+      task: "clean assembleDebug",
+      project_dir: "./"
+    )
+
+    # Output the APK path
+    apk_path = lane_context[SharedValues::GRADLE_APK_OUTPUT_PATH]
+    UI.success("Debug APK built successfully!")
+    UI.message("APK location: #{apk_path}")
+  end
+
+  desc "Build release APK for testing"
+  lane :build_release do
+    # Clean and build release APK
+    gradle(
+      task: "clean assembleRelease",
+      project_dir: "./"
+    )
+
+    apk_path = lane_context[SharedValues::GRADLE_APK_OUTPUT_PATH]
+    UI.success("Release APK built successfully!")
+    UI.message("APK location: #{apk_path}")
+  end
+
+  desc "Build release AAB (Android App Bundle) for Play Store"
+  lane :build_aab do
+    # Clean and build release AAB
+    gradle(
+      task: "clean bundleRelease",
+      project_dir: "./"
+    )
+
+    aab_path = lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]
+    UI.success("Release AAB built successfully!")
+    UI.message("AAB location: #{aab_path}")
+  end
+
+  # ============================================================================
+  # DEPLOYMENT LANES
+  # ============================================================================
+
+  desc "Deploy to internal testing track"
+  lane :internal do
+    # Build the release bundle
+    build_aab
+
+    # Upload to Play Store internal track
+    upload_to_play_store(
+      track: "internal",
+      aab: lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH],
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+
+    UI.success("Successfully deployed to internal testing track!")
+  end
+
+  desc "Deploy to closed beta testing track"
+  lane :beta do
+    # Build the release bundle
+    build_aab
+
+    # Upload to Play Store beta track
+    upload_to_play_store(
+      track: "beta",
+      aab: lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH],
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+
+    UI.success("Successfully deployed to beta testing track!")
+  end
+
+  desc "Deploy to production"
+  lane :production do
+    # Safety confirmation for production deploys
+    unless ENV["CI"]
+      UI.confirm("Are you sure you want to deploy to production?")
+    end
+
+    # Build the release bundle
+    build_aab
+
+    # Upload to Play Store production track
+    upload_to_play_store(
+      track: "production",
+      aab: lane_context[SharedValues::GRADLE_AAB_OUTPUT_PATH]
+    )
+
+    UI.success("Successfully deployed to production!")
+  end
+
+  desc "Promote beta to production"
+  lane :promote_to_production do
+    upload_to_play_store(
+      track: "beta",
+      track_promote_to: "production",
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+
+    UI.success("Successfully promoted beta to production!")
+  end
+
+  # ============================================================================
+  # UTILITY LANES
+  # ============================================================================
+
+  desc "Run Android lint checks"
+  lane :lint do
+    gradle(
+      task: "lint",
+      project_dir: "./"
+    )
+
+    UI.success("Lint checks completed!")
+  end
+
+  desc "Run Android unit tests"
+  lane :test do
+    gradle(
+      task: "test",
+      project_dir: "./"
+    )
+
+    UI.success("Unit tests completed!")
+  end
+
+  desc "Clean build artifacts"
+  lane :clean do
+    gradle(
+      task: "clean",
+      project_dir: "./"
+    )
+
+    UI.success("Build artifacts cleaned!")
+  end
+
+  desc "Increment version code"
+  lane :bump_version_code do |options|
+    # Read current version code from build.gradle
+    build_gradle = File.read("../app/build.gradle")
+    current_version_code = build_gradle.match(/versionCode\s+(\d+)/)[1].to_i
+    new_version_code = current_version_code + 1
+
+    # Update version code in build.gradle
+    new_content = build_gradle.gsub(
+      /versionCode\s+\d+/,
+      "versionCode #{new_version_code}"
+    )
+    File.write("../app/build.gradle", new_content)
+
+    UI.success("Version code bumped from #{current_version_code} to #{new_version_code}")
+
+    # Commit the change if requested
+    if options[:commit]
+      git_commit(
+        path: ["app/build.gradle"],
+        message: "Bump version code to #{new_version_code}"
+      )
+    end
+
+    new_version_code
+  end
+
+  desc "Increment version name"
+  lane :bump_version_name do |options|
+    new_version = options[:version]
+
+    unless new_version
+      # Read current version and increment patch
+      build_gradle = File.read("../app/build.gradle")
+      current_version = build_gradle.match(/versionName\s+"([^"]+)"/)[1]
+      parts = current_version.split(".")
+      parts[2] = (parts[2].to_i + 1).to_s
+      new_version = parts.join(".")
+    end
+
+    # Update version name in build.gradle
+    build_gradle = File.read("../app/build.gradle")
+    new_content = build_gradle.gsub(
+      /versionName\s+"[^"]+"/,
+      "versionName \"#{new_version}\""
+    )
+    File.write("../app/build.gradle", new_content)
+
+    UI.success("Version name updated to #{new_version}")
+
+    # Commit the change if requested
+    if options[:commit]
+      git_commit(
+        path: ["app/build.gradle"],
+        message: "Bump version to #{new_version}"
+      )
+    end
+
+    new_version
+  end
+
+  # ============================================================================
+  # CI/CD LANES
+  # ============================================================================
+
+  desc "CI pipeline: lint, test, and build"
+  lane :ci do
+    lint
+    test
+    build_release
+
+    UI.success("CI pipeline completed successfully!")
+  end
+
+  desc "Full release: bump version, build, and deploy to beta"
+  lane :release_beta do |options|
+    # Bump version code
+    bump_version_code(commit: false)
+
+    # Optionally bump version name
+    if options[:version]
+      bump_version_name(version: options[:version], commit: false)
+    end
+
+    # Commit version changes
+    git_commit(
+      path: ["app/build.gradle"],
+      message: "Prepare release #{options[:version] || 'beta'}"
+    )
+
+    # Build and deploy to beta
+    beta
+
+    # Create git tag
+    version_name = File.read("../app/build.gradle").match(/versionName\s+"([^"]+)"/)[1]
+    version_code = File.read("../app/build.gradle").match(/versionCode\s+(\d+)/)[1]
+    add_git_tag(
+      tag: "android-v#{version_name}-#{version_code}"
+    )
+
+    UI.success("Released version #{version_name} (#{version_code}) to beta!")
+  end
+
+  # ============================================================================
+  # POST-BUILD HOOKS
+  # ============================================================================
+
+  after_all do |lane|
+    # Notifications or cleanup tasks can go here
+  end
+
+  error do |lane, exception|
+    UI.error("Fastlane encountered an error in lane '#{lane}'")
+    UI.error(exception.message)
+
+    # Notify about build failure if in CI
+    if ENV["CI"]
+      # Add notification integration here (Slack, email, etc.)
+      # slack(
+      #   message: "Build failed: #{exception.message}",
+      #   success: false
+      # )
+    end
+  end
+
+end

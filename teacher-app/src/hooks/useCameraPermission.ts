@@ -9,6 +9,14 @@
 
 import {useState, useEffect, useCallback} from 'react';
 import {Platform, Linking, Alert} from 'react-native';
+import {
+  check,
+  request,
+  PERMISSIONS,
+  RESULTS,
+  openSettings as openNativeSettings,
+  Permission,
+} from 'react-native-permissions';
 
 /**
  * Permission status values
@@ -74,52 +82,86 @@ export interface UseCameraPermissionOptions {
 }
 
 /**
- * Mock permission check for development
- * In production, this would use react-native-permissions
+ * Map react-native-permissions RESULTS to our PermissionStatus type
+ */
+function mapPermissionResult(result: string): PermissionStatus {
+  switch (result) {
+    case RESULTS.UNAVAILABLE:
+      return 'unavailable';
+    case RESULTS.DENIED:
+      return 'denied';
+    case RESULTS.LIMITED:
+      return 'limited';
+    case RESULTS.GRANTED:
+      return 'granted';
+    case RESULTS.BLOCKED:
+      return 'blocked';
+    default:
+      return 'denied';
+  }
+}
+
+/**
+ * Get the camera permission for the current platform
+ */
+function getCameraPermission(): Permission {
+  return Platform.OS === 'ios'
+    ? PERMISSIONS.IOS.CAMERA
+    : PERMISSIONS.ANDROID.CAMERA;
+}
+
+/**
+ * Get the photo library permission for the current platform
+ * Note: Android 13+ (API 33) uses READ_MEDIA_IMAGES instead of READ_EXTERNAL_STORAGE
+ */
+function getPhotoLibraryPermission(): Permission {
+  if (Platform.OS === 'ios') {
+    return PERMISSIONS.IOS.PHOTO_LIBRARY;
+  }
+
+  // Android 13+ (API 33) uses granular media permissions
+  // READ_MEDIA_IMAGES for accessing photos
+  // For older versions, fall back to READ_EXTERNAL_STORAGE
+  // Note: The library handles API level detection internally
+  return Platform.Version >= 33
+    ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES
+    : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
+}
+
+/**
+ * Check camera permission using react-native-permissions
  */
 async function checkCameraPermission(): Promise<PermissionStatus> {
-  // Mock implementation - in production would use:
-  // import { check, PERMISSIONS } from 'react-native-permissions';
-  // return await check(Platform.OS === 'ios' ? PERMISSIONS.IOS.CAMERA : PERMISSIONS.ANDROID.CAMERA);
-
-  // For development, simulate granted permission
-  return 'granted';
+  const permission = getCameraPermission();
+  const result = await check(permission);
+  return mapPermissionResult(result);
 }
 
 /**
- * Mock permission check for photo library
+ * Check photo library permission using react-native-permissions
  */
 async function checkPhotoLibraryPermission(): Promise<PermissionStatus> {
-  // Mock implementation - in production would use:
-  // import { check, PERMISSIONS } from 'react-native-permissions';
-  // return await check(Platform.OS === 'ios' ? PERMISSIONS.IOS.PHOTO_LIBRARY : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
-
-  // For development, simulate granted permission
-  return 'granted';
+  const permission = getPhotoLibraryPermission();
+  const result = await check(permission);
+  return mapPermissionResult(result);
 }
 
 /**
- * Mock permission request for camera
+ * Request camera permission using react-native-permissions
  */
 async function requestCameraPermissionNative(): Promise<PermissionStatus> {
-  // Mock implementation - in production would use:
-  // import { request, PERMISSIONS } from 'react-native-permissions';
-  // return await request(Platform.OS === 'ios' ? PERMISSIONS.IOS.CAMERA : PERMISSIONS.ANDROID.CAMERA);
-
-  // For development, simulate granted permission
-  return 'granted';
+  const permission = getCameraPermission();
+  const result = await request(permission);
+  return mapPermissionResult(result);
 }
 
 /**
- * Mock permission request for photo library
+ * Request photo library permission using react-native-permissions
  */
 async function requestPhotoLibraryPermissionNative(): Promise<PermissionStatus> {
-  // Mock implementation - in production would use:
-  // import { request, PERMISSIONS } from 'react-native-permissions';
-  // return await request(Platform.OS === 'ios' ? PERMISSIONS.IOS.PHOTO_LIBRARY : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
-
-  // For development, simulate granted permission
-  return 'granted';
+  const permission = getPhotoLibraryPermission();
+  const result = await request(permission);
+  return mapPermissionResult(result);
 }
 
 /**
@@ -255,20 +297,25 @@ export function useCameraPermission(
   }, []);
 
   /**
-   * Open app settings
+   * Open app settings using react-native-permissions
    */
   const openSettings = useCallback(async () => {
     try {
-      if (Platform.OS === 'ios') {
-        await Linking.openURL('app-settings:');
-      } else {
-        await Linking.openSettings();
-      }
+      await openNativeSettings();
     } catch (err) {
-      Alert.alert(
-        'Unable to Open Settings',
-        'Please open Settings manually and grant camera permissions to this app.',
-      );
+      // Fallback to Linking if react-native-permissions fails
+      try {
+        if (Platform.OS === 'ios') {
+          await Linking.openURL('app-settings:');
+        } else {
+          await Linking.openSettings();
+        }
+      } catch {
+        Alert.alert(
+          'Unable to Open Settings',
+          'Please open Settings manually and grant camera permissions to this app.',
+        );
+      }
     }
   }, []);
 

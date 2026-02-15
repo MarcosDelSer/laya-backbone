@@ -1,18 +1,26 @@
 /**
  * LAYA Teacher App - Main Entry Point
  *
- * React Native iOS application for teachers/educators to perform
+ * React Native application for teachers/educators to perform
  * daily childcare tracking activities including attendance, meals,
  * naps, diapers, and photo capture.
  *
+ * Supports both iOS and Android with platform-specific adaptations.
  * Features bottom tab navigation for quick access to all screens.
  */
 
 import React, {useEffect, useCallback} from 'react';
+import {StatusBar, BackHandler, Platform} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 import TabNavigator from './src/navigation/TabNavigator';
+
+// Import platform-specific styling utilities
+import {
+  configureStatusBar,
+  isAndroid,
+} from './src/utils/platformStyles';
 
 // Import push notification hook
 import {useNotifications} from './src/hooks/useNotifications';
@@ -20,8 +28,49 @@ import type {NotificationPayload} from './src/services/pushNotifications';
 
 /**
  * Main App component with push notification integration
+ * and platform-specific configurations for Android/iOS
  */
 function App(): React.JSX.Element {
+  /**
+   * Configure platform-specific status bar appearance
+   * Android uses translucent status bar with dark background
+   * iOS relies on SafeAreaView for proper layout
+   */
+  useEffect(() => {
+    // Configure status bar for both platforms
+    configureStatusBar('dark');
+
+    // Android-specific: Set status bar to translucent for immersive UI
+    if (Platform.OS === 'android') {
+      StatusBar.setTranslucent(true);
+      StatusBar.setBackgroundColor('transparent');
+    }
+  }, []);
+
+  /**
+   * Handle Android hardware back button
+   *
+   * Returns false to allow default navigation behavior.
+   * In screens where custom handling is needed (e.g., modals, forms),
+   * this can be overridden at the screen level.
+   */
+  useEffect(() => {
+    if (!isAndroid) {
+      return;
+    }
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        // Return false to let React Navigation handle the back action
+        // Screens that need custom behavior should add their own handlers
+        return false;
+      },
+    );
+
+    return () => backHandler.remove();
+  }, []);
+
   /**
    * Handle incoming push notifications
    *
@@ -83,6 +132,12 @@ function App(): React.JSX.Element {
 
   return (
     <SafeAreaProvider>
+      {/* Platform-specific status bar configuration */}
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={isAndroid ? '#4A90D9' : 'transparent'}
+        translucent={isAndroid}
+      />
       <NavigationContainer>
         <TabNavigator />
       </NavigationContainer>

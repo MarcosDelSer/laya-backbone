@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network Security Configuration for LAYA Teacher App
+
+  This configuration allows cleartext traffic for local development
+  while maintaining secure connections for production.
+
+  For production builds, remove localhost from domain-config.
+-->
+<network-security-config>
+    <!-- Default configuration: Trust system CA certificates -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Development configuration: Allow local Metro bundler -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Local development server (Metro bundler) -->
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">10.0.3.2</domain>
+    </domain-config>
+</network-security-config>

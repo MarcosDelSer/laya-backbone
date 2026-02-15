@@ -1,0 +1,49 @@
+# LAYA Teacher App - Fastlane Appfile
+#
+# This file contains app identifiers and credentials for fastlane.
+# See https://docs.fastlane.tools/advanced/Appfile/
+#
+# IMPORTANT: This file may contain sensitive paths. Do not commit
+# actual credentials or service account keys to version control.
+
+# ==============================================================================
+# APP IDENTIFIERS
+# ==============================================================================
+
+# The package name / application ID as defined in build.gradle
+json_key_file("") # Path to the json secret file - follow https://docs.fastlane.tools/actions/supply/#setup
+package_name("com.laya.teacherapp") # e.g. com.laya.teacherapp
+
+# ==============================================================================
+# GOOGLE PLAY CREDENTIALS
+# ==============================================================================
+#
+# To configure Google Play deployment:
+#
+# 1. Create a Google Cloud Project and enable the Google Play Developer API
+# 2. Create a Service Account with appropriate permissions
+# 3. Download the JSON key file
+# 4. Grant the service account access in Google Play Console
+# 5. Set the json_key_file path above
+#
+# For detailed setup instructions:
+# https://docs.fastlane.tools/getting-started/android/setup/#setting-up-supply
+#
+# Example (uncomment and update path):
+# json_key_file("./fastlane/play-store-service-account.json")
+
+# ==============================================================================
+# ENVIRONMENT-SPECIFIC OVERRIDES
+# ==============================================================================
+#
+# Use different configurations for different lanes:
+#
+# for_platform :android do
+#   for_lane :production do
+#     json_key_file("./fastlane/production-service-account.json")
+#   end
+#
+#   for_lane :beta do
+#     json_key_file("./fastlane/beta-service-account.json")
+#   end
+# end

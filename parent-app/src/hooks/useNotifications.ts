@@ -4,7 +4,7 @@
  * A custom hook for managing push notification state and registration.
  * Handles permission checking, token registration, and notification handling.
  *
- * Follows the pattern from the teacher-app useNotifications.ts.
+ * Follows the pattern from useCameraPermission.ts for consistent API.
  */
 
 import {useState, useEffect, useCallback, useRef} from 'react';
@@ -16,6 +16,7 @@ import {
   PushNotificationError,
   isPushNotificationSupported,
   getPermissionStatus,
+  requestPermission,
   initializePushNotifications,
   registerForPushNotifications,
   getCurrentToken,

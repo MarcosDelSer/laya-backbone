@@ -1,266 +1,178 @@
 /**
- * LAYA Parent App - Message Composer Component
+ * LAYA Parent App - MessageComposer Component
  *
- * Text input component for composing and sending messages in a thread.
- * Features include:
- * - Auto-expanding textarea
- * - Character count warning
- * - Send on Enter (or button press)
- * - Disabled state support
- *
- * Adapted from parent-portal/components/MessageComposer.tsx for React Native.
+ * Input component for composing and sending messages.
+ * Includes text input and send button with validation.
  */
 
-import React, {useState, useCallback, useRef} from 'react';
+import React, {useState, useCallback} from 'react';
 import {
+  StyleSheet,
   View,
   TextInput,
-  Text,
-  StyleSheet,
   TouchableOpacity,
+  Text,
   Keyboard,
   Platform,
-  NativeSyntheticEvent,
-  TextInputContentSizeChangeEventData,
 } from 'react-native';
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-const MAX_CHARACTER_COUNT = 500;
-const CHARACTER_WARNING_THRESHOLD = 200;
-const MIN_INPUT_HEIGHT = 40;
-const MAX_INPUT_HEIGHT = 120;
-
-// ============================================================================
-// Props Interface
-// ============================================================================
-
+/**
+ * Props for MessageComposer component
+ */
 interface MessageComposerProps {
-  /** Callback when a message is sent */
-  onSendMessage: (content: string) => void;
-  /** Whether the composer is disabled */
-  disabled?: boolean;
-  /** Placeholder text for the input */
+  onSend: (content: string) => void;
   placeholder?: string;
+  disabled?: boolean;
 }
 
-// ============================================================================
-// Component
-// ============================================================================
+/**
+ * Theme colors used across the app
+ */
+const COLORS = {
+  primary: '#4A90D9',
+  background: '#F5F5F5',
+  cardBackground: '#FFFFFF',
+  text: '#333333',
+  textSecondary: '#666666',
+  textLight: '#999999',
+  border: '#E0E0E0',
+  disabled: '#CCCCCC',
+};
 
 /**
- * MessageComposer - input component for composing messages.
- *
- * Provides a text input with auto-expanding height, character count,
- * and a send button. Supports keyboard submit via Enter key.
+ * MessageComposer provides a text input and send button for composing messages.
+ * Handles text state, validation, and keyboard dismissal.
  */
 function MessageComposer({
-  onSendMessage,
-  disabled = false,
+  onSend,
   placeholder = 'Type a message...',
+  disabled = false,
 }: MessageComposerProps): React.JSX.Element {
   const [message, setMessage] = useState('');
-  const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
-  const inputRef = useRef<TextInput>(null);
+  const [isFocused, setIsFocused] = useState(false);
+
+  const trimmedMessage = message.trim();
+  const canSend = trimmedMessage.length > 0 && !disabled;
 
   /**
-   * Handle content size change to auto-expand input
-   */
-  const handleContentSizeChange = useCallback(
-    (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
-      const {height} = event.nativeEvent.contentSize;
-      const newHeight = Math.min(Math.max(height, MIN_INPUT_HEIGHT), MAX_INPUT_HEIGHT);
-      setInputHeight(newHeight);
-    },
-    [],
-  );
-
-  /**
-   * Handle message submission
+   * Handle sending the message
    */
   const handleSend = useCallback(() => {
-    const trimmedMessage = message.trim();
-    if (trimmedMessage && !disabled) {
-      onSendMessage(trimmedMessage);
-      setMessage('');
-      setInputHeight(MIN_INPUT_HEIGHT);
-      Keyboard.dismiss();
-    }
-  }, [message, disabled, onSendMessage]);
+    if (!canSend) return;
+
+    onSend(trimmedMessage);
+    setMessage('');
+    Keyboard.dismiss();
+  }, [canSend, onSend, trimmedMessage]);
 
   /**
-   * Handle key press for submit on Enter
-   * Note: On iOS, we rely on returnKeyType="send" and onSubmitEditing
+   * Handle text change
    */
-  const handleSubmitEditing = useCallback(() => {
-    handleSend();
-  }, [handleSend]);
+  const handleChangeText = useCallback((text: string) => {
+    setMessage(text);
+  }, []);
 
-  const canSend = message.trim().length > 0 && !disabled;
-  const showCharacterCount = message.length > CHARACTER_WARNING_THRESHOLD;
-  const isOverLimit = message.length > MAX_CHARACTER_COUNT;
+  /**
+   * Handle focus state
+   */
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+  }, []);
 
   return (
     <View style={styles.container}>
-      <View style={styles.inputRow}>
-        {/* Attachment button placeholder */}
-        <TouchableOpacity
-          style={styles.attachButton}
-          disabled={disabled}
-          activeOpacity={0.7}
-          accessibilityLabel="Attach file"
-          accessibilityHint="Attachment feature coming soon">
-          <Text style={[styles.attachIcon, disabled && styles.attachIconDisabled]}>
-            📎
-          </Text>
-        </TouchableOpacity>
-
-        {/* Message input */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            ref={inputRef}
-            style={[
-              styles.input,
-              {height: inputHeight},
-              disabled && styles.inputDisabled,
-            ]}
-            value={message}
-            onChangeText={setMessage}
-            onContentSizeChange={handleContentSizeChange}
-            onSubmitEditing={handleSubmitEditing}
-            placeholder={placeholder}
-            placeholderTextColor="#9CA3AF"
-            multiline
-            editable={!disabled}
-            returnKeyType="send"
-            blurOnSubmit={false}
-            textAlignVertical="center"
-            accessibilityLabel="Message input"
-            accessibilityHint="Type your message here"
-          />
-          {/* Character count */}
-          {showCharacterCount && (
-            <Text
-              style={[
-                styles.characterCount,
-                isOverLimit && styles.characterCountOver,
-              ]}>
-              {message.length}/{MAX_CHARACTER_COUNT}
-            </Text>
-          )}
-        </View>
-
-        {/* Send button */}
+      <View
+        style={[
+          styles.inputContainer,
+          isFocused && styles.inputContainerFocused,
+        ]}>
+        <TextInput
+          style={styles.input}
+          value={message}
+          onChangeText={handleChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.textLight}
+          multiline
+          maxLength={2000}
+          editable={!disabled}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          returnKeyType="default"
+          blurOnSubmit={false}
+          textAlignVertical="center"
+        />
         <TouchableOpacity
           style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
           onPress={handleSend}
           disabled={!canSend}
           activeOpacity={0.7}
           accessibilityLabel="Send message"
-          accessibilityHint={canSend ? 'Sends your message' : 'Enter a message to send'}
-          accessibilityRole="button">
-          <Text style={[styles.sendIcon, !canSend && styles.sendIconDisabled]}>
-            ➤
+          accessibilityRole="button"
+          accessibilityState={{disabled: !canSend}}>
+          <Text
+            style={[styles.sendIcon, !canSend && styles.sendIconDisabled]}>
+            {'\u2191'}
           </Text>
         </TouchableOpacity>
       </View>
-
-      {/* Helper text */}
-      <Text style={styles.helperText}>
-        Press Send button or use Return key
-      </Text>
     </View>
   );
 }
 
-// ============================================================================
-// Styles
-// ============================================================================
-
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
     paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  attachButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    marginBottom: 2,
-  },
-  attachIcon: {
-    fontSize: 20,
-  },
-  attachIconDisabled: {
-    opacity: 0.4,
+    paddingVertical: 8,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    backgroundColor: COLORS.cardBackground,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
   },
   inputContainer: {
-    flex: 1,
-    position: 'relative',
-    marginRight: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: COLORS.background,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingLeft: 16,
+    paddingRight: 4,
+    paddingVertical: 4,
+    minHeight: 44,
+  },
+  inputContainerFocused: {
+    borderColor: COLORS.primary,
   },
   input: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    paddingRight: 50,
-    fontSize: 15,
-    color: '#111827',
-    minHeight: MIN_INPUT_HEIGHT,
-    maxHeight: MAX_INPUT_HEIGHT,
-  },
-  inputDisabled: {
-    backgroundColor: '#E5E7EB',
-    color: '#9CA3AF',
-  },
-  characterCount: {
-    position: 'absolute',
-    right: 12,
-    bottom: 8,
-    fontSize: 11,
-    color: '#9CA3AF',
-  },
-  characterCountOver: {
-    color: '#DC2626',
-    fontWeight: '500',
+    flex: 1,
+    fontSize: 16,
+    color: COLORS.text,
+    maxHeight: 120,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    paddingRight: 8,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#3B82F6',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: COLORS.disabled,
   },
   sendIcon: {
-    fontSize: 18,
+    fontSize: 20,
+    fontWeight: '700',
     color: '#FFFFFF',
-    transform: [{rotate: '0deg'}],
   },
   sendIconDisabled: {
-    color: '#9CA3AF',
-  },
-  helperText: {
-    marginTop: 8,
-    fontSize: 11,
-    color: '#9CA3AF',
-    textAlign: 'center',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
 });
 

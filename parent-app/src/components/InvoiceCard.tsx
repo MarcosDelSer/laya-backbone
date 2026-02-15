@@ -1,275 +1,270 @@
 /**
- * LAYA Parent App - Invoice Card Component
+ * LAYA Parent App - InvoiceCard Component
  *
- * Displays a complete invoice with header, amount, due date,
- * line items, and action buttons for downloading and payment.
- *
- * Adapted from parent-portal/components/InvoiceCard.tsx for React Native.
+ * A card component for displaying individual invoices with
+ * amount, due date, status, line items, and download action.
  */
 
-import React from 'react';
+import React, {useState} from 'react';
 import {
-  View,
-  Text,
   StyleSheet,
+  Text,
+  View,
   TouchableOpacity,
-  Linking,
+  ActivityIndicator,
   Alert,
 } from 'react-native';
+import type {Invoice} from '../types';
+import PaymentBadge from './PaymentBadge';
+import {
+  formatCurrency,
+  formatInvoiceDate,
+  getDaysUntilDue,
+  downloadInvoicePdf,
+} from '../api/invoiceApi';
 
-import PaymentStatusBadge from './PaymentStatusBadge';
-import type {Invoice, InvoiceItem} from '../types';
-
-// ============================================================================
-// Props Interface
-// ============================================================================
-
-export interface InvoiceCardProps {
+interface InvoiceCardProps {
+  /** The invoice data to display */
   invoice: Invoice;
-  onPayPress?: (invoice: Invoice) => void;
-}
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Format a number as currency (USD).
- */
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount);
+  /** Optional callback when the card is pressed */
+  onPress?: (invoice: Invoice) => void;
 }
 
 /**
- * Format a date string to a readable format.
+ * Theme colors used across the app
  */
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+const COLORS = {
+  primary: '#4A90D9',
+  background: '#FFFFFF',
+  text: '#333333',
+  textSecondary: '#666666',
+  textLight: '#999999',
+  border: '#E0E0E0',
+  error: '#DC2626',
+  tableHeader: '#F9FAFB',
+  tableBorder: '#E5E7EB',
+};
 
 /**
- * Calculate the number of days until the due date.
+ * InvoiceCard displays a single invoice with its details and actions.
  */
-function getDaysUntilDue(dueDate: string): number {
-  const due = new Date(dueDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  due.setHours(0, 0, 0, 0);
-  const diffTime = due.getTime() - today.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-}
-
-/**
- * Get the due date status text.
- */
-function getDueDateStatusText(daysUntilDue: number, isPastDue: boolean): string {
-  if (isPastDue) {
-    const days = Math.abs(daysUntilDue);
-    return `${days} day${days !== 1 ? 's' : ''} overdue`;
-  }
-  if (daysUntilDue === 0) {
-    return 'Due today';
-  }
-  return `${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''} remaining`;
-}
-
-// ============================================================================
-// Sub-Components
-// ============================================================================
-
-interface InvoiceItemRowProps {
-  item: InvoiceItem;
-  isLast: boolean;
-}
-
-function InvoiceItemRow({item, isLast}: InvoiceItemRowProps): React.JSX.Element {
-  return (
-    <View style={[styles.itemRow, !isLast && styles.itemRowBorder]}>
-      <View style={styles.itemDescription}>
-        <Text style={styles.itemDescriptionText} numberOfLines={2}>
-          {item.description}
-        </Text>
-      </View>
-      <View style={styles.itemDetails}>
-        <Text style={styles.itemQuantity}>{item.quantity}</Text>
-        <Text style={styles.itemUnitPrice}>{formatCurrency(item.unitPrice)}</Text>
-        <Text style={styles.itemTotal}>{formatCurrency(item.total)}</Text>
-      </View>
-    </View>
-  );
-}
-
-// ============================================================================
-// Component
-// ============================================================================
-
-/**
- * InvoiceCard - displays a complete invoice with all details.
- */
-function InvoiceCard({invoice, onPayPress}: InvoiceCardProps): React.JSX.Element {
+function InvoiceCard({
+  invoice,
+  onPress,
+}: InvoiceCardProps): React.JSX.Element {
+  const [isDownloading, setIsDownloading] = useState(false);
   const daysUntilDue = getDaysUntilDue(invoice.dueDate);
   const isPastDue = daysUntilDue < 0 && invoice.status !== 'paid';
 
-  const handleDownload = async () => {
-    if (!invoice.pdfUrl) {
-      Alert.alert('Error', 'PDF is not available for this invoice.');
+  const handlePress = () => {
+    if (onPress) {
+      onPress(invoice);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!invoice.pdfUrl || isDownloading) {
       return;
     }
 
+    setIsDownloading(true);
     try {
-      const canOpen = await Linking.canOpenURL(invoice.pdfUrl);
-      if (canOpen) {
-        await Linking.openURL(invoice.pdfUrl);
-      } else {
-        Alert.alert('Error', 'Unable to open the PDF.');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to open the PDF. Please try again.');
-    }
-  };
-
-  const handlePayPress = () => {
-    if (onPayPress) {
-      onPayPress(invoice);
-    } else {
+      await downloadInvoicePdf(invoice.id);
+    } catch {
       Alert.alert(
-        'Payment',
-        'Online payment will be available soon.',
+        'Download Failed',
+        'Unable to download the invoice PDF. Please try again later.',
         [{text: 'OK'}],
       );
+    } finally {
+      setIsDownloading(false);
     }
   };
 
-  return (
-    <View style={styles.container}>
+  /**
+   * Render the due date status text
+   */
+  const renderDueDateStatus = (): React.JSX.Element | null => {
+    if (invoice.status === 'paid' || invoice.status === 'cancelled') {
+      return null;
+    }
+
+    let statusText: string;
+    if (isPastDue) {
+      const days = Math.abs(daysUntilDue);
+      statusText = `${days} day${days !== 1 ? 's' : ''} overdue`;
+    } else if (daysUntilDue === 0) {
+      statusText = 'Due today';
+    } else {
+      statusText = `${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''} remaining`;
+    }
+
+    return (
+      <Text style={[styles.dueDateStatus, isPastDue && styles.dueDateOverdue]}>
+        {statusText}
+      </Text>
+    );
+  };
+
+  const CardContent = (
+    <View style={styles.card}>
       {/* Invoice Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.iconContainer}>
-            <Text style={styles.documentIcon}>📄</Text>
+            <Text style={styles.iconText}>📄</Text>
           </View>
           <View style={styles.headerInfo}>
-            <Text style={styles.invoiceNumber}>Invoice #{invoice.number}</Text>
-            <Text style={styles.issuedDate}>
-              Issued: {formatDate(invoice.date)}
+            <Text style={styles.invoiceNumber}>
+              Invoice #{invoice.invoiceNumber}
+            </Text>
+            <Text style={styles.issueDate}>
+              Issued: {formatInvoiceDate(invoice.issueDate)}
             </Text>
           </View>
         </View>
-        <PaymentStatusBadge status={invoice.status} />
+        <PaymentBadge status={invoice.status} />
       </View>
 
       {/* Amount and Due Date */}
-      <View style={styles.amountSection}>
-        <View style={styles.amountContainer}>
+      <View style={styles.amountRow}>
+        <View style={styles.amountSection}>
           <Text style={styles.amountLabel}>Total Amount</Text>
-          <Text style={styles.amountValue}>{formatCurrency(invoice.amount)}</Text>
-        </View>
-        <View style={styles.dueDateContainer}>
-          <Text style={styles.dueDateLabel}>Due Date</Text>
-          <Text style={[styles.dueDateValue, isPastDue && styles.dueDateOverdue]}>
-            {formatDate(invoice.dueDate)}
+          <Text style={styles.amount}>
+            {formatCurrency(invoice.amount, invoice.currency)}
           </Text>
-          {invoice.status !== 'paid' && (
-            <Text
-              style={[
-                styles.dueDateStatus,
-                isPastDue && styles.dueDateStatusOverdue,
-              ]}>
-              {getDueDateStatusText(daysUntilDue, isPastDue)}
-            </Text>
-          )}
+        </View>
+        <View style={styles.dueDateSection}>
+          <Text style={styles.dueDateLabel}>Due Date</Text>
+          <Text style={[styles.dueDate, isPastDue && styles.dueDateOverdue]}>
+            {formatInvoiceDate(invoice.dueDate)}
+          </Text>
+          {renderDueDateStatus()}
         </View>
       </View>
 
       {/* Invoice Items */}
       {invoice.items.length > 0 && (
         <View style={styles.itemsSection}>
-          <Text style={styles.itemsSectionTitle}>Invoice Details</Text>
-          {/* Table Header */}
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderText, styles.headerDescription]}>
-              Description
-            </Text>
-            <View style={styles.tableHeaderDetails}>
-              <Text style={styles.tableHeaderText}>Qty</Text>
-              <Text style={styles.tableHeaderText}>Price</Text>
-              <Text style={styles.tableHeaderText}>Total</Text>
+          <Text style={styles.itemsHeader}>Invoice Details</Text>
+          <View style={styles.table}>
+            {/* Table Header */}
+            <View style={styles.tableRow}>
+              <Text style={[styles.tableCell, styles.tableHeaderCell, styles.descriptionCell]}>
+                Description
+              </Text>
+              <Text style={[styles.tableCell, styles.tableHeaderCell, styles.qtyCell]}>
+                Qty
+              </Text>
+              <Text style={[styles.tableCell, styles.tableHeaderCell, styles.priceCell]}>
+                Price
+              </Text>
+              <Text style={[styles.tableCell, styles.tableHeaderCell, styles.totalCell]}>
+                Total
+              </Text>
             </View>
-          </View>
-          {/* Table Body */}
-          {invoice.items.map((item, index) => (
-            <InvoiceItemRow
-              key={index}
-              item={item}
-              isLast={index === invoice.items.length - 1}
-            />
-          ))}
-          {/* Table Footer */}
-          <View style={styles.tableFooter}>
-            <Text style={styles.tableFooterLabel}>Total</Text>
-            <Text style={styles.tableFooterValue}>
-              {formatCurrency(invoice.amount)}
-            </Text>
+            {/* Table Rows */}
+            {invoice.items.map((item) => (
+              <View key={item.id} style={styles.tableRow}>
+                <Text
+                  style={[styles.tableCell, styles.descriptionCell]}
+                  numberOfLines={2}>
+                  {item.description}
+                </Text>
+                <Text style={[styles.tableCell, styles.qtyCell]}>
+                  {item.quantity}
+                </Text>
+                <Text style={[styles.tableCell, styles.priceCell]}>
+                  {formatCurrency(item.unitPrice, invoice.currency)}
+                </Text>
+                <Text style={[styles.tableCell, styles.totalCell, styles.tableCellBold]}>
+                  {formatCurrency(item.total, invoice.currency)}
+                </Text>
+              </View>
+            ))}
+            {/* Table Footer - Total */}
+            <View style={[styles.tableRow, styles.tableFooter]}>
+              <Text
+                style={[
+                  styles.tableCell,
+                  styles.descriptionCell,
+                  styles.tableCellBold,
+                ]}>
+                Total
+              </Text>
+              <Text style={[styles.tableCell, styles.qtyCell]} />
+              <Text style={[styles.tableCell, styles.priceCell]} />
+              <Text
+                style={[
+                  styles.tableCell,
+                  styles.totalCell,
+                  styles.tableCellBold,
+                ]}>
+                {formatCurrency(invoice.amount, invoice.currency)}
+              </Text>
+            </View>
           </View>
         </View>
       )}
 
       {/* Actions */}
-      <View style={styles.actionsSection}>
+      <View style={styles.actions}>
         <TouchableOpacity
           style={styles.downloadButton}
-          onPress={handleDownload}
-          activeOpacity={0.7}>
-          <Text style={styles.buttonIcon}>⬇️</Text>
-          <Text style={styles.downloadButtonText}>Download PDF</Text>
+          onPress={handleDownloadPdf}
+          disabled={!invoice.pdfUrl || isDownloading}
+          accessibilityRole="button"
+          accessibilityLabel="Download invoice PDF">
+          {isDownloading ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <>
+              <Text style={styles.downloadIcon}>⬇</Text>
+              <Text style={styles.downloadText}>Download PDF</Text>
+            </>
+          )}
         </TouchableOpacity>
-
-        {invoice.status !== 'paid' && (
-          <TouchableOpacity
-            style={styles.payButton}
-            onPress={handlePayPress}
-            activeOpacity={0.7}>
-            <Text style={styles.buttonIcon}>💳</Text>
-            <Text style={styles.payButtonText}>Pay Now</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        onPress={handlePress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Invoice ${invoice.invoiceNumber}, ${formatCurrency(invoice.amount)}`}>
+        {CardContent}
+      </TouchableOpacity>
+    );
+  }
+
+  return CardContent;
 }
 
-// ============================================================================
-// Styles
-// ============================================================================
-
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#FFFFFF',
+  card: {
+    backgroundColor: COLORS.background,
     borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    // iOS shadow
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-    overflow: 'hidden',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    // Android elevation
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -277,16 +272,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#DBEAFE',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EBF5FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  documentIcon: {
-    fontSize: 24,
+  iconText: {
+    fontSize: 20,
   },
   headerInfo: {
     flex: 1,
@@ -294,203 +289,134 @@ const styles = StyleSheet.create({
   invoiceNumber: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: COLORS.text,
     marginBottom: 2,
   },
-  issuedDate: {
-    fontSize: 14,
-    color: '#6B7280',
+  issueDate: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
   },
-  // Amount Section
-  amountSection: {
+  amountRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  amountContainer: {
+  amountSection: {
     flex: 1,
   },
   amountLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.textLight,
     marginBottom: 4,
   },
-  amountValue: {
-    fontSize: 24,
+  amount: {
+    fontSize: 22,
     fontWeight: '700',
-    color: '#111827',
+    color: COLORS.text,
   },
-  dueDateContainer: {
+  dueDateSection: {
     alignItems: 'flex-end',
   },
   dueDateLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.textLight,
     marginBottom: 4,
   },
-  dueDateValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
+  dueDate: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
   },
   dueDateOverdue: {
-    color: '#DC2626',
+    color: COLORS.error,
   },
   dueDateStatus: {
     fontSize: 11,
-    color: '#6B7280',
+    color: COLORS.textLight,
     marginTop: 2,
   },
-  dueDateStatusOverdue: {
-    color: '#EF4444',
-  },
-  // Items Section
   itemsSection: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    marginBottom: 16,
   },
-  itemsSectionTitle: {
+  itemsHeader: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
-    marginBottom: 12,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 10,
   },
-  tableHeader: {
+  table: {
+    borderWidth: 1,
+    borderColor: COLORS.tableBorder,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  tableRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
-    marginBottom: 4,
-  },
-  tableHeaderText: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#6B7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  headerDescription: {
-    flex: 1,
-  },
-  tableHeaderDetails: {
-    flexDirection: 'row',
-    width: 140,
-    justifyContent: 'space-between',
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-  },
-  itemRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: COLORS.tableBorder,
   },
-  itemDescription: {
-    flex: 1,
-    marginRight: 12,
+  tableCell: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: COLORS.textSecondary,
   },
-  itemDescriptionText: {
-    fontSize: 13,
-    color: '#111827',
+  tableHeaderCell: {
+    backgroundColor: COLORS.tableHeader,
+    fontWeight: '600',
+    fontSize: 11,
+    color: COLORS.textLight,
+    textTransform: 'uppercase',
   },
-  itemDetails: {
-    flexDirection: 'row',
-    width: 140,
-    justifyContent: 'space-between',
-  },
-  itemQuantity: {
-    fontSize: 13,
-    color: '#6B7280',
-    textAlign: 'center',
-    width: 30,
-  },
-  itemUnitPrice: {
-    fontSize: 13,
-    color: '#6B7280',
-    textAlign: 'right',
-    width: 50,
-  },
-  itemTotal: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#111827',
-    textAlign: 'right',
-    width: 50,
+  tableCellBold: {
+    fontWeight: '600',
+    color: COLORS.text,
   },
   tableFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 4,
-    marginTop: 4,
+    backgroundColor: COLORS.tableHeader,
+    borderBottomWidth: 0,
   },
-  tableFooterLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#111827',
-    marginRight: 12,
+  descriptionCell: {
+    flex: 2,
   },
-  tableFooterValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-    width: 60,
+  qtyCell: {
+    width: 40,
+    textAlign: 'center',
+  },
+  priceCell: {
+    width: 70,
     textAlign: 'right',
   },
-  // Actions Section
-  actionsSection: {
+  totalCell: {
+    width: 70,
+    textAlign: 'right',
+  },
+  actions: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    gap: 12,
+    justifyContent: 'flex-start',
   },
   downloadButton: {
-    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
     paddingVertical: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.background,
   },
-  downloadButtonText: {
+  downloadIcon: {
+    fontSize: 14,
+    marginRight: 6,
+    color: COLORS.primary,
+  },
+  downloadText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#4B5563',
-    marginLeft: 6,
-  },
-  payButton: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#2563EB',
-  },
-  payButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#FFFFFF',
-    marginLeft: 6,
-  },
-  buttonIcon: {
-    fontSize: 14,
+    color: COLORS.primary,
   },
 });
 
