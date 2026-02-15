@@ -20,6 +20,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 use Gibbon\Module\PhotoManagement\Domain\PhotoGateway;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Include core (this file is called directly, not through module framework)
 include '../../gibbon.php';
@@ -61,6 +63,23 @@ if ($deleted === false) {
     $URL .= '&return=error2';
     header("Location: {$URL}");
     exit;
+}
+
+// Trigger webhook for AI sync
+try {
+    $settingGateway = $container->get(SettingGateway::class);
+    $aiSyncService = new AISyncService($settingGateway, $pdo);
+
+    $photoData = [
+        'gibbonPhotoUploadID' => $gibbonPhotoUploadID,
+        'filename' => $photo['filename'] ?? '',
+        'filePath' => $photo['filePath'] ?? '',
+        'deletedByID' => $gibbonPersonID,
+        'softDelete' => true,
+    ];
+    $aiSyncService->syncPhotoDelete($gibbonPhotoUploadID, $photoData);
+} catch (Exception $e) {
+    // Silently fail - don't break UX if webhook fails
 }
 
 // Success
