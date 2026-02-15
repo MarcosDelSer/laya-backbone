@@ -2,9 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- App Sandbox - Required for Mac App Store distribution -->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+
+	<!-- Network Client - Allow outgoing network connections for API calls -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+
+	<!-- Keychain Access Groups - Secure storage for JWT tokens and credentials -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.laya.admin</string>
+	</array>
 </dict>
 </plist>
