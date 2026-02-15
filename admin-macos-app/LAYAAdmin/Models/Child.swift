@@ -355,17 +355,29 @@ struct ChildRequest: Codable {
     /// Child's date of birth
     let dateOfBirth: Date
 
-    /// Enrollment status
-    let enrollmentStatus: EnrollmentStatus
+    /// Enrollment status (optional for updates)
+    var enrollmentStatus: EnrollmentStatus?
 
     /// Assigned classroom ID (optional)
     let classroomId: String?
 
-    /// Primary guardian ID
-    let primaryGuardianId: String
+    /// Primary guardian ID (optional - generated if not provided)
+    var primaryGuardianId: String?
+
+    /// Primary guardian name (optional - for offline mode)
+    var primaryGuardianName: String?
+
+    /// Primary guardian email (optional)
+    var primaryGuardianEmail: String?
+
+    /// Primary guardian phone (optional)
+    var primaryGuardianPhone: String?
 
     /// Secondary guardian ID (optional)
     let secondaryGuardianId: String?
+
+    /// Secondary guardian name (optional)
+    var secondaryGuardianName: String?
 
     /// Known allergies (optional)
     let allergies: String?
@@ -394,7 +406,11 @@ struct ChildRequest: Codable {
         case enrollmentStatus = "enrollment_status"
         case classroomId = "classroom_id"
         case primaryGuardianId = "primary_guardian_id"
+        case primaryGuardianName = "primary_guardian_name"
+        case primaryGuardianEmail = "primary_guardian_email"
+        case primaryGuardianPhone = "primary_guardian_phone"
         case secondaryGuardianId = "secondary_guardian_id"
+        case secondaryGuardianName = "secondary_guardian_name"
         case allergies
         case medicalNotes = "medical_notes"
         case dietaryRequirements = "dietary_requirements"

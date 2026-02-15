@@ -4,6 +4,7 @@
 //
 //  Main application view that handles authentication state routing.
 //  Shows LoginView when unauthenticated, or the main navigation when authenticated.
+//  Integrates with KeyboardShortcuts.swift for comprehensive keyboard navigation.
 //
 
 import SwiftUI
@@ -23,6 +24,7 @@ import Combine
 /// - Smooth transitions between auth states
 /// - Navigation sidebar with all app sections
 /// - User profile display in sidebar header
+/// - Keyboard shortcuts for navigation (Cmd+1-5) via KeyboardShortcuts.swift
 struct MainView: View {
 
     // MARK: - Properties
@@ -112,6 +114,13 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: .newStaff)) { _ in
             selectedSection = .staff
             // TODO: Open new staff form when staff management is implemented
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showAnalytics)) { _ in
+            selectedSection = .analytics
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .newInvoice)) { _ in
+            selectedSection = .finance
+            // TODO: Open new invoice form when finance is implemented
         }
     }
 

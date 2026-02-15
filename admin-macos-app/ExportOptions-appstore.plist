@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Export destination: Mac App Store distribution -->
+	<key>destination</key>
+	<string>upload</string>
+
+	<!-- Method: app-store for App Store Connect -->
+	<key>method</key>
+	<string>app-store</string>
+
+	<!-- Manual signing configuration -->
+	<key>signingStyle</key>
+	<string>manual</string>
+
+	<!-- Team ID - Must be configured before distribution -->
+	<!-- Replace with actual Apple Developer Team ID -->
+	<key>teamID</key>
+	<string>TEAM_ID_HERE</string>
+
+	<!-- Signing certificate - 3rd Party Mac Developer Application -->
+	<key>signingCertificate</key>
+	<string>3rd Party Mac Developer Application</string>
+
+	<!-- Upload to App Store Connect -->
+	<key>uploadSymbols</key>
+	<true/>
+
+	<!-- Generate App Store information -->
+	<key>generateAppStoreInformation</key>
+	<false/>
+
+	<!-- Provisioning profiles for App Store -->
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.laya.admin</key>
+		<string>APPSTORE_PROFILE_NAME_HERE</string>
+	</dict>
+</dict>
+</plist>
