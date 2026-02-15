@@ -12,6 +12,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import settings
+from app.models import Base
 
 # Alembic Config object - provides access to values in alembic.ini
 config = context.config
@@ -22,9 +23,11 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Add your model's MetaData object here for 'autogenerate' support
-# from app.models import Base
-# target_metadata = Base.metadata
-target_metadata = None
+# This includes all models that inherit from Base:
+# - Activity: Core activity definitions
+# - ActivityRecommendation: Generated recommendations log
+# - ActivityParticipation: Participation history tracking
+target_metadata = Base.metadata
 
 # Override sqlalchemy.url with our async database URL from settings
 # Convert async URL to sync for Alembic operations that require sync connection
