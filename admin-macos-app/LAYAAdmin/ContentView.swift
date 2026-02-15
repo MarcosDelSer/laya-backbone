@@ -134,7 +134,7 @@ struct DetailView: View {
             case .dashboard:
                 DashboardView()
             case .children:
-                ChildrenPlaceholderView()
+                ChildListView()
             case .staff:
                 StaffPlaceholderView()
             case .finance:
