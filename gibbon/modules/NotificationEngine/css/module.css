@@ -1,0 +1,506 @@
+/**
+ * Notification Engine Module Styles
+ * LAYA Kindergarten Platform
+ *
+ * Styles for notification queue, settings UI, and template management
+ */
+
+/* =============================================
+   Notification Queue Table
+   ============================================= */
+
+.notification-queue {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.notification-queue th,
+.notification-queue td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.notification-queue th {
+    background: #f9fafb;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.875rem;
+}
+
+.notification-queue tr:hover {
+    background: #f9fafb;
+}
+
+/* Notification status badges */
+.notification-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.notification-status.pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.notification-status.processing {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.notification-status.sent {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.notification-status.failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Channel badges */
+.notification-channel {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.notification-channel.email {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.notification-channel.push {
+    background: #fce7f3;
+    color: #9d174d;
+}
+
+.notification-channel.both {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+/* =============================================
+   Notification Settings
+   ============================================= */
+
+.notification-settings {
+    max-width: 800px;
+}
+
+.notification-settings-section {
+    margin-bottom: 2rem;
+}
+
+.notification-settings-section h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.notification-preference-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.notification-preference-row:hover {
+    background: #f9fafb;
+}
+
+.notification-preference-info {
+    flex: 1;
+}
+
+.notification-preference-name {
+    font-weight: 500;
+    color: #111827;
+    margin-bottom: 0.25rem;
+}
+
+.notification-preference-description {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.notification-preference-toggles {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.notification-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.notification-toggle-label {
+    font-size: 0.875rem;
+    color: #374151;
+}
+
+/* Toggle switch */
+.toggle-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background-color: #d1d5db;
+    transition: 0.2s;
+    border-radius: 24px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+    background-color: #3b82f6;
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(20px);
+}
+
+input:disabled + .toggle-slider {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* =============================================
+   Notification Templates
+   ============================================= */
+
+.notification-template-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.notification-template-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.notification-template-type {
+    font-weight: 600;
+    color: #111827;
+    font-size: 1rem;
+}
+
+.notification-template-active {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.notification-template-body {
+    display: grid;
+    gap: 1rem;
+}
+
+.notification-template-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.notification-template-field label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #6b7280;
+    text-transform: uppercase;
+}
+
+.notification-template-field input,
+.notification-template-field textarea {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease;
+}
+
+.notification-template-field input:focus,
+.notification-template-field textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.notification-template-field textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* =============================================
+   Queue Statistics
+   ============================================= */
+
+.queue-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.queue-stat-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1.25rem;
+    text-align: center;
+}
+
+.queue-stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.queue-stat-label {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.queue-stat-card.pending .queue-stat-value {
+    color: #d97706;
+}
+
+.queue-stat-card.processing .queue-stat-value {
+    color: #2563eb;
+}
+
+.queue-stat-card.sent .queue-stat-value {
+    color: #059669;
+}
+
+.queue-stat-card.failed .queue-stat-value {
+    color: #dc2626;
+}
+
+/* =============================================
+   Device Token Management
+   ============================================= */
+
+.device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.device-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.device-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6b7280;
+}
+
+.device-info {
+    flex: 1;
+}
+
+.device-name {
+    font-weight: 500;
+    color: #111827;
+}
+
+.device-meta {
+    font-size: 0.75rem;
+    color: #6b7280;
+    display: flex;
+    gap: 1rem;
+}
+
+.device-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.device-action-btn {
+    padding: 0.5rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    color: #6b7280;
+    transition: all 0.2s ease;
+}
+
+.device-action-btn:hover {
+    border-color: #d1d5db;
+    color: #374151;
+}
+
+.device-action-btn.remove:hover {
+    border-color: #fca5a5;
+    color: #dc2626;
+    background: #fef2f2;
+}
+
+/* =============================================
+   Empty States
+   ============================================= */
+
+.notification-empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #6b7280;
+}
+
+.notification-empty-state .empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem;
+    color: #d1d5db;
+}
+
+.notification-empty-state h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #374151;
+}
+
+.notification-empty-state p {
+    font-size: 0.875rem;
+    color: #6b7280;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* =============================================
+   Filter Bar
+   ============================================= */
+
+.notification-filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.notification-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.notification-filter label {
+    font-size: 0.875rem;
+    color: #374151;
+    font-weight: 500;
+}
+
+.notification-filter select {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    background: #fff;
+    cursor: pointer;
+}
+
+.notification-filter select:focus {
+    outline: none;
+    border-color: #3b82f6;
+}
+
+/* =============================================
+   Responsive Adjustments
+   ============================================= */
+
+@media (max-width: 768px) {
+    .notification-preference-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .notification-preference-toggles {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .queue-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .notification-filters {
+        flex-direction: column;
+    }
+
+    .notification-filter {
+        width: 100%;
+    }
+
+    .notification-filter select {
+        flex: 1;
+    }
+
+    .device-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .device-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}
