@@ -21,7 +21,7 @@ struct LAYAAdminApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainView()
         }
         .windowStyle(.automatic)
         .windowToolbarStyle(.unified)
