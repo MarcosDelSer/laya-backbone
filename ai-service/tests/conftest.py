@@ -91,6 +91,55 @@ TestAsyncSessionLocal = sessionmaker(
 pytest_plugins = ("pytest_asyncio",)
 
 
+# SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
+SQLITE_CREATE_COACHING_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS coaching_sessions (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    context TEXT,
+    special_need_types TEXT,
+    category VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coaching_recommendations (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES coaching_sessions(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    priority VARCHAR(20) NOT NULL DEFAULT 'medium',
+    relevance_score REAL NOT NULL DEFAULT 0.0,
+    target_audience VARCHAR(100) NOT NULL DEFAULT 'educator',
+    prerequisites TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS evidence_sources (
+    id TEXT PRIMARY KEY,
+    recommendation_id TEXT NOT NULL REFERENCES coaching_recommendations(id) ON DELETE CASCADE,
+    source_type VARCHAR(50) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    authors TEXT,
+    publication VARCHAR(200),
+    year INTEGER,
+    doi VARCHAR(100),
+    url VARCHAR(500),
+    isbn VARCHAR(20),
+    accessed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_sessions_child ON coaching_sessions(child_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_sessions_user ON coaching_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_recommendations_session ON coaching_recommendations(session_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_recommendations_category ON coaching_recommendations(category);
+CREATE INDEX IF NOT EXISTS idx_evidence_sources_recommendation ON evidence_sources(recommendation_id);
+"""
+
 # SQLite-compatible activity tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_ACTIVITY_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS activities (
@@ -157,15 +206,18 @@ def event_loop_policy():
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Create a fresh database session for each test.
 
-    Creates coaching tables via ORM and activity tables via raw SQL
-    (for SQLite compatibility with PostgreSQL ARRAY types).
+    Creates all tables via raw SQL for SQLite compatibility
+    (PostgreSQL ARRAY types not supported in SQLite).
 
     Yields:
         AsyncSession: Async database session for testing.
     """
-    # Create coaching tables via ORM metadata
+    # Create coaching tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        for statement in SQLITE_CREATE_COACHING_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
 
     # Create activity tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
@@ -185,7 +237,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP TABLE IF EXISTS evidence_sources"))
+        await conn.execute(text("DROP TABLE IF EXISTS coaching_recommendations"))
+        await conn.execute(text("DROP TABLE IF EXISTS coaching_sessions"))
 
 
 @pytest_asyncio.fixture
@@ -387,6 +441,12 @@ def sample_child_id_activity() -> UUID:
 
 
 @pytest.fixture
+def sample_child_id() -> UUID:
+    """Fixture for a sample child UUID used in activity tests."""
+    return uuid4()
+
+
+@pytest.fixture
 def sample_activity_data() -> Dict[str, Any]:
     """Fixture for sample activity data for creating test activities."""
     return {
@@ -446,6 +506,9 @@ class MockActivityParticipation:
         self.created_at = created_at
         self.updated_at = updated_at
 
+    def __repr__(self) -> str:
+        return f"<ActivityParticipation(id={self.id}, child_id={self.child_id}, activity_id={self.activity_id})>"
+
 
 class MockActivityRecommendation:
     """Mock ActivityRecommendation object for testing."""
@@ -461,6 +524,9 @@ class MockActivityRecommendation:
         self.generated_at = generated_at
         self.created_at = created_at
         self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<ActivityRecommendation(id={self.id}, child_id={self.child_id}, activity_id={self.activity_id})>"
 
 
 async def create_activity_in_db(
