@@ -34,5 +34,47 @@ jest.mock('react-native-screens', () => ({
   enableScreens: jest.fn(),
 }));
 
+// Mock @react-navigation/bottom-tabs
+jest.mock('@react-navigation/bottom-tabs', () => {
+  const React = require('react');
+  return {
+    createBottomTabNavigator: () => ({
+      Navigator: ({children}) => React.createElement(React.Fragment, null, children),
+      Screen: () => null,
+    }),
+  };
+});
+
+// Mock the useNotifications hook
+jest.mock('./src/hooks/useNotifications', () => ({
+  useNotifications: () => [
+    {
+      isSupported: true,
+      isRegistered: false,
+      isLoading: false,
+      token: null,
+      error: null,
+    },
+    {
+      register: jest.fn(),
+      unregister: jest.fn(),
+      requestPermission: jest.fn(),
+      sendNotification: jest.fn(),
+    },
+  ],
+}));
+
+// Mock the push notifications service
+jest.mock('./src/services/pushNotifications', () => ({
+  PushNotificationService: {
+    requestPermission: jest.fn(),
+    getToken: jest.fn(),
+    unregister: jest.fn(),
+    onNotificationReceived: jest.fn(),
+    sendLocalNotification: jest.fn(),
+  },
+}));
+
 // Silence the warning: Animated: `useNativeDriver` is not supported
-jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper');
+// Note: In React Native 0.78+, NativeAnimatedHelper is handled internally
+// and doesn't require mocking. The warning is suppressed by default.
