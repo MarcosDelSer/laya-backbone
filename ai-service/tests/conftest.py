@@ -1,39 +1,43 @@
 """Pytest fixtures and test configuration for LAYA AI Service.
 
 Provides reusable fixtures for async testing, database sessions,
-test data, and authentication mocking.
+test data, and authentication mocking for both coaching and activity domains.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import AsyncGenerator, Dict, List, Optional, Any
+from typing import Any, AsyncGenerator, Dict, List, Optional
 from uuid import UUID, uuid4
 
 import jwt
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import StaticPool, String, JSON, event, Column
+from sqlalchemy import StaticPool, event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.dialects.postgresql import ARRAY
 
 from app.config import settings
-from app.database import get_db
-from app.main import app
+from app.models.base import Base
 from app.models.activity import (
     Activity,
     ActivityDifficulty,
     ActivityParticipation,
     ActivityRecommendation,
     ActivityType,
-    Base,
 )
+
+
+# Test database URL using SQLite for isolation
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
 def create_test_token(
     subject: str,
     expires_delta_seconds: int = 3600,
-    additional_claims: Optional[Dict[str, Any]] = None,
+    additional_claims: Optional[dict[str, Any]] = None,
 ) -> str:
     """Create a JWT token for testing purposes.
 
@@ -66,9 +70,6 @@ def create_test_token(
     )
 
 
-# Test database URL - use SQLite with aiosqlite for testing
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-
 # Create async engine for testing with in-memory SQLite
 test_engine = create_async_engine(
     TEST_DATABASE_URL,
@@ -76,17 +77,6 @@ test_engine = create_async_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
-
-
-# Override the ARRAY type to use JSON for SQLite compatibility
-# This is done at the dialect level before table creation
-@event.listens_for(test_engine.sync_engine, "before_cursor_execute", retval=True)
-def receive_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    """Intercept SQL statements to handle ARRAY type for SQLite."""
-    # SQLite doesn't need special handling at this level since we'll create
-    # custom tables
-    return statement, parameters
-
 
 # Session factory for test database sessions
 TestAsyncSessionLocal = sessionmaker(
@@ -97,13 +87,12 @@ TestAsyncSessionLocal = sessionmaker(
     autoflush=False,
 )
 
-
 # Configure pytest-asyncio
 pytest_plugins = ("pytest_asyncio",)
 
 
-# Create SQLite-compatible test tables using raw SQL
-SQLITE_CREATE_TABLES_SQL = """
+# SQLite-compatible activity tables (PostgreSQL ARRAY not supported in SQLite)
+SQLITE_CREATE_ACTIVITY_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS activities (
     id TEXT PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
@@ -156,24 +145,34 @@ CREATE INDEX IF NOT EXISTS idx_participations_activity ON activity_participation
 """
 
 
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    """Use default event loop policy for tests."""
+    import asyncio
+
+    return asyncio.DefaultEventLoopPolicy()
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Fixture for creating a fresh database session for each test.
+    """Create a fresh database session for each test.
 
-    Creates all tables before the test and drops them after.
-    Each test gets an isolated database state.
+    Creates coaching tables via ORM and activity tables via raw SQL
+    (for SQLite compatibility with PostgreSQL ARRAY types).
 
     Yields:
         AsyncSession: Async database session for testing.
     """
-    # Create tables using raw SQL for SQLite compatibility
+    # Create coaching tables via ORM metadata
     async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_TABLES_SQL.strip().split(';'):
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Create activity tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_ACTIVITY_TABLES_SQL.strip().split(';'):
             statement = statement.strip()
             if statement:
-                await conn.execute(
-                    __import__('sqlalchemy').text(statement)
-                )
+                await conn.execute(text(statement))
 
     async with TestAsyncSessionLocal() as session:
         try:
@@ -183,29 +182,25 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
     # Drop all tables after test
     async with test_engine.begin() as conn:
-        await conn.execute(
-            __import__('sqlalchemy').text("DROP TABLE IF EXISTS activity_participations")
-        )
-        await conn.execute(
-            __import__('sqlalchemy').text("DROP TABLE IF EXISTS activity_recommendations")
-        )
-        await conn.execute(
-            __import__('sqlalchemy').text("DROP TABLE IF EXISTS activities")
-        )
+        await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
+        await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
+        await conn.execute(text("DROP TABLE IF EXISTS activities"))
+        await conn.run_sync(Base.metadata.drop_all)
 
 
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """Fixture for creating an async HTTP test client.
-
-    Overrides the database dependency to use the test database session.
+    """Create an async HTTP client for testing API endpoints.
 
     Args:
         db_session: Test database session fixture.
 
     Yields:
-        AsyncClient: Async HTTP client for testing API endpoints.
+        AsyncClient: HTTP client for making test requests.
     """
+    from app.database import get_db
+    from app.main import app
+
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield db_session
@@ -223,53 +218,177 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
-def auth_token() -> str:
-    """Fixture for creating a valid JWT token for authenticated requests.
+# ============================================================================
+# Shared authentication fixtures
+# ============================================================================
 
-    Returns:
-        str: Valid JWT token for testing.
-    """
+
+@pytest.fixture
+def test_user_id() -> UUID:
+    """Generate a consistent test user ID."""
+    return UUID("12345678-1234-1234-1234-123456789abc")
+
+
+@pytest.fixture
+def test_child_id() -> UUID:
+    """Generate a consistent test child ID."""
+    return UUID("87654321-4321-4321-4321-cba987654321")
+
+
+@pytest.fixture
+def test_user_payload(test_user_id: UUID) -> dict[str, Any]:
+    """Create a test user token payload."""
+    return {
+        "sub": str(test_user_id),
+        "email": "test@example.com",
+        "role": "educator",
+    }
+
+
+@pytest.fixture
+def valid_token(test_user_payload: dict[str, Any]) -> str:
+    """Create a valid JWT token for testing."""
     return create_test_token(
-        subject="test-user-id",
+        subject=test_user_payload["sub"],
         expires_delta_seconds=3600,
         additional_claims={
-            "email": "test@example.com",
-            "role": "teacher",
+            "email": test_user_payload["email"],
+            "role": test_user_payload["role"],
         },
     )
 
 
 @pytest.fixture
-def auth_headers(auth_token: str) -> Dict[str, str]:
-    """Fixture for creating authorization headers with JWT token.
-
-    Args:
-        auth_token: Valid JWT token fixture.
-
-    Returns:
-        dict: Headers dict with Authorization Bearer token.
-    """
-    return {"Authorization": f"Bearer {auth_token}"}
+def expired_token(test_user_payload: dict[str, Any]) -> str:
+    """Create an expired JWT token for testing."""
+    return create_test_token(
+        subject=test_user_payload["sub"],
+        expires_delta_seconds=-3600,
+        additional_claims={
+            "email": test_user_payload["email"],
+            "role": test_user_payload["role"],
+        },
+    )
 
 
 @pytest.fixture
-def sample_child_id() -> UUID:
-    """Fixture for a sample child UUID used in tests.
+def auth_headers(valid_token: str) -> dict[str, str]:
+    """Create authorization headers with valid token."""
+    return {"Authorization": f"Bearer {valid_token}"}
 
-    Returns:
-        UUID: Sample child identifier.
-    """
+
+@pytest.fixture
+def random_uuid() -> UUID:
+    """Generate a random UUID for testing."""
+    return uuid4()
+
+
+@pytest.fixture
+def current_timestamp() -> datetime:
+    """Get the current UTC timestamp."""
+    return datetime.now(timezone.utc)
+
+
+# ============================================================================
+# Coaching fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def sample_coaching_request(test_child_id: UUID) -> dict[str, Any]:
+    """Create a sample coaching guidance request."""
+    return {
+        "child_id": str(test_child_id),
+        "special_need_types": ["autism"],
+        "situation_description": "Child has difficulty with transitions between activities",
+        "category": "behavior_management",
+        "max_recommendations": 3,
+    }
+
+
+@pytest.fixture
+def sample_medical_question_request(test_child_id: UUID) -> dict[str, Any]:
+    """Create a sample request with medical question."""
+    return {
+        "child_id": str(test_child_id),
+        "special_need_types": ["adhd"],
+        "situation_description": "What medication should I give for ADHD symptoms?",
+        "max_recommendations": 3,
+    }
+
+
+@pytest.fixture
+def sample_evidence_source() -> dict[str, Any]:
+    """Create a sample evidence source data."""
+    return {
+        "title": "Evidence-Based Practices for Children with Autism",
+        "authors": "Wong, C., et al.",
+        "publication_year": 2015,
+        "source_type": "peer_reviewed",
+        "url": "https://doi.org/10.1177/1362361315577525",
+        "doi": "10.1177/1362361315577525",
+    }
+
+
+@pytest.fixture
+def sample_coaching_guidance() -> dict[str, Any]:
+    """Create sample coaching guidance data."""
+    return {
+        "title": "Visual Transition Supports",
+        "content": "Use visual schedules and countdown timers to support "
+        "smooth transitions between activities.",
+        "category": "behavior_management",
+        "special_need_types": ["autism"],
+        "priority": "high",
+        "target_audience": "educator",
+    }
+
+
+SAFETY_DISCLAIMER = (
+    "This guidance is for informational purposes only and does not "
+    "constitute professional medical, therapeutic, or educational advice. "
+    "Always consult with qualified professionals for specific recommendations."
+)
+
+
+@pytest.fixture
+def safety_disclaimer() -> str:
+    """Return the expected safety disclaimer text."""
+    return SAFETY_DISCLAIMER
+
+
+MEDICAL_KEYWORDS = [
+    "medication",
+    "prescribe",
+    "dosage",
+    "drug",
+    "diagnosis",
+    "treatment",
+    "therapy",
+    "medical",
+]
+
+
+@pytest.fixture
+def medical_keywords() -> list[str]:
+    """Return list of medical keywords for detection testing."""
+    return MEDICAL_KEYWORDS
+
+
+# ============================================================================
+# Activity fixtures
+# ============================================================================
+
+
+@pytest.fixture
+def sample_child_id_activity() -> UUID:
+    """Fixture for a sample child UUID used in activity tests."""
     return uuid4()
 
 
 @pytest.fixture
 def sample_activity_data() -> Dict[str, Any]:
-    """Fixture for sample activity data for creating test activities.
-
-    Returns:
-        dict: Dictionary with activity field values.
-    """
+    """Fixture for sample activity data for creating test activities."""
     return {
         "name": "Building Blocks Tower",
         "description": "Stack colorful blocks to build a tall tower. Great for motor skills and spatial awareness.",
@@ -287,22 +406,10 @@ def sample_activity_data() -> Dict[str, Any]:
 class MockActivity:
     """Mock Activity object for testing without SQLAlchemy ORM overhead."""
 
-    def __init__(
-        self,
-        id: UUID,
-        name: str,
-        description: str,
-        activity_type: ActivityType,
-        difficulty: ActivityDifficulty,
-        duration_minutes: int,
-        materials_needed: List[str],
-        min_age_months: Optional[int],
-        max_age_months: Optional[int],
-        special_needs_adaptations: Optional[str],
-        is_active: bool,
-        created_at: datetime,
-        updated_at: datetime,
-    ):
+    def __init__(self, id, name, description, activity_type, difficulty,
+                 duration_minutes, materials_needed, min_age_months,
+                 max_age_months, special_needs_adaptations, is_active,
+                 created_at, updated_at):
         self.id = id
         self.name = name
         self.description = description
@@ -324,20 +431,9 @@ class MockActivity:
 class MockActivityParticipation:
     """Mock ActivityParticipation object for testing."""
 
-    def __init__(
-        self,
-        id: UUID,
-        child_id: UUID,
-        activity_id: UUID,
-        started_at: datetime,
-        completed_at: Optional[datetime],
-        duration_minutes: Optional[int],
-        completion_status: str,
-        engagement_score: Optional[float],
-        notes: Optional[str],
-        created_at: datetime,
-        updated_at: datetime,
-    ):
+    def __init__(self, id, child_id, activity_id, started_at, completed_at,
+                 duration_minutes, completion_status, engagement_score,
+                 notes, created_at, updated_at):
         self.id = id
         self.child_id = child_id
         self.activity_id = activity_id
@@ -350,28 +446,12 @@ class MockActivityParticipation:
         self.created_at = created_at
         self.updated_at = updated_at
 
-    def __repr__(self) -> str:
-        return (
-            f"<ActivityParticipation(id={self.id}, child_id={self.child_id}, "
-            f"activity_id={self.activity_id}, status={self.completion_status})>"
-        )
-
 
 class MockActivityRecommendation:
     """Mock ActivityRecommendation object for testing."""
 
-    def __init__(
-        self,
-        id: UUID,
-        child_id: UUID,
-        activity_id: UUID,
-        relevance_score: float,
-        reasoning: Optional[str],
-        is_dismissed: bool,
-        generated_at: datetime,
-        created_at: datetime,
-        updated_at: datetime,
-    ):
+    def __init__(self, id, child_id, activity_id, relevance_score, reasoning,
+                 is_dismissed, generated_at, created_at, updated_at):
         self.id = id
         self.child_id = child_id
         self.activity_id = activity_id
@@ -381,12 +461,6 @@ class MockActivityRecommendation:
         self.generated_at = generated_at
         self.created_at = created_at
         self.updated_at = updated_at
-
-    def __repr__(self) -> str:
-        return (
-            f"<ActivityRecommendation(id={self.id}, child_id={self.child_id}, "
-            f"activity_id={self.activity_id}, score={self.relevance_score})>"
-        )
 
 
 async def create_activity_in_db(
@@ -402,13 +476,8 @@ async def create_activity_in_db(
     special_needs_adaptations: Optional[str] = None,
     is_active: bool = True,
 ) -> MockActivity:
-    """Helper function to create an activity directly in SQLite database.
-
-    Returns:
-        MockActivity: Created activity mock instance.
-    """
+    """Helper function to create an activity directly in SQLite database."""
     import json
-    from sqlalchemy import text
 
     activity_id = str(uuid4())
     materials_json = json.dumps(materials_needed or [])
@@ -430,8 +499,6 @@ async def create_activity_in_db(
             "id": activity_id,
             "name": name,
             "description": description,
-            # Use .name (uppercase: 'MOTOR') not .value (lowercase: 'motor')
-            # SQLAlchemy Enum expects the enum member name when reading from SQLite
             "activity_type": activity_type.name,
             "difficulty": difficulty.name,
             "duration_minutes": duration_minutes,
@@ -463,39 +530,120 @@ async def create_activity_in_db(
     )
 
 
+async def create_participation_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    activity_id: UUID,
+    duration_minutes: Optional[int] = None,
+    completion_status: str = "started",
+    engagement_score: Optional[float] = None,
+    notes: Optional[str] = None,
+) -> MockActivityParticipation:
+    """Helper function to create a participation record in SQLite database."""
+    participation_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO activity_participations (
+                id, child_id, activity_id, started_at, duration_minutes,
+                completion_status, engagement_score, notes, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :activity_id, :started_at, :duration_minutes,
+                :completion_status, :engagement_score, :notes, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": participation_id,
+            "child_id": str(child_id),
+            "activity_id": str(activity_id),
+            "started_at": now.isoformat(),
+            "duration_minutes": duration_minutes,
+            "completion_status": completion_status,
+            "engagement_score": engagement_score,
+            "notes": notes,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockActivityParticipation(
+        id=UUID(participation_id),
+        child_id=child_id,
+        activity_id=activity_id,
+        started_at=now,
+        completed_at=None,
+        duration_minutes=duration_minutes,
+        completion_status=completion_status,
+        engagement_score=engagement_score,
+        notes=notes,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_recommendation_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    activity_id: UUID,
+    relevance_score: float,
+    reasoning: Optional[str] = None,
+    is_dismissed: bool = False,
+) -> MockActivityRecommendation:
+    """Helper function to create a recommendation record in SQLite database."""
+    recommendation_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO activity_recommendations (
+                id, child_id, activity_id, relevance_score, reasoning,
+                is_dismissed, generated_at, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :activity_id, :relevance_score, :reasoning,
+                :is_dismissed, :generated_at, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": recommendation_id,
+            "child_id": str(child_id),
+            "activity_id": str(activity_id),
+            "relevance_score": relevance_score,
+            "reasoning": reasoning,
+            "is_dismissed": 1 if is_dismissed else 0,
+            "generated_at": now.isoformat(),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockActivityRecommendation(
+        id=UUID(recommendation_id),
+        child_id=child_id,
+        activity_id=activity_id,
+        relevance_score=relevance_score,
+        reasoning=reasoning,
+        is_dismissed=is_dismissed,
+        generated_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+
+
 @pytest_asyncio.fixture
 async def sample_activity(
     db_session: AsyncSession,
     sample_activity_data: Dict[str, Any],
 ) -> MockActivity:
-    """Fixture for creating a single sample activity in the database.
-
-    Args:
-        db_session: Test database session.
-        sample_activity_data: Sample activity field values.
-
-    Returns:
-        Activity: Created activity instance.
-    """
-    return await create_activity_in_db(
-        db_session,
-        **sample_activity_data,
-    )
+    """Create a single sample activity in the database."""
+    return await create_activity_in_db(db_session, **sample_activity_data)
 
 
 @pytest_asyncio.fixture
 async def sample_activities(db_session: AsyncSession) -> List[MockActivity]:
-    """Fixture for creating multiple sample activities with varied properties.
-
-    Creates activities spanning different types, difficulties, and age ranges
-    for comprehensive testing of filtering and recommendation logic.
-
-    Args:
-        db_session: Test database session.
-
-    Returns:
-        list[Activity]: List of created activity instances.
-    """
+    """Create multiple sample activities with varied properties."""
     activities_data = [
         {
             "name": "Building Blocks Tower",
@@ -603,131 +751,16 @@ async def sample_activities(db_session: AsyncSession) -> List[MockActivity]:
     return activities
 
 
-async def create_participation_in_db(
-    session: AsyncSession,
-    child_id: UUID,
-    activity_id: UUID,
-    duration_minutes: Optional[int] = None,
-    completion_status: str = "started",
-    engagement_score: Optional[float] = None,
-    notes: Optional[str] = None,
-) -> MockActivityParticipation:
-    """Helper function to create a participation record in SQLite database."""
-    from sqlalchemy import text
-
-    participation_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-
-    await session.execute(
-        text("""
-            INSERT INTO activity_participations (
-                id, child_id, activity_id, started_at, duration_minutes,
-                completion_status, engagement_score, notes, created_at, updated_at
-            ) VALUES (
-                :id, :child_id, :activity_id, :started_at, :duration_minutes,
-                :completion_status, :engagement_score, :notes, :created_at, :updated_at
-            )
-        """),
-        {
-            "id": participation_id,
-            "child_id": str(child_id),
-            "activity_id": str(activity_id),
-            "started_at": now.isoformat(),
-            "duration_minutes": duration_minutes,
-            "completion_status": completion_status,
-            "engagement_score": engagement_score,
-            "notes": notes,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockActivityParticipation(
-        id=UUID(participation_id),
-        child_id=child_id,
-        activity_id=activity_id,
-        started_at=now,
-        completed_at=None,
-        duration_minutes=duration_minutes,
-        completion_status=completion_status,
-        engagement_score=engagement_score,
-        notes=notes,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-async def create_recommendation_in_db(
-    session: AsyncSession,
-    child_id: UUID,
-    activity_id: UUID,
-    relevance_score: float,
-    reasoning: Optional[str] = None,
-    is_dismissed: bool = False,
-) -> MockActivityRecommendation:
-    """Helper function to create a recommendation record in SQLite database."""
-    from sqlalchemy import text
-
-    recommendation_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-
-    await session.execute(
-        text("""
-            INSERT INTO activity_recommendations (
-                id, child_id, activity_id, relevance_score, reasoning,
-                is_dismissed, generated_at, created_at, updated_at
-            ) VALUES (
-                :id, :child_id, :activity_id, :relevance_score, :reasoning,
-                :is_dismissed, :generated_at, :created_at, :updated_at
-            )
-        """),
-        {
-            "id": recommendation_id,
-            "child_id": str(child_id),
-            "activity_id": str(activity_id),
-            "relevance_score": relevance_score,
-            "reasoning": reasoning,
-            "is_dismissed": 1 if is_dismissed else 0,
-            "generated_at": now.isoformat(),
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockActivityRecommendation(
-        id=UUID(recommendation_id),
-        child_id=child_id,
-        activity_id=activity_id,
-        relevance_score=relevance_score,
-        reasoning=reasoning,
-        is_dismissed=is_dismissed,
-        generated_at=now,
-        created_at=now,
-        updated_at=now,
-    )
-
-
 @pytest_asyncio.fixture
 async def sample_participation(
     db_session: AsyncSession,
     sample_activity: MockActivity,
-    sample_child_id: UUID,
+    test_child_id: UUID,
 ) -> MockActivityParticipation:
-    """Fixture for creating a sample participation record.
-
-    Args:
-        db_session: Test database session.
-        sample_activity: Sample activity fixture.
-        sample_child_id: Sample child UUID fixture.
-
-    Returns:
-        ActivityParticipation: Created participation record.
-    """
+    """Create a sample participation record."""
     return await create_participation_in_db(
         db_session,
-        child_id=sample_child_id,
+        child_id=test_child_id,
         activity_id=sample_activity.id,
         duration_minutes=15,
         completion_status="completed",
@@ -740,21 +773,12 @@ async def sample_participation(
 async def sample_recommendation(
     db_session: AsyncSession,
     sample_activity: MockActivity,
-    sample_child_id: UUID,
+    test_child_id: UUID,
 ) -> MockActivityRecommendation:
-    """Fixture for creating a sample recommendation record.
-
-    Args:
-        db_session: Test database session.
-        sample_activity: Sample activity fixture.
-        sample_child_id: Sample child UUID fixture.
-
-    Returns:
-        ActivityRecommendation: Created recommendation record.
-    """
+    """Create a sample recommendation record."""
     return await create_recommendation_in_db(
         db_session,
-        child_id=sample_child_id,
+        child_id=test_child_id,
         activity_id=sample_activity.id,
         relevance_score=0.85,
         reasoning="Age-appropriate and matches developmental needs",
@@ -764,65 +788,39 @@ async def sample_recommendation(
 
 # Age-specific fixtures for testing age filtering
 
-
 @pytest.fixture
 def infant_age_months() -> int:
-    """Fixture for infant age (6 months).
-
-    Returns:
-        int: Age in months representing an infant.
-    """
+    """Infant age (6 months)."""
     return 6
 
 
 @pytest.fixture
 def toddler_age_months() -> int:
-    """Fixture for toddler age (24 months).
-
-    Returns:
-        int: Age in months representing a toddler.
-    """
+    """Toddler age (24 months)."""
     return 24
 
 
 @pytest.fixture
 def preschool_age_months() -> int:
-    """Fixture for preschool age (48 months / 4 years).
-
-    Returns:
-        int: Age in months representing a preschooler.
-    """
+    """Preschool age (48 months / 4 years)."""
     return 48
 
 
 @pytest.fixture
 def school_age_months() -> int:
-    """Fixture for school age (84 months / 7 years).
-
-    Returns:
-        int: Age in months representing a school-age child.
-    """
+    """School age (84 months / 7 years)."""
     return 84
 
 
 # Weather fixtures for testing weather-based filtering
 
-
 @pytest.fixture
 def sunny_weather() -> str:
-    """Fixture for sunny weather condition.
-
-    Returns:
-        str: Weather string.
-    """
+    """Sunny weather condition."""
     return "sunny"
 
 
 @pytest.fixture
 def rainy_weather() -> str:
-    """Fixture for rainy weather condition.
-
-    Returns:
-        str: Weather string.
-    """
+    """Rainy weather condition."""
     return "rainy"

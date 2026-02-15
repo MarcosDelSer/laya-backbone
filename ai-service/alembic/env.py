@@ -23,10 +23,18 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Add your model's MetaData object here for 'autogenerate' support
-# This includes all models that inherit from Base:
-# - Activity: Core activity definitions
-# - ActivityRecommendation: Generated recommendations log
-# - ActivityParticipation: Participation history tracking
+# Import all models to ensure they are registered with Base.metadata
+from app.models import (  # noqa: E402, F401
+    CoachingRecommendation,
+    CoachingSession,
+    EvidenceSource,
+)
+from app.models.activity import (  # noqa: E402, F401
+    Activity,
+    ActivityRecommendation,
+    ActivityParticipation,
+)
+
 target_metadata = Base.metadata
 
 # Override sqlalchemy.url with our async database URL from settings

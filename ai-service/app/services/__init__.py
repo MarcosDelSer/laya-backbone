@@ -1,12 +1,29 @@
-"""Service layer for LAYA AI Service.
+"""Business logic services for LAYA AI Service.
 
-This module exports all service classes for business logic operations.
-Services encapsulate complex operations and provide a clean interface
-for routers to interact with the database and other resources.
+This package contains all service layer implementations that encapsulate
+business logic, database operations, and external integrations.
+
+Modules:
+    coaching_service: Service for RAG-based special needs coaching guidance
+    activity_service: Service for activity intelligence and recommendations
 """
 
+from app.services.coaching_service import (
+    SAFETY_DISCLAIMER,
+    CoachingService,
+    CoachingServiceError,
+    InvalidChildError,
+    NoSourcesFoundError,
+)
 from app.services.activity_service import ActivityService
 
-__all__ = [
+__all__: list[str] = [
+    # Coaching
+    "CoachingService",
+    "CoachingServiceError",
+    "InvalidChildError",
+    "NoSourcesFoundError",
+    "SAFETY_DISCLAIMER",
+    # Activity
     "ActivityService",
 ]
