@@ -9,8 +9,10 @@ This package contains authentication and authorization functionality including:
 """
 
 from app.auth.models import User, UserRole
+from app.auth.schemas import LoginRequest
 
 __all__ = [
     "User",
     "UserRole",
+    "LoginRequest",
 ]
