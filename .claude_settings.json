@@ -1,0 +1,39 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/014-task-m-integration-e2e/**)",
+      "Write(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/014-task-m-integration-e2e/**)",
+      "Edit(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/014-task-m-integration-e2e/**)",
+      "Glob(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/014-task-m-integration-e2e/**)",
+      "Grep(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/014-task-m-integration-e2e/**)",
+      "Read(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/014-task-m-integration-e2e/.auto-claude/specs/014-task-m-integration-e2e/**)",
+      "Write(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/014-task-m-integration-e2e/.auto-claude/specs/014-task-m-integration-e2e/**)",
+      "Edit(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/014-task-m-integration-e2e/.auto-claude/specs/014-task-m-integration-e2e/**)",
+      "Read(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/**)",
+      "Write(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/**)",
+      "Edit(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/**)",
+      "Glob(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/**)",
+      "Grep(/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__get-library-docs(*)",
+      "mcp__graphiti-memory__search_nodes(*)",
+      "mcp__graphiti-memory__search_facts(*)",
+      "mcp__graphiti-memory__add_episode(*)",
+      "mcp__graphiti-memory__get_episodes(*)",
+      "mcp__graphiti-memory__get_entity_edge(*)"
+    ]
+  }
+}
