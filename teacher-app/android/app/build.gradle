@@ -1,0 +1,217 @@
+// LAYA Teacher App - App-level build.gradle
+//
+// Android app module configuration for the Teacher app.
+// Includes React Native, Firebase, and release configuration.
+
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+// Firebase Cloud Messaging for push notifications
+apply plugin: 'com.google.gms.google-services'
+
+/**
+ * React Native configuration block.
+ * Configures the React Native Gradle plugin for bundling and code generation.
+ */
+react {
+    // Enable autolinking of native modules
+    autolinkLibrariesWithApp()
+
+    // Hermes is the recommended JS engine for React Native
+    // It provides better performance and smaller bundle sizes
+    hermesEnabled = true
+
+    // Enable code generation for native modules
+    enableHermes = true
+}
+
+/**
+ * Loads local.properties for keystore passwords and other local config.
+ * These should not be committed to version control.
+ */
+def keystorePropertiesFile = rootProject.file("local.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace "com.teacherapp"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.laya.teacherapp"
+        minSdk 29          // Android 10 - minimum supported version
+        targetSdk 34       // Android 14 - target version
+        versionCode 1
+        versionName "1.0.0"
+
+        // Enable multidex for large apps with many dependencies
+        multiDexEnabled true
+
+        // Test instrumentation runner for Android tests
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    /**
+     * Signing configurations for debug and release builds.
+     * Release signing requires keystore properties in local.properties or gradle.properties.
+     */
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        release {
+            // Keystore configuration for release builds
+            // These values should be set in gradle.properties (not committed)
+            // LAYA_UPLOAD_STORE_FILE=path/to/keystore
+            // LAYA_UPLOAD_KEY_ALIAS=alias
+            // LAYA_UPLOAD_STORE_PASSWORD=password
+            // LAYA_UPLOAD_KEY_PASSWORD=password
+            if (project.hasProperty('LAYA_UPLOAD_STORE_FILE')) {
+                storeFile file(LAYA_UPLOAD_STORE_FILE)
+                storePassword LAYA_UPLOAD_STORE_PASSWORD
+                keyAlias LAYA_UPLOAD_KEY_ALIAS
+                keyPassword LAYA_UPLOAD_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+            debuggable true
+
+            // Enable React Native dev features
+            buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", "false"
+        }
+        release {
+            // Enable ProGuard/R8 for code shrinking and obfuscation
+            minifyEnabled true
+            shrinkResources true
+
+            // ProGuard rules for React Native and Firebase
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+
+            // Use release signing config if available, otherwise debug
+            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+
+            // Disable debugging in release
+            debuggable false
+
+            // React Native architecture flag
+            buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", "false"
+        }
+    }
+
+    /**
+     * Build features configuration
+     */
+    buildFeatures {
+        // Enable BuildConfig class generation
+        buildConfig true
+
+        // Enable View Binding (optional, for native views)
+        viewBinding true
+    }
+
+    /**
+     * Compile options for Java/Kotlin
+     */
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    /**
+     * Packaging options to avoid duplicate file errors
+     */
+    packagingOptions {
+        pickFirst 'lib/x86/libc++_shared.so'
+        pickFirst 'lib/x86_64/libc++_shared.so'
+        pickFirst 'lib/armeabi-v7a/libc++_shared.so'
+        pickFirst 'lib/arm64-v8a/libc++_shared.so'
+
+        // Exclude META-INF files that cause conflicts
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/license.txt'
+        exclude 'META-INF/NOTICE'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/notice.txt'
+        exclude 'META-INF/ASL2.0'
+        exclude 'META-INF/*.kotlin_module'
+    }
+
+    /**
+     * Split APKs by ABI for smaller download sizes on Play Store
+     */
+    splits {
+        abi {
+            reset()
+            enable true
+            universalApk true  // Also build universal APK
+            include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+        }
+    }
+}
+
+dependencies {
+    // React Native core
+    implementation("com.facebook.react:react-android")
+
+    // Hermes JavaScript engine (recommended for React Native)
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation("org.webkit:android-jsc:+")
+    }
+
+    // Firebase BoM (Bill of Materials) for version management
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+
+    // Firebase Cloud Messaging for push notifications
+    implementation 'com.google.firebase:firebase-messaging'
+
+    // Firebase Analytics (optional, but useful for tracking)
+    implementation 'com.google.firebase:firebase-analytics'
+
+    // AndroidX dependencies
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // Multidex support for apps with >64K methods
+    implementation 'androidx.multidex:multidex:2.0.1'
+
+    // Kotlin standard library
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:${rootProject.ext.kotlinVersion}"
+
+    // Testing dependencies
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+
+/**
+ * Task to copy the Hermes debug files for development builds.
+ * This enables better debugging with Hermes.
+ */
+task copyDownloadableDepsToLibs(type: Copy) {
+    from configurations.implementation
+    into 'libs'
+}
+
+// Apply React Native autolinking
+apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
+applyNativeModulesAppBuildGradle(project)
