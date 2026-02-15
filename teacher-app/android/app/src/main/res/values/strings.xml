@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LAYA Teacher App - String Resources
+
+  This file contains all user-facing strings for the Android app.
+  For localization, create values-<language> directories (e.g., values-es, values-fr)
+  with translated versions of this file.
+-->
+<resources>
+    <!-- App Name -->
+    <string name="app_name">LAYA Teacher</string>
+
+    <!-- Generic Actions -->
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_close">Close</string>
+
+    <!-- Permission Dialogs -->
+    <string name="permission_camera_title">Camera Permission Required</string>
+    <string name="permission_camera_message">LAYA Teacher needs camera access to capture photos of classroom activities and children\'s achievements.</string>
+    <string name="permission_camera_denied">Camera permission denied. Please enable it in Settings to capture photos.</string>
+
+    <string name="permission_storage_title">Storage Permission Required</string>
+    <string name="permission_storage_message">LAYA Teacher needs storage access to save and share photos.</string>
+    <string name="permission_storage_denied">Storage permission denied. Please enable it in Settings to access photos.</string>
+
+    <string name="permission_notification_title">Notification Permission Required</string>
+    <string name="permission_notification_message">Enable notifications to receive important updates about attendance, incidents, and messages from parents.</string>
+    <string name="permission_notification_denied">Notifications are disabled. You may miss important updates.</string>
+
+    <string name="permission_settings_button">Open Settings</string>
+
+    <!-- Notification Channels -->
+    <string name="notification_channel_general_name">General Notifications</string>
+    <string name="notification_channel_general_description">General updates and reminders for LAYA Teacher</string>
+
+    <string name="notification_channel_incidents_name">Incident Alerts</string>
+    <string name="notification_channel_incidents_description">Urgent notifications about incidents and important events</string>
+
+    <string name="notification_channel_messages_name">Parent Messages</string>
+    <string name="notification_channel_messages_description">Messages from parents and guardians</string>
+
+    <!-- Error Messages -->
+    <string name="error_network">Network error. Please check your connection and try again.</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="error_session_expired">Your session has expired. Please sign in again.</string>
+
+    <!-- Offline Mode -->
+    <string name="offline_mode_banner">You\'re offline. Changes will sync when connected.</string>
+    <string name="offline_sync_pending">Syncing pending changes\u2026</string>
+    <string name="offline_sync_complete">All changes synced</string>
+
+    <!-- Accessibility -->
+    <string name="content_description_app_logo">LAYA Teacher logo</string>
+    <string name="content_description_back_button">Go back</string>
+    <string name="content_description_menu_button">Open menu</string>
+    <string name="content_description_notification_badge">New notifications available</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Splash Screen Background for LAYA Teacher App
+
+  This drawable is used as the window background during app launch.
+  Shows the LAYA brand color with a centered logo placeholder.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Background color: LAYA Blue -->
+    <item android:drawable="@color/primary" />
+
+    <!-- Centered logo placeholder - replace with actual logo -->
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@mipmap/ic_launcher" />
+    </item>
+</layer-list>

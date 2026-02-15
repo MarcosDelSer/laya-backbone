@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LAYA Teacher App - Color Resources
+
+  This file defines the app's color palette.
+  Colors are organized by their semantic purpose for easy theming.
+-->
+<resources>
+    <!-- ==================== BRAND COLORS ==================== -->
+
+    <!-- Primary brand color - LAYA Blue -->
+    <color name="primary">#2563EB</color>
+    <color name="primary_dark">#1D4ED8</color>
+    <color name="primary_light">#60A5FA</color>
+
+    <!-- Accent color for interactive elements -->
+    <color name="accent">#F59E0B</color>
+    <color name="accent_dark">#D97706</color>
+    <color name="accent_light">#FCD34D</color>
+
+    <!-- ==================== SEMANTIC COLORS ==================== -->
+
+    <!-- Success states (check-ins, completions) -->
+    <color name="success">#22C55E</color>
+    <color name="success_dark">#16A34A</color>
+    <color name="success_light">#86EFAC</color>
+
+    <!-- Warning states (alerts, pending actions) -->
+    <color name="warning">#F59E0B</color>
+    <color name="warning_dark">#D97706</color>
+    <color name="warning_light">#FDE68A</color>
+
+    <!-- Error states (incidents, failures) -->
+    <color name="error">#EF4444</color>
+    <color name="error_dark">#DC2626</color>
+    <color name="error_light">#FCA5A5</color>
+
+    <!-- Info states (neutral notifications) -->
+    <color name="info">#3B82F6</color>
+    <color name="info_dark">#2563EB</color>
+    <color name="info_light">#93C5FD</color>
+
+    <!-- ==================== BACKGROUND COLORS ==================== -->
+
+    <!-- Main background -->
+    <color name="background">#FFFFFF</color>
+    <color name="background_secondary">#F9FAFB</color>
+
+    <!-- Surface colors for cards and elevated elements -->
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_elevated">#FFFFFF</color>
+
+    <!-- Overlay for modals and dialogs -->
+    <color name="overlay">#66000000</color>
+
+    <!-- ==================== TEXT COLORS ==================== -->
+
+    <!-- Primary text (headings, main content) -->
+    <color name="text_primary">#1F2937</color>
+
+    <!-- Secondary text (descriptions, labels) -->
+    <color name="text_secondary">#6B7280</color>
+
+    <!-- Tertiary text (hints, placeholders) -->
+    <color name="text_tertiary">#9CA3AF</color>
+
+    <!-- Text on dark/primary backgrounds -->
+    <color name="text_on_primary">#FFFFFF</color>
+
+    <!-- Disabled text -->
+    <color name="text_disabled">#D1D5DB</color>
+
+    <!-- ==================== UI ELEMENT COLORS ==================== -->
+
+    <!-- Borders and dividers -->
+    <color name="border">#E5E7EB</color>
+    <color name="divider">#F3F4F6</color>
+
+    <!-- Input field colors -->
+    <color name="input_background">#F9FAFB</color>
+    <color name="input_border">#D1D5DB</color>
+    <color name="input_border_focused">#2563EB</color>
+
+    <!-- Icon colors -->
+    <color name="icon_primary">#374151</color>
+    <color name="icon_secondary">#9CA3AF</color>
+
+    <!-- Navigation bar -->
+    <color name="navigation_bar">#FFFFFF</color>
+    <color name="navigation_bar_icon">#6B7280</color>
+    <color name="navigation_bar_icon_selected">#2563EB</color>
+
+    <!-- ==================== NOTIFICATION COLORS ==================== -->
+
+    <!-- Default notification color (shown in status bar and notification shade) -->
+    <color name="notification_color">#2563EB</color>
+
+    <!-- Incident notification (urgent/high priority) -->
+    <color name="notification_incident">#EF4444</color>
+
+    <!-- ==================== ATTENDANCE STATUS COLORS ==================== -->
+
+    <!-- Check-in status -->
+    <color name="status_checked_in">#22C55E</color>
+    <color name="status_checked_out">#6B7280</color>
+    <color name="status_absent">#EF4444</color>
+    <color name="status_pending">#F59E0B</color>
+
+    <!-- ==================== ACTIVITY COLORS ==================== -->
+
+    <!-- Activity type colors -->
+    <color name="activity_meal">#F59E0B</color>
+    <color name="activity_nap">#8B5CF6</color>
+    <color name="activity_outdoor">#22C55E</color>
+    <color name="activity_learning">#3B82F6</color>
+    <color name="activity_creative">#EC4899</color>
+
+    <!-- ==================== UTILITY COLORS ==================== -->
+
+    <!-- Standard colors -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="transparent">#00000000</color>
+
+    <!-- Ripple effect -->
+    <color name="ripple">#1F2563EB</color>
+</resources>
