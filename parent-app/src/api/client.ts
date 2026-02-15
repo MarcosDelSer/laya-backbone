@@ -151,7 +151,7 @@ function buildUrl(endpoint: string, params?: Record<string, string>, target: Api
 /**
  * Make a single API request attempt
  */
-async function makeRequest<T>(
+async function makeRequest(
   url: string,
   options: RequestOptions,
 ): Promise<{response: Response | null; body: unknown; error: Error | null}> {
@@ -172,7 +172,7 @@ async function makeRequest<T>(
 
   // Add authentication token if available
   if (sessionToken) {
-    requestHeaders['Authorization'] = `Bearer ${sessionToken}`;
+    requestHeaders.Authorization = `Bearer ${sessionToken}`;
   }
 
   try {
@@ -208,7 +208,7 @@ export async function apiRequest<T>(
   let attempt = 0;
 
   while (attempt <= retries) {
-    const {response, body, error} = await makeRequest<T>(url, options);
+    const {response, body, error} = await makeRequest(url, options);
 
     // Handle fetch errors (network issues, timeouts)
     if (error) {

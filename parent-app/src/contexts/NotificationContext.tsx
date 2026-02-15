@@ -10,7 +10,7 @@
  * 2. Use useNotificationContext() in any component to access notification state
  */
 
-import React, {createContext, useContext, useCallback, useMemo} from 'react';
+import React, {createContext, useContext, useMemo} from 'react';
 
 import {NotificationPayload} from '../services/pushNotifications';
 import {

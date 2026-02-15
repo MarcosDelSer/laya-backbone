@@ -133,16 +133,15 @@ export async function sharePhoto(
     const attribution = '\n\nShared from LAYA Parent App';
     message = message ? `${message}${attribution}` : '';
 
+    // Build share content - React Native Share requires at least message or url
+    // We always have a URL from the photo, so we can safely cast
     const shareContent: {
       message?: string;
-      url?: string;
+      url: string;
       title?: string;
-    } = {};
-
-    // Add photo URL (this will be shared directly on iOS)
-    if (photo.url) {
-      shareContent.url = photo.url;
-    }
+    } = {
+      url: photo.url,
+    };
 
     if (message) {
       shareContent.message = message;
@@ -253,7 +252,9 @@ export async function downloadPhoto(
     //
     // For now, we return success with the URL as the "path"
     // The actual save functionality requires additional native modules
-    const filename = generatePhotoFilename(photo, date);
+    // Generate filename for future use when native modules are available
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _filename = generatePhotoFilename(photo, date);
 
     return {
       success: true,

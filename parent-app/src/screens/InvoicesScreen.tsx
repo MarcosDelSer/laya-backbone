@@ -177,7 +177,7 @@ function formatCurrency(amount: number): string {
 async function fetchInvoices(): Promise<Invoice[]> {
   // TODO: Replace with actual API call when backend is connected
   // Simulate network delay for realistic UX
-  await new Promise(resolve => setTimeout(resolve, 800));
+  await new Promise<void>(resolve => setTimeout(resolve, 800));
 
   // Return mock data sorted by date (most recent first)
   return [...mockInvoices].sort(

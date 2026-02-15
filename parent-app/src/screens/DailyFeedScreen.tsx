@@ -240,7 +240,7 @@ async function fetchReports(): Promise<DailyReport[]> {
   // throw new Error(response.error?.message || 'Failed to fetch reports');
 
   // Simulate network delay for realistic UX
-  await new Promise(resolve => setTimeout(resolve, 800));
+  await new Promise<void>(resolve => setTimeout(resolve, 800));
 
   // Return sorted mock data
   return sortReportsByDate(mockReports);

@@ -56,7 +56,7 @@ const mockMessages: Record<string, Message[]> = {
       senderId: 'teacher-1',
       senderName: 'Ms. Johnson',
       content:
-        "Hi! I wanted to let you know that Emma had a wonderful day today. She really enjoyed the art activity and made a beautiful painting.",
+        'Hi! I wanted to let you know that Emma had a wonderful day today. She really enjoyed the art activity and made a beautiful painting.',
       timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
       read: true,
     },
@@ -176,8 +176,10 @@ async function fetchThreads(): Promise<MessageThread[]> {
 
 /**
  * Group messages by date for rendering with date separators.
+ * Reserved for future use when implementing date separators in message view.
  */
-function groupMessagesByDate(messages: Message[]): Array<{date: string; messages: Message[]}> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _groupMessagesByDate(messages: Message[]): Array<{date: string; messages: Message[]}> {
   const groups: Record<string, Message[]> = {};
 
   messages.forEach(message => {
@@ -542,7 +544,9 @@ function MessagesScreen(_props: MessagesScreenProps): React.JSX.Element {
 
   // Get messages for selected thread
   const selectedMessages = useMemo(() => {
-    if (!selectedThreadId) return [];
+    if (!selectedThreadId) {
+      return [];
+    }
     return messages[selectedThreadId] || [];
   }, [messages, selectedThreadId]);
 
@@ -598,7 +602,9 @@ function MessagesScreen(_props: MessagesScreenProps): React.JSX.Element {
    */
   const handleSendMessage = useCallback(
     (content: string) => {
-      if (!selectedThreadId) return;
+      if (!selectedThreadId) {
+        return;
+      }
 
       const newMessage: Message = {
         id: `msg-${Date.now()}`,

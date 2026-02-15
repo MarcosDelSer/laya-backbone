@@ -81,7 +81,10 @@ export type NotificationEventHandler = (payload: NotificationPayload) => void;
 // Internal state
 let isInitialized = false;
 let currentToken: string | null = null;
+// Reserved for future use when Firebase messaging is integrated
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let foregroundHandler: NotificationEventHandler | null = null;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let backgroundHandler: NotificationEventHandler | null = null;
 
 /**
@@ -398,7 +401,7 @@ export function setBackgroundNotificationHandler(
  * Topics allow sending notifications to groups of users.
  */
 export async function subscribeToTopic(
-  topic: string,
+  _topic: string,
 ): Promise<PushNotificationResult> {
   if (!isFCMSDKAvailable()) {
     return {
@@ -410,28 +413,18 @@ export async function subscribeToTopic(
     };
   }
 
-  try {
-    // Mock implementation - in production would use:
-    // import messaging from '@react-native-firebase/messaging';
-    // await messaging().subscribeToTopic(topic);
+  // Mock implementation - in production would use:
+  // import messaging from '@react-native-firebase/messaging';
+  // await messaging().subscribeToTopic(_topic);
 
-    return {success: true};
-  } catch (error) {
-    return {
-      success: false,
-      error: {
-        code: 'TOKEN_REGISTRATION_FAILED',
-        message: error instanceof Error ? error.message : 'Failed to subscribe to topic',
-      },
-    };
-  }
+  return {success: true};
 }
 
 /**
  * Unsubscribe from a notification topic
  */
 export async function unsubscribeFromTopic(
-  topic: string,
+  _topic: string,
 ): Promise<PushNotificationResult> {
   if (!isFCMSDKAvailable()) {
     return {
@@ -443,21 +436,11 @@ export async function unsubscribeFromTopic(
     };
   }
 
-  try {
-    // Mock implementation - in production would use:
-    // import messaging from '@react-native-firebase/messaging';
-    // await messaging().unsubscribeFromTopic(topic);
+  // Mock implementation - in production would use:
+  // import messaging from '@react-native-firebase/messaging';
+  // await messaging().unsubscribeFromTopic(_topic);
 
-    return {success: true};
-  } catch (error) {
-    return {
-      success: false,
-      error: {
-        code: 'TOKEN_REGISTRATION_FAILED',
-        message: error instanceof Error ? error.message : 'Failed to unsubscribe from topic',
-      },
-    };
-  }
+  return {success: true};
 }
 
 /**

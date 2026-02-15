@@ -19,7 +19,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import type {MainTabParamList} from '../types/navigation';
 
 /**
- * Tab icon properties
+ * Props for tab bar icon function
  */
 interface TabIconProps {
   focused: boolean;

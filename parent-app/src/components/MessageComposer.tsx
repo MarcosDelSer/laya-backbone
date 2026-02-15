@@ -11,7 +11,7 @@
  * Adapted from parent-portal/components/MessageComposer.tsx for React Native.
  */
 
-import React, {useState, useCallback, useRef, useEffect} from 'react';
+import React, {useState, useCallback, useRef} from 'react';
 import {
   View,
   TextInput,
@@ -21,7 +21,6 @@ import {
   Keyboard,
   Platform,
   NativeSyntheticEvent,
-  TextInputKeyPressEventData,
   TextInputContentSizeChangeEventData,
 } from 'react-native';
 

@@ -487,7 +487,7 @@ function PhotoViewer({
   const keyExtractor = useCallback((item: Photo) => item.id, []);
 
   const getItemLayout = useCallback(
-    (_: Photo[] | null | undefined, index: number) => ({
+    (_: ArrayLike<Photo> | null | undefined, index: number) => ({
       length: SCREEN_WIDTH,
       offset: SCREEN_WIDTH * index,
       index,

@@ -14,7 +14,6 @@ import type {
   MessageThread,
   SendMessageRequest,
   CreateThreadRequest,
-  PaginatedResponse,
 } from '../types';
 
 // ============================================================================

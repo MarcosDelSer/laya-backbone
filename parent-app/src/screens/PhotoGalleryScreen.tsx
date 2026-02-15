@@ -164,7 +164,7 @@ async function fetchGalleryPhotos(): Promise<PhotoWithMetadata[]> {
   // throw new Error(response.error?.message || 'Failed to fetch photos');
 
   // Simulate network delay for realistic UX
-  await new Promise(resolve => setTimeout(resolve, 800));
+  await new Promise<void>(resolve => setTimeout(resolve, 800));
 
   // Return sorted mock data
   return sortPhotosByDate(mockPhotos);
@@ -485,7 +485,7 @@ function PhotoGalleryScreen(_props: PhotosScreenProps): React.JSX.Element {
    * Handle photo press in grid - open full-screen viewer
    */
   const handlePhotoPress = useCallback(
-    (photo: Photo, index: number) => {
+    (photo: Photo, _index: number) => {
       // Find the global index of this photo
       const globalIndex = data?.findIndex(item => item.photo.id === photo.id) ?? 0;
       setSelectedPhotoIndex(globalIndex);

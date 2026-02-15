@@ -52,17 +52,20 @@ async function getStoredTokens(): Promise<{
  * - expo-secure-store
  *
  * TODO: Implement secure token storage
+ *
+ * @param _accessToken - Access token to store (unused pending implementation)
+ * @param _refreshToken - Refresh token to store (unused pending implementation)
  */
 async function setStoredTokens(
-  accessToken: string | null,
-  refreshToken: string | null,
+  _accessToken: string | null,
+  _refreshToken: string | null,
 ): Promise<void> {
   // TODO: Implement secure token storage
   // Example with react-native-keychain:
-  // if (accessToken && refreshToken) {
+  // if (_accessToken && _refreshToken) {
   //   await Keychain.setGenericPassword(
   //     'laya_parent',
-  //     JSON.stringify({ accessToken, refreshToken })
+  //     JSON.stringify({ accessToken: _accessToken, refreshToken: _refreshToken })
   //   );
   // } else {
   //   await Keychain.resetGenericPassword();
@@ -88,8 +91,10 @@ function App(): React.JSX.Element {
    *
    * This callback is called when the user logs in or logs out.
    * Use this for analytics or navigation handling.
+   *
+   * @param _isAuthenticated - Whether the user is authenticated (unused pending implementation)
    */
-  const handleAuthStateChange = useCallback((isAuthenticated: boolean) => {
+  const handleAuthStateChange = useCallback((_isAuthenticated: boolean) => {
     // Handle auth state changes
     // In the future, this can:
     // - Log analytics events
@@ -103,9 +108,11 @@ function App(): React.JSX.Element {
    * This callback is called when a notification is received while
    * the app is in the foreground. Use this to navigate to the
    * relevant screen based on notification type.
+   *
+   * @param _payload - Notification payload (unused pending implementation)
    */
   const handleNotificationReceived = useCallback(
-    (payload: NotificationPayload) => {
+    (_payload: NotificationPayload) => {
       // Handle navigation based on notification type
       // In the future, this can navigate to specific screens:
       // - 'daily_report' -> DailyFeedScreen

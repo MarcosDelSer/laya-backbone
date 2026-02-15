@@ -13,7 +13,6 @@ import type {
   DailyReport,
   MealEntry,
   NapEntry,
-  ActivityEntry,
   Photo,
   Child,
   PaginatedResponse,
