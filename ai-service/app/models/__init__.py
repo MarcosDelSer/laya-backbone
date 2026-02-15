@@ -37,6 +37,12 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
+from app.models.mfa import (
+    MFABackupCode,
+    MFAIPWhitelist,
+    MFAMethod,
+    MFASettings,
+)
 
 __all__ = [
     "Base",
@@ -61,4 +67,9 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
+    # MFA models
+    "MFASettings",
+    "MFABackupCode",
+    "MFAIPWhitelist",
+    "MFAMethod",
 ]
