@@ -11,6 +11,7 @@ import {StyleSheet, View, Text} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
 import type {RootTabParamList} from './types';
+import DailyFeedScreen from '../screens/DailyFeedScreen';
 
 /**
  * Tab icon properties
@@ -91,20 +92,11 @@ function PlaceholderScreen({
 /**
  * Temporary placeholder screens
  * TODO: Replace with actual screen imports once created in phase 6 & 7:
- * - DailyFeedScreen (subtask-6-1)
  * - PhotoGalleryScreen (subtask-6-2)
  * - InvoicesScreen (subtask-6-3)
  * - MessagingScreen (subtask-7-1)
  * - DocumentsScreen (subtask-7-2)
  */
-function DailyFeedScreen(): React.JSX.Element {
-  return (
-    <PlaceholderScreen
-      title="Daily Feed"
-      description="View your child's daily activities and updates"
-    />
-  );
-}
 
 function PhotoGalleryScreen(): React.JSX.Element {
   return (
