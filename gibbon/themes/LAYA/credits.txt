@@ -1,0 +1,33 @@
+LAYA Theme for Gibbon
+=====================
+
+A modern, kindergarten-friendly theme for LAYA Childcare.
+
+Author: LAYA Childcare
+Version: 1.0.00
+License: GNU General Public License v3.0
+
+Built for Gibbon, the flexible, open school platform.
+https://gibbonedu.org/
+
+---
+
+Dependencies & Credits
+----------------------
+
+Tailwind CSS v3.x
+License: MIT
+https://tailwindcss.com/
+
+Inter Font Family (system font stack fallback)
+License: SIL Open Font License 1.1
+https://fonts.google.com/specimen/Inter
+
+---
+
+Icons and images used in this theme are either:
+- Created specifically for LAYA Childcare
+- Licensed under open source licenses
+- Part of the Gibbon core distribution
+
+Please see individual files for specific attributions.
