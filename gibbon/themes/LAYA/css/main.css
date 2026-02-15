@@ -1,0 +1,539 @@
+/**
+ * LAYA Theme - Modern CSS Overrides
+ * Part 1: CSS Custom Properties, Typography, and Global Styles
+ *
+ * A modern, kindergarten-friendly theme for LAYA Childcare.
+ * Primary color: Warm Teal (#14b8a6)
+ */
+
+/* ==========================================================================
+   Section 1: CSS Custom Properties (Variables)
+   ========================================================================== */
+
+:root {
+  /* Primary Colors - Warm Teal */
+  --laya-primary: #14b8a6;
+  --laya-primary-light: #5eead4;
+  --laya-primary-dark: #0f766e;
+  --laya-primary-darker: #0d9488;
+  --laya-primary-hover: #0d9488;
+  --laya-primary-50: #f0fdfa;
+  --laya-primary-100: #ccfbf1;
+  --laya-primary-200: #99f6e4;
+  --laya-primary-300: #5eead4;
+  --laya-primary-400: #2dd4bf;
+  --laya-primary-500: #14b8a6;
+  --laya-primary-600: #0d9488;
+  --laya-primary-700: #0f766e;
+  --laya-primary-800: #115e59;
+  --laya-primary-900: #134e4a;
+
+  /* Accent Colors */
+  --laya-accent: #f97316;
+  --laya-accent-light: #fb923c;
+  --laya-accent-dark: #ea580c;
+
+  /* Background Colors */
+  --laya-bg: #fafaf9;
+  --laya-bg-warm: #fafaf9;
+  --laya-surface: #f5f5f4;
+  --laya-surface-hover: #e7e5e4;
+
+  /* Border Colors */
+  --laya-border: #e7e5e4;
+  --laya-border-light: #f5f5f4;
+  --laya-border-dark: #d6d3d1;
+  --laya-border-input: #d6d3d1;
+
+  /* Text Colors */
+  --laya-text: #292524;
+  --laya-text-dark: #1c1917;
+  --laya-text-muted: #78716c;
+  --laya-text-light: #a8a29e;
+  --laya-text-inverse: #ffffff;
+
+  /* Status Colors */
+  --laya-success: #22c55e;
+  --laya-success-light: #dcfce7;
+  --laya-warning: #f59e0b;
+  --laya-warning-light: #fef3c7;
+  --laya-error: #ef4444;
+  --laya-error-light: #fee2e2;
+  --laya-info: #3b82f6;
+  --laya-info-light: #dbeafe;
+
+  /* Typography */
+  --laya-font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --laya-font-family-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --laya-font-size-base: 15px;
+  --laya-font-size-sm: 13px;
+  --laya-font-size-xs: 11px;
+  --laya-font-size-lg: 17px;
+  --laya-font-size-xl: 20px;
+  --laya-font-size-2xl: 24px;
+  --laya-font-size-3xl: 30px;
+  --laya-line-height: 1.6;
+  --laya-line-height-tight: 1.25;
+  --laya-line-height-relaxed: 1.75;
+  --laya-font-weight-normal: 400;
+  --laya-font-weight-medium: 500;
+  --laya-font-weight-semibold: 600;
+  --laya-font-weight-bold: 700;
+
+  /* Spacing */
+  --laya-spacing-xs: 4px;
+  --laya-spacing-sm: 8px;
+  --laya-spacing-md: 12px;
+  --laya-spacing-lg: 16px;
+  --laya-spacing-xl: 24px;
+  --laya-spacing-2xl: 32px;
+
+  /* Border Radius */
+  --laya-radius-sm: 4px;
+  --laya-radius-md: 8px;
+  --laya-radius-lg: 12px;
+  --laya-radius-xl: 16px;
+  --laya-radius-full: 9999px;
+
+  /* Shadows */
+  --laya-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --laya-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --laya-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --laya-shadow-focus: 0 0 0 3px rgba(20, 184, 166, 0.15);
+
+  /* Transitions */
+  --laya-transition-fast: 150ms ease;
+  --laya-transition-normal: 200ms ease;
+  --laya-transition-slow: 300ms ease;
+
+  /* Z-Index Scale */
+  --laya-z-dropdown: 1000;
+  --laya-z-sticky: 1020;
+  --laya-z-fixed: 1030;
+  --laya-z-modal-backdrop: 1040;
+  --laya-z-modal: 1050;
+  --laya-z-popover: 1060;
+  --laya-z-tooltip: 1070;
+}
+
+/* ==========================================================================
+   Section 2: Typography
+   ========================================================================== */
+
+/* Base Typography */
+body {
+  font-family: var(--laya-font-family);
+  font-size: var(--laya-font-size-base);
+  line-height: var(--laya-line-height);
+  color: var(--laya-text);
+  background-color: var(--laya-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings - NO uppercase, using font-weight: 600 */
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: var(--laya-font-family);
+  font-weight: var(--laya-font-weight-semibold);
+  line-height: var(--laya-line-height-tight);
+  color: var(--laya-text-dark);
+  margin-top: 0;
+  margin-bottom: 0.5em;
+  text-transform: none; /* Override any uppercase from Default theme */
+}
+
+h1, .h1 {
+  font-size: var(--laya-font-size-3xl);
+  letter-spacing: -0.025em;
+}
+
+h2, .h2 {
+  font-size: var(--laya-font-size-2xl);
+  letter-spacing: -0.02em;
+}
+
+h3, .h3 {
+  font-size: var(--laya-font-size-xl);
+  letter-spacing: -0.015em;
+}
+
+h4, .h4 {
+  font-size: var(--laya-font-size-lg);
+}
+
+h5, .h5 {
+  font-size: var(--laya-font-size-base);
+}
+
+h6, .h6 {
+  font-size: var(--laya-font-size-sm);
+}
+
+/* Paragraphs */
+p {
+  margin-top: 0;
+  margin-bottom: 1em;
+  line-height: var(--laya-line-height);
+}
+
+/* Lead/Intro text */
+.lead,
+.intro {
+  font-size: var(--laya-font-size-lg);
+  line-height: var(--laya-line-height-relaxed);
+  color: var(--laya-text-muted);
+}
+
+/* Small text */
+small,
+.small,
+.text-sm {
+  font-size: var(--laya-font-size-sm);
+}
+
+.text-xs {
+  font-size: var(--laya-font-size-xs);
+}
+
+/* Muted text */
+.text-muted,
+.muted {
+  color: var(--laya-text-muted);
+}
+
+/* Strong/Bold */
+strong, b,
+.font-bold {
+  font-weight: var(--laya-font-weight-bold);
+}
+
+.font-semibold {
+  font-weight: var(--laya-font-weight-semibold);
+}
+
+.font-medium {
+  font-weight: var(--laya-font-weight-medium);
+}
+
+/* Code and Pre */
+code, kbd, pre, samp {
+  font-family: var(--laya-font-family-mono);
+  font-size: 0.9em;
+}
+
+code {
+  background-color: var(--laya-surface);
+  padding: 0.125em 0.375em;
+  border-radius: var(--laya-radius-sm);
+  color: var(--laya-primary-700);
+}
+
+pre {
+  background-color: var(--laya-surface);
+  padding: var(--laya-spacing-lg);
+  border-radius: var(--laya-radius-md);
+  overflow-x: auto;
+  border: 1px solid var(--laya-border);
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* ==========================================================================
+   Section 3: Global Styles
+   ========================================================================== */
+
+/* Box Sizing Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Anchor/Links */
+a {
+  color: var(--laya-primary);
+  text-decoration: none;
+  transition: color var(--laya-transition-fast);
+}
+
+a:hover {
+  color: var(--laya-primary-dark);
+  text-decoration: underline;
+}
+
+a:focus {
+  outline: 2px solid var(--laya-primary);
+  outline-offset: 2px;
+}
+
+a:focus:not(:focus-visible) {
+  outline: none;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--laya-primary);
+  outline-offset: 2px;
+}
+
+/* Highlight class - teal instead of orange */
+.highlight {
+  color: var(--laya-primary);
+}
+
+a.highlight:hover {
+  color: var(--laya-primary-dark);
+}
+
+/* Text highlight/mark */
+mark,
+.mark {
+  background-color: var(--laya-primary-100);
+  padding: 0.125em 0.25em;
+  border-radius: var(--laya-radius-sm);
+}
+
+/* Lists */
+ul, ol {
+  margin-top: 0;
+  margin-bottom: 1em;
+  padding-left: 1.5em;
+}
+
+ul ul, ul ol, ol ul, ol ol {
+  margin-bottom: 0;
+}
+
+li {
+  margin-bottom: 0.25em;
+}
+
+/* Description Lists */
+dl {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+dt {
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+}
+
+dd {
+  margin-left: 0;
+  margin-bottom: 0.5em;
+  color: var(--laya-text-muted);
+}
+
+/* Horizontal Rule */
+hr {
+  border: 0;
+  border-top: 1px solid var(--laya-border);
+  margin: var(--laya-spacing-xl) 0;
+}
+
+/* Blockquote */
+blockquote {
+  margin: 0 0 1em;
+  padding: var(--laya-spacing-lg);
+  padding-left: var(--laya-spacing-xl);
+  border-left: 4px solid var(--laya-primary);
+  background-color: var(--laya-primary-50);
+  border-radius: 0 var(--laya-radius-md) var(--laya-radius-md) 0;
+  color: var(--laya-text);
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Images */
+img {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+/* User images - softer shadow, rounded corners */
+.user-image,
+.userPhoto,
+.photo img,
+.profilePhoto img {
+  border-radius: var(--laya-radius-lg);
+  box-shadow: var(--laya-shadow-md);
+  border: 2px solid var(--laya-bg);
+}
+
+/* Figures */
+figure {
+  margin: 0 0 1em;
+}
+
+figcaption {
+  font-size: var(--laya-font-size-sm);
+  color: var(--laya-text-muted);
+  margin-top: var(--laya-spacing-sm);
+}
+
+/* Abbreviations */
+abbr[title] {
+  cursor: help;
+  text-decoration: underline dotted;
+}
+
+/* Address */
+address {
+  font-style: normal;
+  line-height: inherit;
+  margin-bottom: 1em;
+}
+
+/* Selection */
+::selection {
+  background-color: var(--laya-primary-200);
+  color: var(--laya-text-dark);
+}
+
+::-moz-selection {
+  background-color: var(--laya-primary-200);
+  color: var(--laya-text-dark);
+}
+
+/* Focus outline for accessibility */
+:focus {
+  outline-color: var(--laya-primary);
+}
+
+/* Skip link for accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--laya-primary);
+  color: var(--laya-text-inverse);
+  padding: var(--laya-spacing-sm) var(--laya-spacing-lg);
+  z-index: var(--laya-z-tooltip);
+  transition: top var(--laya-transition-fast);
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* Visually Hidden (but accessible to screen readers) */
+.sr-only,
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   Section 4: Page Title and Header Overrides
+   ========================================================================== */
+
+/* Page titles - no uppercase */
+.page-title,
+.pageTitle,
+#content h2,
+.main-content h2:first-child {
+  text-transform: none;
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+  letter-spacing: -0.015em;
+}
+
+/* Section headers */
+.section-header,
+.sectionHeader,
+.trailHead {
+  text-transform: none;
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+}
+
+/* Column headers in tables */
+th,
+.column-header {
+  text-transform: none;
+  font-weight: var(--laya-font-weight-semibold);
+}
+
+/* Module headers */
+.module-header,
+.moduleHeader {
+  text-transform: none;
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+}
+
+/* ==========================================================================
+   Section 5: Layout Helpers
+   ========================================================================== */
+
+/* Container */
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--laya-spacing-lg);
+  padding-right: var(--laya-spacing-lg);
+}
+
+/* Clearfix */
+.clearfix::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* Hidden utilities */
+.hidden {
+  display: none !important;
+}
+
+.invisible {
+  visibility: hidden;
+}
+
+/* Print utility */
+@media print {
+  .no-print,
+  .d-print-none {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+    color: black;
+    font-size: 12pt;
+  }
+
+  a {
+    color: black;
+    text-decoration: underline;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+
+  a[href^="#"]::after,
+  a[href^="javascript:"]::after {
+    content: "";
+  }
+}
