@@ -5,7 +5,14 @@
 
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
-apply plugin: "com.facebook.react"
+
+// Check if React Native node_modules exist
+def reactNativeModulesExist = file("../../node_modules/@react-native/gradle-plugin").exists()
+
+// Apply React Native plugin only if available
+if (reactNativeModulesExist) {
+    apply plugin: "com.facebook.react"
+}
 
 // Firebase Cloud Messaging for push notifications
 apply plugin: 'com.google.gms.google-services'
@@ -13,18 +20,24 @@ apply plugin: 'com.google.gms.google-services'
 /**
  * React Native configuration block.
  * Configures the React Native Gradle plugin for bundling and code generation.
+ * Only applied when React Native modules are available.
  */
-react {
-    // Enable autolinking of native modules
-    autolinkLibrariesWithApp()
+if (reactNativeModulesExist) {
+    react {
+        // Enable autolinking of native modules
+        autolinkLibrariesWithApp()
 
-    // Hermes is the recommended JS engine for React Native
-    // It provides better performance and smaller bundle sizes
-    hermesEnabled = true
+        // Hermes is the recommended JS engine for React Native
+        // It provides better performance and smaller bundle sizes
+        hermesEnabled = true
 
-    // Enable code generation for native modules
-    enableHermes = true
+        // Enable code generation for native modules
+        enableHermes = true
+    }
 }
+
+// Define hermesEnabled for use in dependencies
+def hermesEnabled = reactNativeModulesExist ? "true" : "false"
 
 /**
  * Loads local.properties for keystore passwords and other local config.
@@ -60,10 +73,15 @@ android {
      */
     signingConfigs {
         debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+            // Use default debug keystore if custom one doesn't exist
+            def debugKeystoreFile = file('debug.keystore')
+            if (debugKeystoreFile.exists()) {
+                storeFile debugKeystoreFile
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+            // If no keystore specified, Android uses default debug keystore at ~/.android/debug.keystore
         }
         release {
             // Keystore configuration for release builds
@@ -166,14 +184,16 @@ android {
 }
 
 dependencies {
-    // React Native core
-    implementation("com.facebook.react:react-android")
+    // React Native core (only if available)
+    if (reactNativeModulesExist) {
+        implementation("com.facebook.react:react-android")
 
-    // Hermes JavaScript engine (recommended for React Native)
-    if (hermesEnabled.toBoolean()) {
-        implementation("com.facebook.react:hermes-android")
-    } else {
-        implementation("org.webkit:android-jsc:+")
+        // Hermes JavaScript engine (recommended for React Native)
+        if (hermesEnabled.toBoolean()) {
+            implementation("com.facebook.react:hermes-android")
+        } else {
+            implementation("org.webkit:android-jsc:+")
+        }
     }
 
     // Firebase BoM (Bill of Materials) for version management
@@ -212,6 +232,9 @@ task copyDownloadableDepsToLibs(type: Copy) {
     into 'libs'
 }
 
-// Apply React Native autolinking
-apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
-applyNativeModulesAppBuildGradle(project)
+// Apply React Native autolinking (only if node_modules exist)
+def nativeModulesGradle = file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
+if (nativeModulesGradle.exists()) {
+    apply from: nativeModulesGradle
+    applyNativeModulesAppBuildGradle(project)
+}
