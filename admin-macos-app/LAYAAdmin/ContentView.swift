@@ -132,7 +132,7 @@ struct DetailView: View {
         Group {
             switch section {
             case .dashboard:
-                DashboardPlaceholderView()
+                DashboardView()
             case .children:
                 ChildrenPlaceholderView()
             case .staff:
@@ -153,25 +153,7 @@ struct DetailView: View {
 
 // MARK: - Placeholder Views
 
-/// Placeholder for the dashboard view - will be implemented in a later subtask.
-struct DashboardPlaceholderView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "square.grid.2x2")
-                .font(.system(size: 64))
-                .foregroundColor(.accentColor)
-
-            Text("Dashboard")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-
-            Text("Overview of key metrics and pending items")
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(NSColor.windowBackgroundColor))
-    }
-}
+// Note: DashboardPlaceholderView has been replaced with the full DashboardView implementation
 
 /// Placeholder for the children management view.
 struct ChildrenPlaceholderView: View {
