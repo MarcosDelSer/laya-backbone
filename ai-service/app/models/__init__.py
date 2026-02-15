@@ -37,6 +37,13 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
+from app.models.occupancy import (
+    AgeGroupType,
+    AttendanceStatus,
+    ChildAttendance,
+    Group,
+    OccupancyRecord,
+)
 
 __all__ = [
     "Base",
@@ -61,4 +68,10 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
+    # Occupancy models
+    "Group",
+    "OccupancyRecord",
+    "ChildAttendance",
+    "AttendanceStatus",
+    "AgeGroupType",
 ]
