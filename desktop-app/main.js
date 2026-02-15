@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
 
 // Parent-portal development URL
@@ -31,6 +31,23 @@ function createWindow() {
 
 // App ready event
 app.whenReady().then(() => {
+  // Configure Content Security Policy headers for security
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data: https:; " +
+          "font-src 'self' data:; " +
+          "connect-src 'self' http://localhost:* ws://localhost:*"
+        ]
+      }
+    });
+  });
+
   createWindow();
 
   // macOS: Re-create window when dock icon is clicked and no windows exist
