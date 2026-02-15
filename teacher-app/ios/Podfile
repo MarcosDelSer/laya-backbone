@@ -1,0 +1,59 @@
+# LAYA Teacher App - iOS Podfile
+#
+# CocoaPods configuration for the Teacher iOS app.
+# Includes React Native dependencies and Firebase Cloud Messaging.
+
+# Resolve react_native_pods.rb with node to allow for hoisting
+require Pod::Executable.execute_command('node', ['-p',
+  'require.resolve(
+    "react-native/scripts/react_native_pods.rb",
+    {paths: [process.argv[1]]},
+  )', __dir__]).strip
+
+platform :ios, min_ios_version_supported
+prepare_react_native_project!
+
+# Firebase SDK requires static linking
+use_frameworks! :linkage => :static
+
+# React Native requires modular headers for static linking
+$RNFirebaseAsStaticFramework = true
+
+target 'TeacherApp' do
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    # An absolute path to your application root
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  # Firebase Cloud Messaging for push notifications
+  # Note: GoogleService-Info.plist must be added to the Xcode project
+  # Download from Firebase Console: https://console.firebase.google.com/
+  pod 'Firebase/Messaging', '~> 11.0'
+
+  # React Native Firebase - Messaging module
+  # This integrates Firebase Cloud Messaging with React Native
+  # Requires @react-native-firebase/app and @react-native-firebase/messaging npm packages
+  # pod 'RNFBApp', :path => '../node_modules/@react-native-firebase/app'
+  # pod 'RNFBMessaging', :path => '../node_modules/@react-native-firebase/messaging'
+
+  post_install do |installer|
+    # React Native post-install configuration
+    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+      # :ccache_enabled => true
+    )
+
+    # Fix for Xcode 15+ - set deployment target for all pods
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      end
+    end
+  end
+end
