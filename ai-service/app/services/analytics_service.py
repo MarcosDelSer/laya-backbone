@@ -6,12 +6,14 @@ and Quebec regulatory compliance monitoring.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
 from sqlalchemy import and_, desc, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.analytics import (
@@ -32,6 +34,8 @@ from app.schemas.analytics import (
     KPIMetricsListResponse,
     MetricCategory,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Quebec childcare staff-to-child ratio requirements
@@ -318,20 +322,27 @@ class AnalyticsService:
         Returns:
             list[AnalyticsMetric]: List of metrics for the period
         """
-        query = select(AnalyticsMetric).where(
-            and_(
-                AnalyticsMetric.period_start >= period_start,
-                AnalyticsMetric.period_end <= period_end,
+        try:
+            query = select(AnalyticsMetric).where(
+                and_(
+                    AnalyticsMetric.period_start >= period_start,
+                    AnalyticsMetric.period_end <= period_end,
+                )
             )
-        )
 
-        if facility_id is not None:
-            query = query.where(AnalyticsMetric.facility_id == facility_id)
+            if facility_id is not None:
+                query = query.where(AnalyticsMetric.facility_id == facility_id)
 
-        query = query.order_by(desc(AnalyticsMetric.period_end))
+            query = query.order_by(desc(AnalyticsMetric.period_end))
 
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
+            result = await self.db.execute(query)
+            return list(result.scalars().all())
+        except SQLAlchemyError as e:
+            logger.warning(f"Database error fetching metrics: {e}")
+            return []
+        except Exception as e:
+            logger.warning(f"Unexpected error fetching metrics: {e}")
+            return []
 
     async def _build_kpi_for_category(
         self,
@@ -438,34 +449,41 @@ class AnalyticsService:
         Returns:
             list[ForecastDataPoint]: Historical enrollment data points
         """
-        today = date.today()
-        start_date = today - timedelta(days=months_back * 30)
+        try:
+            today = date.today()
+            start_date = today - timedelta(days=months_back * 30)
 
-        query = select(EnrollmentForecast).where(
-            and_(
-                EnrollmentForecast.forecast_date >= start_date,
-                EnrollmentForecast.forecast_date <= today,
+            query = select(EnrollmentForecast).where(
+                and_(
+                    EnrollmentForecast.forecast_date >= start_date,
+                    EnrollmentForecast.forecast_date <= today,
+                )
             )
-        )
 
-        if facility_id is not None:
-            query = query.where(EnrollmentForecast.facility_id == facility_id)
+            if facility_id is not None:
+                query = query.where(EnrollmentForecast.facility_id == facility_id)
 
-        query = query.order_by(EnrollmentForecast.forecast_date)
+            query = query.order_by(EnrollmentForecast.forecast_date)
 
-        result = await self.db.execute(query)
-        forecasts = result.scalars().all()
+            result = await self.db.execute(query)
+            forecasts = result.scalars().all()
 
-        return [
-            ForecastDataPoint(
-                forecast_date=f.forecast_date,
-                predicted_enrollment=f.predicted_enrollment,
-                confidence_lower=f.confidence_lower,
-                confidence_upper=f.confidence_upper,
-                is_historical=True,
-            )
-            for f in forecasts
-        ]
+            return [
+                ForecastDataPoint(
+                    forecast_date=f.forecast_date,
+                    predicted_enrollment=f.predicted_enrollment,
+                    confidence_lower=f.confidence_lower,
+                    confidence_upper=f.confidence_upper,
+                    is_historical=True,
+                )
+                for f in forecasts
+            ]
+        except SQLAlchemyError as e:
+            logger.warning(f"Database error fetching enrollment history: {e}")
+            return []
+        except Exception as e:
+            logger.warning(f"Unexpected error fetching enrollment history: {e}")
+            return []
 
     async def _generate_forecast(
         self,
@@ -595,39 +613,46 @@ class AnalyticsService:
         Returns:
             list[ComplianceCheckResponse]: List of compliance check responses
         """
-        # Fetch the most recent check for each check type
-        checks: list[ComplianceCheckResponse] = []
+        try:
+            # Fetch the most recent check for each check type
+            checks: list[ComplianceCheckResponse] = []
 
-        for check_type in ComplianceCheckType:
-            query = select(ComplianceCheck).where(
-                ComplianceCheck.check_type == check_type.value
-            )
-
-            if facility_id is not None:
-                query = query.where(ComplianceCheck.facility_id == facility_id)
-
-            query = query.order_by(desc(ComplianceCheck.checked_at)).limit(1)
-
-            result = await self.db.execute(query)
-            check = result.scalar_one_or_none()
-
-            if check:
-                checks.append(
-                    ComplianceCheckResponse(
-                        check_type=ComplianceCheckType(check.check_type),
-                        status=ComplianceStatus(check.status),
-                        details=check.details,
-                        checked_at=check.checked_at,
-                        next_check_due=check.next_check_due,
-                        facility_id=check.facility_id,
-                        recommendation=self._get_recommendation_for_status(
-                            ComplianceCheckType(check.check_type),
-                            ComplianceStatus(check.status),
-                        ),
-                    )
+            for check_type in ComplianceCheckType:
+                query = select(ComplianceCheck).where(
+                    ComplianceCheck.check_type == check_type.value
                 )
 
-        return checks
+                if facility_id is not None:
+                    query = query.where(ComplianceCheck.facility_id == facility_id)
+
+                query = query.order_by(desc(ComplianceCheck.checked_at)).limit(1)
+
+                result = await self.db.execute(query)
+                check = result.scalar_one_or_none()
+
+                if check:
+                    checks.append(
+                        ComplianceCheckResponse(
+                            check_type=ComplianceCheckType(check.check_type),
+                            status=ComplianceStatus(check.status),
+                            details=check.details,
+                            checked_at=check.checked_at,
+                            next_check_due=check.next_check_due,
+                            facility_id=check.facility_id,
+                            recommendation=self._get_recommendation_for_status(
+                                ComplianceCheckType(check.check_type),
+                                ComplianceStatus(check.status),
+                            ),
+                        )
+                    )
+
+            return checks
+        except SQLAlchemyError as e:
+            logger.warning(f"Database error fetching compliance checks: {e}")
+            return []
+        except Exception as e:
+            logger.warning(f"Unexpected error fetching compliance checks: {e}")
+            return []
 
     def _build_placeholder_compliance_checks(
         self,
