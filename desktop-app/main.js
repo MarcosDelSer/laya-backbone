@@ -1,5 +1,6 @@
 const { app, BrowserWindow, session } = require('electron');
 const path = require('path');
+const { autoUpdater } = require('electron-updater');
 
 // Parent-portal development URL
 const PARENT_PORTAL_URL = 'http://localhost:3000';
@@ -49,6 +50,9 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+
+  // Check for updates and notify user when available
+  autoUpdater.checkForUpdatesAndNotify();
 
   // macOS: Re-create window when dock icon is clicked and no windows exist
   app.on('activate', () => {
