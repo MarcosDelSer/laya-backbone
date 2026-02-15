@@ -97,10 +97,8 @@ struct DashboardView: View {
                     aiKPIMetricsSection
                 }
 
-                // Alerts section
-                if viewModel.hasAlerts {
-                    alertsSection
-                }
+                // Alerts and pending items in a two-column layout on wider screens
+                alertsAndPendingSection
 
                 // Enrollment forecast preview (if available)
                 if viewModel.forecast != nil {
@@ -114,6 +112,175 @@ struct DashboardView: View {
         }
         .refreshable {
             await viewModel.refresh()
+        }
+    }
+
+    // MARK: - Alerts and Pending Section
+
+    /// Combined section for alerts and pending items
+    private var alertsAndPendingSection: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            // Section title
+            sectionHeader(
+                title: String(localized: "Action Required"),
+                subtitle: String(localized: "Items needing your attention")
+            )
+
+            // Two-column layout for alerts and pending items
+            HStack(alignment: .top, spacing: 24) {
+                // Alerts column
+                VStack(alignment: .leading, spacing: 0) {
+                    AlertListSection(
+                        alerts: viewModel.alerts,
+                        maxDisplayCount: 4,
+                        onAcknowledge: { alertId in
+                            viewModel.acknowledgeAlert(alertId: alertId)
+                        },
+                        onNavigate: { alert in
+                            handleAlertNavigation(alert)
+                        }
+                    )
+                }
+                .frame(maxWidth: .infinity)
+
+                // Pending items column
+                VStack(alignment: .leading, spacing: 0) {
+                    PendingItemsSection(
+                        items: pendingApprovals,
+                        maxDisplayCount: 4,
+                        onItemSelected: { item in
+                            handlePendingItemNavigation(item)
+                        }
+                    )
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    /// Sample pending approvals (in production, this would come from the ViewModel)
+    private var pendingApprovals: [PendingItem] {
+        // Generate pending items from alerts and dashboard data
+        var items: [PendingItem] = []
+
+        // Convert enrollment-related alerts to pending items
+        let enrollmentAlerts = viewModel.alerts.filter {
+            $0.category == .enrollment && !$0.isAcknowledged
+        }
+
+        for alert in enrollmentAlerts {
+            items.append(PendingItem(
+                id: "pending-\(alert.id)",
+                type: .enrollmentApplication,
+                title: alert.title,
+                subtitle: alert.message,
+                createdAt: alert.createdAt,
+                priority: alert.severity == .critical ? .urgent : .normal,
+                relatedEntityId: alert.relatedEntityId
+            ))
+        }
+
+        // Convert compliance-related alerts to certification renewals
+        let complianceAlerts = viewModel.alerts.filter {
+            $0.category == .compliance && !$0.isAcknowledged
+        }
+
+        for alert in complianceAlerts {
+            items.append(PendingItem(
+                id: "pending-\(alert.id)",
+                type: .certificationRenewal,
+                title: alert.title,
+                subtitle: alert.message,
+                createdAt: alert.createdAt,
+                priority: alert.severity == .critical ? .urgent : .normal,
+                relatedEntityId: alert.relatedEntityId
+            ))
+        }
+
+        // Convert finance-related alerts to invoice approvals
+        let financeAlerts = viewModel.alerts.filter {
+            $0.category == .finance && !$0.isAcknowledged
+        }
+
+        for alert in financeAlerts {
+            items.append(PendingItem(
+                id: "pending-\(alert.id)",
+                type: .invoiceApproval,
+                title: alert.title,
+                subtitle: alert.message,
+                createdAt: alert.createdAt,
+                priority: alert.severity == .critical ? .urgent : .normal,
+                relatedEntityId: alert.relatedEntityId
+            ))
+        }
+
+        // Convert staffing-related alerts to leave requests
+        let staffingAlerts = viewModel.alerts.filter {
+            $0.category == .staffing && !$0.isAcknowledged
+        }
+
+        for alert in staffingAlerts {
+            items.append(PendingItem(
+                id: "pending-\(alert.id)",
+                type: .staffLeaveRequest,
+                title: alert.title,
+                subtitle: alert.message,
+                createdAt: alert.createdAt,
+                priority: alert.severity == .critical ? .urgent : .normal,
+                relatedEntityId: alert.relatedEntityId
+            ))
+        }
+
+        return items
+    }
+
+    /// Handles navigation when an alert is tapped
+    private func handleAlertNavigation(_ alert: DashboardAlert) {
+        // Navigate based on alert category and related entity
+        switch alert.category {
+        case .enrollment:
+            // Navigate to enrollment/children section
+            break
+        case .staffing:
+            // Navigate to staff section
+            break
+        case .compliance:
+            // Navigate to compliance/analytics section
+            break
+        case .finance:
+            // Navigate to finance section
+            break
+        case .attendance:
+            // Navigate to attendance reports
+            break
+        case .general:
+            // Show general notification detail
+            break
+        }
+    }
+
+    /// Handles navigation when a pending item is tapped
+    private func handlePendingItemNavigation(_ item: PendingItem) {
+        // Navigate based on item type
+        switch item.type {
+        case .enrollmentApplication:
+            // Navigate to enrollment application detail
+            break
+        case .staffLeaveRequest:
+            // Navigate to leave request detail
+            break
+        case .invoiceApproval:
+            // Navigate to invoice detail
+            break
+        case .documentReview:
+            // Navigate to document detail
+            break
+        case .certificationRenewal:
+            // Navigate to staff certification detail
+            break
+        case .other:
+            // Generic navigation
+            break
         }
     }
 
@@ -293,8 +460,11 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Alerts Section
+    // MARK: - Alerts Section (Legacy/Simple)
 
+    /// A simple alerts section for compact layouts or when pending items are disabled.
+    /// This is kept for backwards compatibility and can be used as an alternative
+    /// to the full alertsAndPendingSection.
     private var alertsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             sectionHeader(
@@ -321,6 +491,52 @@ struct DashboardView: View {
                     }
                     .buttonStyle(.link)
                 }
+            }
+        }
+    }
+
+    // MARK: - Critical Alerts Banner
+
+    /// A prominent banner shown when critical alerts exist
+    private var criticalAlertsBanner: some View {
+        Group {
+            if !viewModel.criticalAlerts.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(viewModel.criticalAlerts.prefix(2)) { alert in
+                        HStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.octagon.fill")
+                                .font(.title3)
+                                .foregroundColor(.white)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(alert.title)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+
+                                Text(alert.message)
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .lineLimit(1)
+                            }
+
+                            Spacer()
+
+                            Button(action: {
+                                viewModel.acknowledgeAlert(alertId: alert.id)
+                            }) {
+                                Text(String(localized: "Acknowledge"))
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.white.opacity(0.2))
+                        }
+                        .padding()
+                        .background(Color.red)
+                    }
+                }
+                .cornerRadius(12)
             }
         }
     }
