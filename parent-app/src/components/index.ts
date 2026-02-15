@@ -7,3 +7,4 @@
 export {default as MealCard} from './MealCard';
 export {default as NapCard} from './NapCard';
 export {default as ActivityCard} from './ActivityCard';
+export {default as DailyReportCard} from './DailyReportCard';
