@@ -1,0 +1,71 @@
+//
+//  Config.xcconfig
+//  LAYAAdmin
+//
+//  Build configuration settings for the LAYA Admin macOS app.
+//  These values can be overridden per build configuration (Debug/Release).
+//
+
+// MARK: - API Configuration
+
+// Gibbon CMS API Base URL
+// Override this value for different environments
+GIBBON_API_URL = http:/$()/localhost/gibbon/api
+
+// AI Service API Base URL
+// Override this value for different environments
+AI_SERVICE_URL = http:/$()/localhost:8000
+
+// MARK: - App Configuration
+
+// Bundle identifier prefix (used for keychain access groups)
+APP_IDENTIFIER_PREFIX = $(AppIdentifierPrefix)
+
+// App display name
+APP_DISPLAY_NAME = LAYA Admin
+
+// MARK: - Build Settings
+
+// Deployment target
+MACOSX_DEPLOYMENT_TARGET = 14.0
+
+// Swift version
+SWIFT_VERSION = 5.0
+
+// Enable Swift strict concurrency
+SWIFT_STRICT_CONCURRENCY = complete
+
+// MARK: - Code Signing
+
+// Development team (set in Xcode or via xcconfig override)
+// DEVELOPMENT_TEAM = YOUR_TEAM_ID
+
+// Code signing style
+CODE_SIGN_STYLE = Automatic
+
+// MARK: - Debug Configuration
+
+// Enable address sanitizer in debug builds
+// ENABLE_ADDRESS_SANITIZER = YES
+
+// Enable thread sanitizer in debug builds
+// ENABLE_THREAD_SANITIZER = YES
+
+// MARK: - Release Configuration
+
+// Strip debug symbols in release
+// STRIP_INSTALLED_PRODUCT = YES
+
+// Enable bitcode (for future compatibility)
+// ENABLE_BITCODE = YES
+
+// MARK: - Info.plist Values
+// These are injected into Info.plist during build
+
+// API URLs for runtime configuration
+GIBBON_API_URL_PLIST = $(GIBBON_API_URL)
+AI_SERVICE_URL_PLIST = $(AI_SERVICE_URL)
+
+// Version information
+// MARKETING_VERSION = 1.0.0
+// CURRENT_PROJECT_VERSION = 1
