@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.dependencies import get_current_user
+from app.routers.analytics import router as analytics_router
 
 app = FastAPI(
     title="LAYA AI Service",
@@ -20,6 +21,13 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Register routers
+app.include_router(
+    analytics_router,
+    prefix="/api/v1/analytics",
+    tags=["analytics"],
 )
 
 
