@@ -113,6 +113,13 @@ struct MainView: View {
             selectedSection = .staff
             // TODO: Open new staff form when staff management is implemented
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showAnalytics)) { _ in
+            selectedSection = .analytics
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .newInvoice)) { _ in
+            selectedSection = .finance
+            // TODO: Open new invoice form when finance is implemented
+        }
     }
 
     // MARK: - Sidebar Content
