@@ -1447,3 +1447,1473 @@ input[type="search"]::-webkit-search-cancel-button {
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   Section 8: jQueryUI Overrides
+   ========================================================================== */
+
+/* Dialog container */
+.ui-dialog {
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  box-shadow: var(--laya-shadow-lg);
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Dialog titlebar - Teal instead of purple */
+.ui-dialog .ui-dialog-titlebar {
+  background: linear-gradient(135deg, var(--laya-primary) 0%, var(--laya-primary-dark) 100%);
+  background-color: var(--laya-primary);
+  border: none;
+  border-radius: var(--laya-radius-lg) var(--laya-radius-lg) 0 0;
+  padding: var(--laya-spacing-md) var(--laya-spacing-lg);
+  color: var(--laya-text-inverse);
+}
+
+.ui-dialog .ui-dialog-title {
+  color: var(--laya-text-inverse);
+  font-weight: var(--laya-font-weight-semibold);
+  font-size: var(--laya-font-size-lg);
+  text-transform: none;
+}
+
+/* Dialog close button */
+.ui-dialog .ui-dialog-titlebar-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: var(--laya-radius-full);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--laya-transition-fast);
+  right: var(--laya-spacing-md);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ui-dialog .ui-dialog-titlebar-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.ui-dialog .ui-dialog-titlebar-close .ui-icon {
+  filter: brightness(0) invert(1);
+}
+
+/* Dialog content */
+.ui-dialog .ui-dialog-content {
+  padding: var(--laya-spacing-xl);
+  color: var(--laya-text);
+  font-size: var(--laya-font-size-base);
+  line-height: var(--laya-line-height);
+  background-color: var(--laya-bg);
+}
+
+/* Dialog buttonpane */
+.ui-dialog .ui-dialog-buttonpane {
+  background-color: var(--laya-surface);
+  border-top: 1px solid var(--laya-border);
+  padding: var(--laya-spacing-md) var(--laya-spacing-lg);
+  border-radius: 0 0 var(--laya-radius-lg) var(--laya-radius-lg);
+}
+
+.ui-dialog .ui-dialog-buttonpane .ui-dialog-buttonset {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--laya-spacing-sm);
+}
+
+.ui-dialog .ui-dialog-buttonpane button {
+  min-height: 38px;
+  padding: var(--laya-spacing-sm) var(--laya-spacing-lg);
+  font-family: var(--laya-font-family);
+  font-size: var(--laya-font-size-sm);
+  font-weight: var(--laya-font-weight-medium);
+  border-radius: var(--laya-radius-md);
+  transition: all var(--laya-transition-fast);
+}
+
+/* Modal overlay */
+.ui-widget-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  opacity: 1;
+}
+
+/* Datepicker styles - Teal instead of blue */
+.ui-datepicker {
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  box-shadow: var(--laya-shadow-lg);
+  padding: var(--laya-spacing-md);
+  width: auto;
+  min-width: 280px;
+  font-family: var(--laya-font-family);
+}
+
+.ui-datepicker-header {
+  background: linear-gradient(135deg, var(--laya-primary) 0%, var(--laya-primary-dark) 100%);
+  background-color: var(--laya-primary);
+  border: none;
+  border-radius: var(--laya-radius-md);
+  padding: var(--laya-spacing-md);
+  margin-bottom: var(--laya-spacing-sm);
+}
+
+.ui-datepicker-title {
+  color: var(--laya-text-inverse);
+  font-weight: var(--laya-font-weight-semibold);
+  font-size: var(--laya-font-size-base);
+  text-transform: none;
+}
+
+.ui-datepicker-title select {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--laya-text-inverse);
+  border: none;
+  border-radius: var(--laya-radius-sm);
+  padding: var(--laya-spacing-xs) var(--laya-spacing-sm);
+  font-size: var(--laya-font-size-sm);
+  cursor: pointer;
+}
+
+.ui-datepicker-title select option {
+  background-color: var(--laya-bg);
+  color: var(--laya-text);
+}
+
+/* Datepicker navigation arrows */
+.ui-datepicker-prev,
+.ui-datepicker-next {
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--laya-radius-full);
+  cursor: pointer;
+  transition: background-color var(--laya-transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ui-datepicker-prev:hover,
+.ui-datepicker-next:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.ui-datepicker-prev .ui-icon,
+.ui-datepicker-next .ui-icon {
+  filter: brightness(0) invert(1);
+}
+
+/* Datepicker calendar */
+.ui-datepicker-calendar {
+  margin: 0;
+  width: 100%;
+  font-size: var(--laya-font-size-sm);
+}
+
+.ui-datepicker-calendar th {
+  padding: var(--laya-spacing-sm);
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-muted);
+  text-transform: none;
+  text-align: center;
+}
+
+.ui-datepicker-calendar td {
+  padding: 2px;
+}
+
+.ui-datepicker-calendar td a,
+.ui-datepicker-calendar td span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--laya-radius-full);
+  text-align: center;
+  transition: all var(--laya-transition-fast);
+  color: var(--laya-text);
+  background: transparent;
+  border: none;
+}
+
+.ui-datepicker-calendar td a:hover {
+  background-color: var(--laya-primary-100);
+  color: var(--laya-primary-dark);
+}
+
+/* Current day */
+.ui-datepicker-today a {
+  background-color: var(--laya-primary-100);
+  color: var(--laya-primary-dark);
+  font-weight: var(--laya-font-weight-semibold);
+}
+
+/* Selected day */
+.ui-datepicker-calendar .ui-state-active,
+.ui-datepicker-calendar .ui-state-highlight {
+  background-color: var(--laya-primary) !important;
+  color: var(--laya-text-inverse) !important;
+  font-weight: var(--laya-font-weight-medium);
+}
+
+/* Disabled dates */
+.ui-datepicker-calendar .ui-state-disabled span {
+  color: var(--laya-text-light);
+  opacity: 0.5;
+}
+
+/* Other month dates */
+.ui-datepicker-other-month span {
+  color: var(--laya-text-light);
+}
+
+/* Autocomplete dropdown */
+.ui-autocomplete {
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-md);
+  box-shadow: var(--laya-shadow-lg);
+  padding: var(--laya-spacing-sm) 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.ui-autocomplete .ui-menu-item {
+  padding: var(--laya-spacing-sm) var(--laya-spacing-md);
+  cursor: pointer;
+  transition: background-color var(--laya-transition-fast);
+}
+
+.ui-autocomplete .ui-menu-item:hover,
+.ui-autocomplete .ui-menu-item.ui-state-focus {
+  background-color: var(--laya-primary-50);
+  color: var(--laya-primary-dark);
+}
+
+.ui-autocomplete .ui-menu-item .ui-menu-item-wrapper {
+  padding: 0;
+}
+
+/* Tooltip */
+.ui-tooltip {
+  background-color: var(--laya-text-dark);
+  color: var(--laya-text-inverse);
+  border: none;
+  border-radius: var(--laya-radius-md);
+  box-shadow: var(--laya-shadow-lg);
+  padding: var(--laya-spacing-sm) var(--laya-spacing-md);
+  font-size: var(--laya-font-size-sm);
+  max-width: 300px;
+}
+
+/* Progressbar */
+.ui-progressbar {
+  background-color: var(--laya-surface);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-full);
+  height: 20px;
+  overflow: hidden;
+}
+
+.ui-progressbar-value {
+  background: linear-gradient(135deg, var(--laya-primary) 0%, var(--laya-primary-dark) 100%);
+  border-radius: var(--laya-radius-full);
+  transition: width var(--laya-transition-slow);
+}
+
+/* Accordion */
+.ui-accordion {
+  border: none;
+}
+
+.ui-accordion .ui-accordion-header {
+  background-color: var(--laya-surface);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-md);
+  padding: var(--laya-spacing-md) var(--laya-spacing-lg);
+  margin-bottom: var(--laya-spacing-sm);
+  font-weight: var(--laya-font-weight-medium);
+  color: var(--laya-text-dark);
+  transition: all var(--laya-transition-fast);
+}
+
+.ui-accordion .ui-accordion-header:hover {
+  background-color: var(--laya-primary-50);
+}
+
+.ui-accordion .ui-accordion-header.ui-state-active {
+  background-color: var(--laya-primary);
+  color: var(--laya-text-inverse);
+  border-color: var(--laya-primary);
+}
+
+.ui-accordion .ui-accordion-content {
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-top: none;
+  border-radius: 0 0 var(--laya-radius-md) var(--laya-radius-md);
+  padding: var(--laya-spacing-lg);
+  margin-top: calc(-1 * var(--laya-spacing-sm));
+}
+
+/* Tabs */
+.ui-tabs {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.ui-tabs .ui-tabs-nav {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--laya-border);
+  padding: 0;
+  margin-bottom: var(--laya-spacing-lg);
+}
+
+.ui-tabs .ui-tabs-nav li {
+  margin: 0;
+  margin-bottom: -2px;
+}
+
+.ui-tabs .ui-tabs-nav li a {
+  padding: var(--laya-spacing-md) var(--laya-spacing-lg);
+  color: var(--laya-text-muted);
+  font-weight: var(--laya-font-weight-medium);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  transition: all var(--laya-transition-fast);
+}
+
+.ui-tabs .ui-tabs-nav li a:hover {
+  color: var(--laya-primary);
+}
+
+.ui-tabs .ui-tabs-nav li.ui-tabs-active a {
+  color: var(--laya-primary);
+  border-bottom-color: var(--laya-primary);
+  background: transparent;
+}
+
+.ui-tabs .ui-tabs-panel {
+  background: var(--laya-bg);
+  border: none;
+  padding: 0;
+}
+
+/* ==========================================================================
+   Section 9: Body Gradients
+   ========================================================================== */
+
+/* Teal gradient - default for LAYA theme */
+.body-gradient-teal,
+body.body-gradient-teal,
+.gradient-teal {
+  background: linear-gradient(135deg,
+    #f0fdfa 0%,
+    #ccfbf1 25%,
+    #99f6e4 50%,
+    #5eead4 75%,
+    #2dd4bf 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Subtle teal gradient for content areas */
+.body-gradient-teal-subtle {
+  background: linear-gradient(180deg,
+    #f0fdfa 0%,
+    #fafaf9 100%
+  );
+}
+
+/* Sky gradient */
+.body-gradient-sky,
+body.body-gradient-sky,
+.gradient-sky {
+  background: linear-gradient(135deg,
+    #f0f9ff 0%,
+    #e0f2fe 25%,
+    #bae6fd 50%,
+    #7dd3fc 75%,
+    #38bdf8 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Green gradient */
+.body-gradient-green,
+body.body-gradient-green,
+.gradient-green {
+  background: linear-gradient(135deg,
+    #f0fdf4 0%,
+    #dcfce7 25%,
+    #bbf7d0 50%,
+    #86efac 75%,
+    #4ade80 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Blue gradient */
+.body-gradient-blue,
+body.body-gradient-blue,
+.gradient-blue {
+  background: linear-gradient(135deg,
+    #eff6ff 0%,
+    #dbeafe 25%,
+    #bfdbfe 50%,
+    #93c5fd 75%,
+    #60a5fa 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Orange gradient */
+.body-gradient-orange,
+body.body-gradient-orange,
+.gradient-orange {
+  background: linear-gradient(135deg,
+    #fff7ed 0%,
+    #ffedd5 25%,
+    #fed7aa 50%,
+    #fdba74 75%,
+    #fb923c 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Pink gradient */
+.body-gradient-pink,
+body.body-gradient-pink,
+.gradient-pink {
+  background: linear-gradient(135deg,
+    #fdf2f8 0%,
+    #fce7f3 25%,
+    #fbcfe8 50%,
+    #f9a8d4 75%,
+    #f472b6 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Purple gradient */
+.body-gradient-purple,
+body.body-gradient-purple,
+.gradient-purple {
+  background: linear-gradient(135deg,
+    #faf5ff 0%,
+    #f3e8ff 25%,
+    #e9d5ff 50%,
+    #d8b4fe 75%,
+    #c084fc 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Indigo gradient */
+.body-gradient-indigo,
+body.body-gradient-indigo,
+.gradient-indigo {
+  background: linear-gradient(135deg,
+    #eef2ff 0%,
+    #e0e7ff 25%,
+    #c7d2fe 50%,
+    #a5b4fc 75%,
+    #818cf8 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Login page gradient - warm and welcoming */
+.login-gradient,
+#login.body-gradient-teal {
+  background: linear-gradient(135deg,
+    var(--laya-primary-100) 0%,
+    var(--laya-primary-200) 50%,
+    var(--laya-primary-300) 100%
+  );
+  min-height: 100vh;
+  background-attachment: fixed;
+}
+
+/* ==========================================================================
+   Section 10: Multi-Step Form Indicators
+   ========================================================================== */
+
+/* Step progress container */
+.step-progress,
+.steps,
+.multi-step-progress,
+.wizard-steps {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--laya-spacing-2xl);
+  padding: 0;
+  list-style: none;
+}
+
+/* Step item */
+.step,
+.step-item,
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+
+/* Step connector line */
+.step::before,
+.step-item::before,
+.wizard-step::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: calc(-50% + 18px);
+  width: calc(100% - 36px);
+  height: 2px;
+  background-color: var(--laya-border);
+  z-index: 0;
+}
+
+.step:first-child::before,
+.step-item:first-child::before,
+.wizard-step:first-child::before {
+  display: none;
+}
+
+/* Step counter - Teal instead of purple */
+.step-counter,
+.step-number,
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--laya-radius-full);
+  background-color: var(--laya-surface);
+  border: 2px solid var(--laya-border);
+  color: var(--laya-text-muted);
+  font-weight: var(--laya-font-weight-semibold);
+  font-size: var(--laya-font-size-sm);
+  position: relative;
+  z-index: 1;
+  transition: all var(--laya-transition-normal);
+}
+
+/* Active step - Teal */
+.step.active .step-counter,
+.step-item.active .step-indicator,
+.wizard-step.active .step-number,
+.step.current .step-counter,
+.step-item.current .step-indicator {
+  background-color: var(--laya-primary);
+  border-color: var(--laya-primary);
+  color: var(--laya-text-inverse);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.2);
+}
+
+/* Completed step */
+.step.completed .step-counter,
+.step-item.completed .step-indicator,
+.wizard-step.completed .step-number,
+.step.done .step-counter {
+  background-color: var(--laya-primary-dark);
+  border-color: var(--laya-primary-dark);
+  color: var(--laya-text-inverse);
+}
+
+.step.completed::before,
+.step-item.completed::before,
+.wizard-step.completed::before {
+  background-color: var(--laya-primary);
+}
+
+/* Step label */
+.step-label,
+.step-title,
+.step-text {
+  margin-top: var(--laya-spacing-sm);
+  font-size: var(--laya-font-size-sm);
+  color: var(--laya-text-muted);
+  text-align: center;
+  font-weight: var(--laya-font-weight-normal);
+  text-transform: none;
+}
+
+.step.active .step-label,
+.step-item.active .step-title,
+.wizard-step.active .step-text {
+  color: var(--laya-primary-dark);
+  font-weight: var(--laya-font-weight-medium);
+}
+
+/* Gibbon multi-part form styling */
+.multiPartForm .stepIndicator,
+.multipart-indicator {
+  display: flex;
+  justify-content: center;
+  gap: var(--laya-spacing-sm);
+  margin-bottom: var(--laya-spacing-xl);
+}
+
+.multiPartForm .stepIndicator span,
+.multipart-indicator span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--laya-radius-full);
+  background-color: var(--laya-surface);
+  border: 2px solid var(--laya-border);
+  color: var(--laya-text-muted);
+  font-weight: var(--laya-font-weight-medium);
+  font-size: var(--laya-font-size-sm);
+  transition: all var(--laya-transition-normal);
+}
+
+.multiPartForm .stepIndicator span.active,
+.multiPartForm .stepIndicator span.current,
+.multipart-indicator span.active {
+  background-color: var(--laya-primary);
+  border-color: var(--laya-primary);
+  color: var(--laya-text-inverse);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.2);
+}
+
+.multiPartForm .stepIndicator span.completed,
+.multiPartForm .stepIndicator span.done,
+.multipart-indicator span.completed {
+  background-color: var(--laya-primary-dark);
+  border-color: var(--laya-primary-dark);
+  color: var(--laya-text-inverse);
+}
+
+/* ==========================================================================
+   Section 11: Custom Blocks and Widgets
+   ========================================================================== */
+
+/* Custom blocks container */
+.custom-block,
+.customBlocks,
+.block-container {
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  padding: var(--laya-spacing-lg);
+  margin-bottom: var(--laya-spacing-lg);
+  transition: box-shadow var(--laya-transition-normal);
+}
+
+.custom-block:hover,
+.customBlocks:hover {
+  box-shadow: var(--laya-shadow-md);
+}
+
+/* Block header */
+.custom-block-header,
+.block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--laya-spacing-md);
+  padding-bottom: var(--laya-spacing-md);
+  border-bottom: 1px solid var(--laya-border-light);
+}
+
+.custom-block-title,
+.block-title {
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+  font-size: var(--laya-font-size-lg);
+  text-transform: none;
+  margin: 0;
+}
+
+/* Sort handle styling */
+.sort-handle,
+.sortHandle,
+.drag-handle,
+.ui-sortable-handle {
+  cursor: grab;
+  padding: var(--laya-spacing-sm);
+  color: var(--laya-text-light);
+  transition: color var(--laya-transition-fast);
+}
+
+.sort-handle:hover,
+.sortHandle:hover,
+.drag-handle:hover,
+.ui-sortable-handle:hover {
+  color: var(--laya-primary);
+}
+
+.sort-handle:active,
+.sortHandle:active,
+.drag-handle:active,
+.ui-sortable-handle:active {
+  cursor: grabbing;
+}
+
+/* Sortable placeholder */
+.ui-sortable-placeholder {
+  background-color: var(--laya-primary-50);
+  border: 2px dashed var(--laya-primary);
+  border-radius: var(--laya-radius-md);
+  visibility: visible !important;
+}
+
+/* Widget styling */
+.widget,
+.sidebar-widget {
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  margin-bottom: var(--laya-spacing-lg);
+  overflow: hidden;
+}
+
+.widget-header,
+.sidebar-widget-header {
+  background-color: var(--laya-surface);
+  padding: var(--laya-spacing-md) var(--laya-spacing-lg);
+  border-bottom: 1px solid var(--laya-border);
+}
+
+.widget-title,
+.sidebar-widget-title {
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+  font-size: var(--laya-font-size-base);
+  text-transform: none;
+  margin: 0;
+}
+
+.widget-content,
+.sidebar-widget-content {
+  padding: var(--laya-spacing-lg);
+}
+
+/* Info boxes */
+.info-box,
+.infoBox {
+  display: flex;
+  align-items: flex-start;
+  padding: var(--laya-spacing-lg);
+  background-color: var(--laya-info-light);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: var(--laya-radius-lg);
+  margin-bottom: var(--laya-spacing-lg);
+  color: var(--laya-text);
+}
+
+.info-box.success,
+.infoBox.success {
+  background-color: var(--laya-success-light);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.info-box.warning,
+.infoBox.warning {
+  background-color: var(--laya-warning-light);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.info-box.error,
+.infoBox.error {
+  background-color: var(--laya-error-light);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* Card styling */
+.card {
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  overflow: hidden;
+  transition: box-shadow var(--laya-transition-normal);
+}
+
+.card:hover {
+  box-shadow: var(--laya-shadow-md);
+}
+
+.card-header {
+  background-color: var(--laya-surface);
+  padding: var(--laya-spacing-lg);
+  border-bottom: 1px solid var(--laya-border);
+}
+
+.card-body {
+  padding: var(--laya-spacing-lg);
+}
+
+.card-footer {
+  background-color: var(--laya-surface);
+  padding: var(--laya-spacing-md) var(--laya-spacing-lg);
+  border-top: 1px solid var(--laya-border);
+}
+
+/* Panel styling */
+.panel {
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  margin-bottom: var(--laya-spacing-lg);
+  overflow: hidden;
+}
+
+.panel-heading {
+  background-color: var(--laya-surface);
+  padding: var(--laya-spacing-md) var(--laya-spacing-lg);
+  border-bottom: 1px solid var(--laya-border);
+}
+
+.panel-title {
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+  margin: 0;
+  text-transform: none;
+}
+
+.panel-body {
+  padding: var(--laya-spacing-lg);
+}
+
+/* Primary panel */
+.panel-primary .panel-heading {
+  background: linear-gradient(135deg, var(--laya-primary) 0%, var(--laya-primary-dark) 100%);
+  color: var(--laya-text-inverse);
+  border-bottom: none;
+}
+
+.panel-primary .panel-title {
+  color: var(--laya-text-inverse);
+}
+
+/* ==========================================================================
+   Section 12: User Images and Avatars
+   ========================================================================== */
+
+/* Enhanced user image styling */
+.user-image,
+.userPhoto,
+.photo img,
+.profilePhoto img,
+.avatar,
+.user-avatar {
+  border-radius: var(--laya-radius-lg);
+  box-shadow: var(--laya-shadow-md);
+  border: 3px solid var(--laya-bg);
+  object-fit: cover;
+  transition: transform var(--laya-transition-normal),
+              box-shadow var(--laya-transition-normal);
+}
+
+.user-image:hover,
+.userPhoto:hover,
+.avatar:hover,
+.user-avatar:hover {
+  transform: scale(1.02);
+  box-shadow: var(--laya-shadow-lg);
+}
+
+/* Circular avatars */
+.avatar-circle,
+.user-avatar-circle {
+  border-radius: var(--laya-radius-full);
+}
+
+/* Avatar sizes */
+.avatar-sm,
+.user-avatar-sm {
+  width: 32px;
+  height: 32px;
+}
+
+.avatar-md,
+.user-avatar-md {
+  width: 48px;
+  height: 48px;
+}
+
+.avatar-lg,
+.user-avatar-lg {
+  width: 64px;
+  height: 64px;
+}
+
+.avatar-xl,
+.user-avatar-xl {
+  width: 96px;
+  height: 96px;
+}
+
+/* Avatar placeholder */
+.avatar-placeholder,
+.no-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--laya-primary-100);
+  color: var(--laya-primary-dark);
+  font-weight: var(--laya-font-weight-semibold);
+  border-radius: var(--laya-radius-lg);
+  border: 3px solid var(--laya-bg);
+}
+
+.avatar-placeholder.avatar-circle,
+.no-photo.avatar-circle {
+  border-radius: var(--laya-radius-full);
+}
+
+/* User card with avatar */
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: var(--laya-spacing-md);
+  padding: var(--laya-spacing-md);
+  background-color: var(--laya-bg);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  transition: background-color var(--laya-transition-fast);
+}
+
+.user-card:hover {
+  background-color: var(--laya-primary-50);
+}
+
+.user-card-info {
+  flex: 1;
+}
+
+.user-card-name {
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+  margin: 0;
+}
+
+.user-card-role {
+  font-size: var(--laya-font-size-sm);
+  color: var(--laya-text-muted);
+}
+
+/* Profile header with large avatar */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: var(--laya-spacing-xl);
+  padding: var(--laya-spacing-xl);
+  background: linear-gradient(135deg, var(--laya-primary-50) 0%, var(--laya-surface) 100%);
+  border-radius: var(--laya-radius-lg);
+  margin-bottom: var(--laya-spacing-xl);
+}
+
+.profile-avatar {
+  flex-shrink: 0;
+}
+
+.profile-info {
+  flex: 1;
+}
+
+/* ==========================================================================
+   Section 13: Highlight and Emphasis Styles
+   ========================================================================== */
+
+/* Highlight variations - Teal theme */
+.highlight-primary,
+.text-primary {
+  color: var(--laya-primary);
+}
+
+.highlight-secondary,
+.text-secondary {
+  color: var(--laya-text-muted);
+}
+
+.highlight-success,
+.text-success {
+  color: var(--laya-success);
+}
+
+.highlight-warning,
+.text-warning {
+  color: var(--laya-warning);
+}
+
+.highlight-error,
+.highlight-danger,
+.text-error,
+.text-danger {
+  color: var(--laya-error);
+}
+
+.highlight-info,
+.text-info {
+  color: var(--laya-info);
+}
+
+/* Background highlights */
+.bg-highlight,
+.bg-primary {
+  background-color: var(--laya-primary);
+  color: var(--laya-text-inverse);
+}
+
+.bg-highlight-light,
+.bg-primary-light {
+  background-color: var(--laya-primary-100);
+  color: var(--laya-primary-dark);
+}
+
+.bg-success {
+  background-color: var(--laya-success);
+  color: var(--laya-text-inverse);
+}
+
+.bg-success-light {
+  background-color: var(--laya-success-light);
+  color: var(--laya-text);
+}
+
+.bg-warning {
+  background-color: var(--laya-warning);
+  color: var(--laya-text-inverse);
+}
+
+.bg-warning-light {
+  background-color: var(--laya-warning-light);
+  color: var(--laya-text);
+}
+
+.bg-error,
+.bg-danger {
+  background-color: var(--laya-error);
+  color: var(--laya-text-inverse);
+}
+
+.bg-error-light,
+.bg-danger-light {
+  background-color: var(--laya-error-light);
+  color: var(--laya-text);
+}
+
+.bg-info {
+  background-color: var(--laya-info);
+  color: var(--laya-text-inverse);
+}
+
+.bg-info-light {
+  background-color: var(--laya-info-light);
+  color: var(--laya-text);
+}
+
+/* Emphasis styles */
+.emphasis,
+.em-strong {
+  font-style: italic;
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-primary-dark);
+}
+
+/* New/Updated badges */
+.badge-new,
+.label-new {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: var(--laya-primary);
+  color: var(--laya-text-inverse);
+  font-size: var(--laya-font-size-xs);
+  font-weight: var(--laya-font-weight-medium);
+  border-radius: var(--laya-radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-updated,
+.label-updated {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: var(--laya-info);
+  color: var(--laya-text-inverse);
+  font-size: var(--laya-font-size-xs);
+  font-weight: var(--laya-font-weight-medium);
+  border-radius: var(--laya-radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Required field indicator */
+.required,
+.required-field::after {
+  color: var(--laya-error);
+}
+
+/* ==========================================================================
+   Section 14: Miscellaneous Overrides
+   ========================================================================== */
+
+/* Loading spinner */
+.loading,
+.spinner,
+.loading-spinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--laya-border);
+  border-top-color: var(--laya-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Loading overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--laya-z-modal);
+}
+
+/* Empty state */
+.empty-state,
+.no-results,
+.no-data {
+  text-align: center;
+  padding: var(--laya-spacing-2xl);
+  color: var(--laya-text-muted);
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  color: var(--laya-text-light);
+  margin-bottom: var(--laya-spacing-md);
+}
+
+.empty-state-title {
+  font-size: var(--laya-font-size-lg);
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+  margin-bottom: var(--laya-spacing-sm);
+}
+
+.empty-state-description {
+  font-size: var(--laya-font-size-base);
+  color: var(--laya-text-muted);
+}
+
+/* Dividers */
+.divider,
+.separator {
+  height: 1px;
+  background-color: var(--laya-border);
+  margin: var(--laya-spacing-xl) 0;
+}
+
+.divider-vertical {
+  width: 1px;
+  height: 100%;
+  background-color: var(--laya-border);
+  margin: 0 var(--laya-spacing-md);
+}
+
+/* Section divider with text */
+.divider-text {
+  display: flex;
+  align-items: center;
+  margin: var(--laya-spacing-xl) 0;
+}
+
+.divider-text::before,
+.divider-text::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--laya-border);
+}
+
+.divider-text span {
+  padding: 0 var(--laya-spacing-md);
+  color: var(--laya-text-muted);
+  font-size: var(--laya-font-size-sm);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--laya-surface);
+  border-radius: var(--laya-radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--laya-border-dark);
+  border-radius: var(--laya-radius-full);
+  transition: background-color var(--laya-transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--laya-text-light);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--laya-border-dark) var(--laya-surface);
+}
+
+/* Tooltip override */
+.tooltip,
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  padding: var(--laya-spacing-sm) var(--laya-spacing-md);
+  background-color: var(--laya-text-dark);
+  color: var(--laya-text-inverse);
+  font-size: var(--laya-font-size-sm);
+  white-space: nowrap;
+  border-radius: var(--laya-radius-md);
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--laya-transition-fast);
+  z-index: var(--laya-z-tooltip);
+}
+
+[data-tooltip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+/* Notification badges */
+.notification-badge,
+.badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  background-color: var(--laya-error);
+  color: var(--laya-text-inverse);
+  font-size: 11px;
+  font-weight: var(--laya-font-weight-bold);
+  border-radius: var(--laya-radius-full);
+  line-height: 1;
+}
+
+/* Tag/Chip styling */
+.tag,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--laya-spacing-xs) var(--laya-spacing-sm);
+  background-color: var(--laya-surface);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-full);
+  font-size: var(--laya-font-size-sm);
+  color: var(--laya-text);
+  transition: all var(--laya-transition-fast);
+}
+
+.tag:hover,
+.chip:hover {
+  background-color: var(--laya-primary-50);
+  border-color: var(--laya-primary);
+}
+
+.tag-primary,
+.chip-primary {
+  background-color: var(--laya-primary-100);
+  border-color: var(--laya-primary);
+  color: var(--laya-primary-dark);
+}
+
+/* Action icons */
+.action-icon,
+.icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--laya-radius-md);
+  color: var(--laya-text-muted);
+  transition: all var(--laya-transition-fast);
+  cursor: pointer;
+}
+
+.action-icon:hover,
+.icon-action:hover {
+  background-color: var(--laya-primary-50);
+  color: var(--laya-primary);
+}
+
+/* Breadcrumb styling */
+.breadcrumb,
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--laya-spacing-sm) 0;
+  margin-bottom: var(--laya-spacing-lg);
+  list-style: none;
+}
+
+.breadcrumb li,
+.breadcrumbs li {
+  display: flex;
+  align-items: center;
+  font-size: var(--laya-font-size-sm);
+  color: var(--laya-text-muted);
+}
+
+.breadcrumb li a,
+.breadcrumbs li a {
+  color: var(--laya-text-muted);
+  transition: color var(--laya-transition-fast);
+}
+
+.breadcrumb li a:hover,
+.breadcrumbs li a:hover {
+  color: var(--laya-primary);
+  text-decoration: none;
+}
+
+.breadcrumb li::after,
+.breadcrumbs li::after {
+  content: '/';
+  margin: 0 var(--laya-spacing-sm);
+  color: var(--laya-text-light);
+}
+
+.breadcrumb li:last-child::after,
+.breadcrumbs li:last-child::after {
+  display: none;
+}
+
+.breadcrumb li:last-child,
+.breadcrumbs li:last-child {
+  color: var(--laya-text-dark);
+  font-weight: var(--laya-font-weight-medium);
+}
+
+/* Collapsible sections */
+.collapsible-header,
+.collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--laya-spacing-md) var(--laya-spacing-lg);
+  background-color: var(--laya-surface);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-md);
+  cursor: pointer;
+  transition: all var(--laya-transition-fast);
+}
+
+.collapsible-header:hover,
+.collapse-toggle:hover {
+  background-color: var(--laya-primary-50);
+}
+
+.collapsible-content,
+.collapse-content {
+  padding: var(--laya-spacing-lg);
+  border: 1px solid var(--laya-border);
+  border-top: none;
+  border-radius: 0 0 var(--laya-radius-md) var(--laya-radius-md);
+  background-color: var(--laya-bg);
+}
+
+/* Quick links */
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--laya-spacing-sm);
+}
+
+.quick-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--laya-spacing-xs);
+  padding: var(--laya-spacing-sm) var(--laya-spacing-md);
+  background-color: var(--laya-surface);
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-md);
+  font-size: var(--laya-font-size-sm);
+  color: var(--laya-text);
+  transition: all var(--laya-transition-fast);
+}
+
+.quick-link:hover {
+  background-color: var(--laya-primary-50);
+  border-color: var(--laya-primary);
+  color: var(--laya-primary-dark);
+  text-decoration: none;
+}
+
+/* Print-friendly overrides */
+@media print {
+  .body-gradient-teal,
+  .body-gradient-sky,
+  .body-gradient-green,
+  .body-gradient-blue,
+  .body-gradient-orange,
+  .body-gradient-pink,
+  .body-gradient-purple,
+  .body-gradient-indigo {
+    background: white !important;
+  }
+
+  .custom-block,
+  .card,
+  .panel,
+  .widget {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+
+  .ui-dialog,
+  .loading-overlay {
+    display: none !important;
+  }
+}
