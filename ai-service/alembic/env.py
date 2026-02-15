@@ -12,6 +12,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import settings
+from app.models import Base
 
 # Alembic Config object - provides access to values in alembic.ini
 config = context.config
@@ -23,11 +24,15 @@ if config.config_file_name is not None:
 
 # Add your model's MetaData object here for 'autogenerate' support
 # Import all models to ensure they are registered with Base.metadata
-from app.models import Base  # noqa: E402
 from app.models import (  # noqa: E402, F401
     CoachingRecommendation,
     CoachingSession,
     EvidenceSource,
+)
+from app.models.activity import (  # noqa: E402, F401
+    Activity,
+    ActivityRecommendation,
+    ActivityParticipation,
 )
 
 target_metadata = Base.metadata

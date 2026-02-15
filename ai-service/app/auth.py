@@ -3,6 +3,8 @@
 Provides token verification and user extraction from JWT tokens.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Any, Optional
 
