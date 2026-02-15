@@ -235,3 +235,123 @@ class MessageAttachment(Base):
         "Message",
         back_populates="attachments",
     )
+
+
+class NotificationChannel(Base):
+    """Store available notification channels.
+
+    Defines the different channels through which notifications can be
+    delivered to parents (e.g., email, push notifications, SMS).
+
+    Attributes:
+        id: Unique identifier for the channel
+        name: Name of the channel (email, push, sms)
+        display_name: Human-readable name for the channel
+        is_active: Whether this channel is currently available
+        created_at: Timestamp when the channel was created
+        updated_at: Timestamp when the channel was last updated
+    """
+
+    __tablename__ = "notification_channels"
+
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    name: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        unique=True,
+    )
+    display_name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=True,
+    )
+
+
+class NotificationPreference(Base):
+    """Store parent notification preferences.
+
+    Stores parent preferences for how they want to receive notifications
+    about messages, daily logs, and urgent communications. Each parent
+    can configure preferences per notification type and channel.
+
+    Attributes:
+        id: Unique identifier for the preference
+        parent_id: ID of the parent user
+        notification_type: Type of notification (message, daily_log, urgent, admin)
+        channel: Notification channel (email, push, sms)
+        is_enabled: Whether notifications are enabled for this type/channel
+        quiet_hours_start: Start of quiet hours (no notifications)
+        quiet_hours_end: End of quiet hours
+        created_at: Timestamp when the preference was created
+        updated_at: Timestamp when the preference was last updated
+    """
+
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    parent_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    notification_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    channel: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+    quiet_hours_start: Mapped[Optional[str]] = mapped_column(
+        String(5),
+        nullable=True,
+    )
+    quiet_hours_end: Mapped[Optional[str]] = mapped_column(
+        String(5),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=True,
+    )
+
+    # Table-level indexes for common query patterns
+    __table_args__ = (
+        Index("ix_notification_preferences_parent", "parent_id"),
+        Index("ix_notification_preferences_parent_type", "parent_id", "notification_type"),
+    )
