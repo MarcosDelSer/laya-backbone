@@ -9,6 +9,7 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
+    rbac: Models for Role-Based Access Control
 """
 
 from app.models.base import Base
@@ -37,6 +38,13 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
+from app.models.rbac import (
+    AuditLog,
+    Permission,
+    Role,
+    RoleType,
+    UserRole,
+)
 
 __all__ = [
     "Base",
@@ -61,4 +69,10 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
+    # RBAC models
+    "Role",
+    "RoleType",
+    "Permission",
+    "UserRole",
+    "AuditLog",
 ]
