@@ -25,6 +25,7 @@ import SwiftUI
 /// - CRUD operations (create, update, delete)
 /// - Selection tracking for bulk operations
 /// - Payment recording support
+/// - Offline support with local caching
 @MainActor
 final class InvoiceListViewModel: ObservableObject {
 
@@ -47,6 +48,17 @@ final class InvoiceListViewModel: ObservableObject {
 
     /// Whether the error alert should be shown
     @Published var showError = false
+
+    // MARK: - Offline Support
+
+    /// Whether the app is currently offline
+    @Published private(set) var isOffline = false
+
+    /// Whether data is being loaded from local cache
+    @Published private(set) var isLoadingFromCache = false
+
+    /// Number of pending sync operations for invoices
+    @Published private(set) var pendingSyncCount: Int = 0
 
     // MARK: - Search & Filter
 
@@ -212,6 +224,12 @@ final class InvoiceListViewModel: ObservableObject {
     /// Gibbon CMS client
     private let gibbonClient: GibbonClient
 
+    /// Sync service for offline support
+    private let syncService: SyncService
+
+    /// Realm manager for local data persistence
+    private let realmManager: RealmManager
+
     /// Combine cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
 
@@ -227,15 +245,59 @@ final class InvoiceListViewModel: ObservableObject {
     // MARK: - Initialization
 
     /// Creates a new InvoiceListViewModel
-    /// - Parameter gibbonClient: The Gibbon client to use (defaults to shared instance)
-    init(gibbonClient: GibbonClient = .shared) {
+    /// - Parameters:
+    ///   - gibbonClient: The Gibbon client to use (defaults to shared instance)
+    ///   - syncService: The sync service for offline support (defaults to shared instance)
+    ///   - realmManager: The Realm manager for local persistence (defaults to shared instance)
+    init(
+        gibbonClient: GibbonClient = .shared,
+        syncService: SyncService = .shared,
+        realmManager: RealmManager = .shared
+    ) {
         self.gibbonClient = gibbonClient
+        self.syncService = syncService
+        self.realmManager = realmManager
         setupSearchDebounce()
+        setupOfflineSupport()
+    }
+
+    // MARK: - Offline Support Setup
+
+    /// Sets up observers for offline support
+    private func setupOfflineSupport() {
+        // Observe network status changes
+        syncService.$networkStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                self?.isOffline = !status.isConnected
+            }
+            .store(in: &cancellables)
+
+        // Observe pending sync count
+        syncService.$pendingOperationsCount
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updatePendingSyncCount()
+            }
+            .store(in: &cancellables)
+
+        // Initial state
+        isOffline = !syncService.isOnline
+        updatePendingSyncCount()
+    }
+
+    /// Updates the pending sync count for invoice operations
+    private func updatePendingSyncCount() {
+        let pendingOps = realmManager.fetchPendingSyncOperations()
+        pendingSyncCount = pendingOps.filter {
+            $0.entityType == SyncEntityType.invoice.rawValue ||
+            $0.entityType == SyncEntityType.payment.rawValue
+        }.count
     }
 
     // MARK: - Public Methods
 
-    /// Loads invoices from the API
+    /// Loads invoices from the API (or local cache if offline)
     /// - Parameter reset: Whether to reset pagination and reload from the beginning
     func loadInvoices(reset: Bool = false) async {
         if reset {
@@ -250,6 +312,13 @@ final class InvoiceListViewModel: ObservableObject {
         isLoading = true
         error = nil
         showError = false
+
+        // Check if offline - load from local cache
+        if isOffline {
+            await loadInvoicesFromCache()
+            isLoading = false
+            return
+        }
 
         do {
             let response = try await gibbonClient.fetchInvoices(
@@ -273,15 +342,70 @@ final class InvoiceListViewModel: ObservableObject {
             currentOffset += response.items.count
             hasLoaded = true
 
+            // Cache fetched invoices locally for offline access
+            await cacheInvoicesLocally(response.items)
+
             // Apply current sorting
             applySorting()
 
         } catch {
-            self.error = error
-            self.showError = true
+            // On network error, try loading from cache
+            if isNetworkError(error) {
+                isOffline = true
+                await loadInvoicesFromCache()
+            } else {
+                self.error = error
+                self.showError = true
+            }
         }
 
         isLoading = false
+    }
+
+    /// Loads invoices from local cache
+    private func loadInvoicesFromCache() async {
+        isLoadingFromCache = true
+
+        let cachedInvoices = realmManager.fetchInvoices(
+            status: statusFilter,
+            familyId: familyFilter,
+            childId: childFilter,
+            searchQuery: isSearching ? searchText : nil
+        )
+
+        invoices = cachedInvoices
+        totalCount = cachedInvoices.count
+        hasMoreData = false
+        hasLoaded = true
+
+        // Apply current sorting
+        applySorting()
+
+        isLoadingFromCache = false
+    }
+
+    /// Caches invoices to local storage for offline access
+    private func cacheInvoicesLocally(_ invoicesToCache: [Invoice]) async {
+        do {
+            try await realmManager.saveInvoices(invoicesToCache)
+        } catch {
+            // Silently fail - caching is best effort
+        }
+    }
+
+    /// Checks if an error is a network-related error
+    private func isNetworkError(_ error: Error) -> Bool {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .networkError:
+                return true
+            default:
+                return false
+            }
+        }
+        // Check for URLSession network errors
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain
     }
 
     /// Refreshes the invoice list (reloads from the beginning)
@@ -327,6 +451,11 @@ final class InvoiceListViewModel: ObservableObject {
         isSaving = true
         error = nil
 
+        // If offline, create locally and queue for sync
+        if isOffline {
+            return await createInvoiceOffline(request)
+        }
+
         do {
             let invoice = try await gibbonClient.createInvoice(request)
 
@@ -335,7 +464,81 @@ final class InvoiceListViewModel: ObservableObject {
             totalCount += 1
             applySorting()
 
+            // Cache locally
+            await cacheInvoicesLocally([invoice])
+
             successMessage = String(localized: "Invoice created successfully")
+            showSuccess = true
+
+            isSaving = false
+            return invoice
+
+        } catch {
+            // If network error, try creating offline
+            if isNetworkError(error) {
+                isOffline = true
+                return await createInvoiceOffline(request)
+            }
+            self.error = error
+            self.showError = true
+            isSaving = false
+            return nil
+        }
+    }
+
+    /// Creates an invoice locally when offline and queues for sync
+    private func createInvoiceOffline(_ request: InvoiceRequest) async -> Invoice? {
+        // Create a temporary invoice with a local ID
+        let localId = "local-\(UUID().uuidString)"
+        let invoiceNumber = "DRAFT-\(Int.random(in: 10000...99999))"
+        let subtotal = request.items?.reduce(0.0) { $0 + ($1.quantity * $1.unitPrice) } ?? 0
+        let taxAmount = subtotal * 0.14975 // Quebec tax rate
+        let totalAmount = subtotal + taxAmount
+
+        let invoice = Invoice(
+            id: localId,
+            number: invoiceNumber,
+            familyId: request.familyId,
+            familyName: request.familyName ?? "",
+            childId: request.childId,
+            childName: request.childName,
+            date: request.date,
+            dueDate: request.dueDate,
+            status: .draft,
+            subtotal: subtotal,
+            taxAmount: taxAmount,
+            totalAmount: totalAmount,
+            amountPaid: 0,
+            items: request.items?.map { item in
+                InvoiceItem(
+                    id: UUID().uuidString,
+                    description: item.description,
+                    category: item.category,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    amount: item.quantity * item.unitPrice
+                )
+            } ?? [],
+            periodStartDate: request.periodStartDate,
+            periodEndDate: request.periodEndDate,
+            pdfUrl: nil,
+            notes: request.notes,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        do {
+            // Save to local database and queue for sync
+            try await realmManager.saveInvoice(invoice, queueSync: true)
+
+            // Add to the beginning of the list
+            invoices.insert(invoice, at: 0)
+            totalCount += 1
+            applySorting()
+
+            updatePendingSyncCount()
+
+            successMessage = String(localized: "Invoice saved locally. Will sync when online.")
             showSuccess = true
 
             isSaving = false
@@ -359,6 +562,11 @@ final class InvoiceListViewModel: ObservableObject {
         isSaving = true
         error = nil
 
+        // If offline, update locally and queue for sync
+        if isOffline {
+            return await updateInvoiceOffline(invoiceId: invoiceId, request: request)
+        }
+
         do {
             let updatedInvoice = try await gibbonClient.updateInvoice(invoiceId: invoiceId, request: request)
 
@@ -372,7 +580,87 @@ final class InvoiceListViewModel: ObservableObject {
                 selectedInvoice = updatedInvoice
             }
 
+            // Cache locally
+            await cacheInvoicesLocally([updatedInvoice])
+
             successMessage = String(localized: "Invoice updated successfully")
+            showSuccess = true
+
+            isSaving = false
+            return updatedInvoice
+
+        } catch {
+            // If network error, try updating offline
+            if isNetworkError(error) {
+                isOffline = true
+                return await updateInvoiceOffline(invoiceId: invoiceId, request: request)
+            }
+            self.error = error
+            self.showError = true
+            isSaving = false
+            return nil
+        }
+    }
+
+    /// Updates an invoice locally when offline and queues for sync
+    private func updateInvoiceOffline(invoiceId: String, request: InvoiceRequest) async -> Invoice? {
+        // Get existing invoice data to preserve non-updated fields
+        let existingInvoice = invoices.first { $0.id == invoiceId } ?? realmManager.fetchInvoice(id: invoiceId)
+
+        let subtotal = request.items?.reduce(0.0) { $0 + ($1.quantity * $1.unitPrice) }
+            ?? existingInvoice?.subtotal ?? 0
+        let taxAmount = subtotal * 0.14975
+        let totalAmount = subtotal + taxAmount
+
+        let updatedInvoice = Invoice(
+            id: invoiceId,
+            number: existingInvoice?.number ?? "",
+            familyId: request.familyId,
+            familyName: request.familyName ?? existingInvoice?.familyName ?? "",
+            childId: request.childId ?? existingInvoice?.childId,
+            childName: request.childName ?? existingInvoice?.childName,
+            date: request.date,
+            dueDate: request.dueDate,
+            status: request.status ?? existingInvoice?.status ?? .draft,
+            subtotal: subtotal,
+            taxAmount: taxAmount,
+            totalAmount: totalAmount,
+            amountPaid: existingInvoice?.amountPaid ?? 0,
+            items: request.items?.map { item in
+                InvoiceItem(
+                    id: UUID().uuidString,
+                    description: item.description,
+                    category: item.category,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    amount: item.quantity * item.unitPrice
+                )
+            } ?? existingInvoice?.items ?? [],
+            periodStartDate: request.periodStartDate ?? existingInvoice?.periodStartDate,
+            periodEndDate: request.periodEndDate ?? existingInvoice?.periodEndDate,
+            pdfUrl: existingInvoice?.pdfUrl,
+            notes: request.notes ?? existingInvoice?.notes,
+            createdAt: existingInvoice?.createdAt ?? Date(),
+            updatedAt: Date()
+        )
+
+        do {
+            // Save to local database and queue for sync
+            try await realmManager.saveInvoice(updatedInvoice, queueSync: true)
+
+            // Update in the local list
+            if let index = invoices.firstIndex(where: { $0.id == invoiceId }) {
+                invoices[index] = updatedInvoice
+            }
+
+            // Update selected invoice if it's the same
+            if selectedInvoice?.id == invoiceId {
+                selectedInvoice = updatedInvoice
+            }
+
+            updatePendingSyncCount()
+
+            successMessage = String(localized: "Invoice saved locally. Will sync when online.")
             showSuccess = true
 
             isSaving = false
@@ -394,8 +682,51 @@ final class InvoiceListViewModel: ObservableObject {
         isDeleting = true
         error = nil
 
+        // If offline, delete locally and queue for sync
+        if isOffline {
+            return await deleteInvoiceOffline(invoiceId: invoiceId)
+        }
+
         do {
             try await gibbonClient.deleteInvoice(invoiceId: invoiceId)
+
+            // Remove from local list
+            invoices.removeAll { $0.id == invoiceId }
+            totalCount -= 1
+
+            // Remove from local cache
+            try? await realmManager.deleteInvoice(id: invoiceId, queueSync: false)
+
+            // Clear selection if deleted invoice was selected
+            selectedInvoiceIds.remove(invoiceId)
+            if selectedInvoice?.id == invoiceId {
+                selectedInvoice = nil
+            }
+
+            successMessage = String(localized: "Invoice deleted successfully")
+            showSuccess = true
+
+            isDeleting = false
+            return true
+
+        } catch {
+            // If network error, try deleting offline
+            if isNetworkError(error) {
+                isOffline = true
+                return await deleteInvoiceOffline(invoiceId: invoiceId)
+            }
+            self.error = error
+            self.showError = true
+            isDeleting = false
+            return false
+        }
+    }
+
+    /// Deletes an invoice locally when offline and queues for sync
+    private func deleteInvoiceOffline(invoiceId: String) async -> Bool {
+        do {
+            // Delete from local database and queue for sync
+            try await realmManager.deleteInvoice(id: invoiceId, queueSync: true)
 
             // Remove from local list
             invoices.removeAll { $0.id == invoiceId }
@@ -407,7 +738,9 @@ final class InvoiceListViewModel: ObservableObject {
                 selectedInvoice = nil
             }
 
-            successMessage = String(localized: "Invoice deleted successfully")
+            updatePendingSyncCount()
+
+            successMessage = String(localized: "Invoice deleted locally. Will sync when online.")
             showSuccess = true
 
             isDeleting = false
@@ -431,20 +764,54 @@ final class InvoiceListViewModel: ObservableObject {
         var deletedCount = 0
 
         for invoiceId in invoiceIds {
-            do {
-                try await gibbonClient.deleteInvoice(invoiceId: invoiceId)
-                invoices.removeAll { $0.id == invoiceId }
-                totalCount -= 1
-                selectedInvoiceIds.remove(invoiceId)
-                deletedCount += 1
-            } catch {
-                // Continue with other deletions even if one fails
+            // If offline, delete locally
+            if isOffline {
+                do {
+                    try await realmManager.deleteInvoice(id: invoiceId, queueSync: true)
+                    invoices.removeAll { $0.id == invoiceId }
+                    totalCount -= 1
+                    selectedInvoiceIds.remove(invoiceId)
+                    deletedCount += 1
+                } catch {
+                    // Continue with other deletions even if one fails
+                }
+            } else {
+                do {
+                    try await gibbonClient.deleteInvoice(invoiceId: invoiceId)
+                    invoices.removeAll { $0.id == invoiceId }
+                    totalCount -= 1
+                    selectedInvoiceIds.remove(invoiceId)
+                    // Remove from local cache
+                    try? await realmManager.deleteInvoice(id: invoiceId, queueSync: false)
+                    deletedCount += 1
+                } catch {
+                    // If network error, try deleting offline
+                    if isNetworkError(error) {
+                        isOffline = true
+                        do {
+                            try await realmManager.deleteInvoice(id: invoiceId, queueSync: true)
+                            invoices.removeAll { $0.id == invoiceId }
+                            totalCount -= 1
+                            selectedInvoiceIds.remove(invoiceId)
+                            deletedCount += 1
+                        } catch {
+                            // Continue with other deletions even if one fails
+                        }
+                    }
+                }
             }
         }
 
         if deletedCount > 0 {
-            successMessage = String(localized: "\(deletedCount) invoices deleted successfully")
+            let messageKey = isOffline
+                ? String(localized: "\(deletedCount) invoices deleted locally. Will sync when online.")
+                : String(localized: "\(deletedCount) invoices deleted successfully")
+            successMessage = messageKey
             showSuccess = true
+
+            if isOffline {
+                updatePendingSyncCount()
+            }
         }
 
         // Clear selected invoice if it was deleted
@@ -466,6 +833,11 @@ final class InvoiceListViewModel: ObservableObject {
         isRecordingPayment = true
         error = nil
 
+        // If offline, record locally and queue for sync
+        if isOffline {
+            return await recordPaymentOffline(request)
+        }
+
         do {
             let payment = try await gibbonClient.recordPayment(request)
 
@@ -477,9 +849,88 @@ final class InvoiceListViewModel: ObservableObject {
                 if selectedInvoice?.id == request.invoiceId {
                     selectedInvoice = updatedInvoice
                 }
+
+                // Cache the updated invoice
+                await cacheInvoicesLocally([updatedInvoice])
             }
 
             successMessage = String(localized: "Payment recorded successfully")
+            showSuccess = true
+
+            isRecordingPayment = false
+            return payment
+
+        } catch {
+            // If network error, try recording offline
+            if isNetworkError(error) {
+                isOffline = true
+                return await recordPaymentOffline(request)
+            }
+            self.error = error
+            self.showError = true
+            isRecordingPayment = false
+            return nil
+        }
+    }
+
+    /// Records a payment locally when offline and queues for sync
+    private func recordPaymentOffline(_ request: PaymentRequest) async -> Payment? {
+        // Create a local payment
+        let localId = "local-\(UUID().uuidString)"
+        let payment = Payment(
+            id: localId,
+            invoiceId: request.invoiceId,
+            amount: request.amount,
+            paymentDate: request.paymentDate,
+            method: request.method,
+            reference: request.reference,
+            notes: request.notes,
+            createdAt: Date()
+        )
+
+        do {
+            // Save payment to local database and queue for sync
+            try await realmManager.savePayment(payment, queueSync: true)
+
+            // Update the local invoice with the new payment
+            if let index = invoices.firstIndex(where: { $0.id == request.invoiceId }) {
+                var invoice = invoices[index]
+                // Create an updated invoice with new amountPaid
+                let updatedInvoice = Invoice(
+                    id: invoice.id,
+                    number: invoice.number,
+                    familyId: invoice.familyId,
+                    familyName: invoice.familyName,
+                    childId: invoice.childId,
+                    childName: invoice.childName,
+                    date: invoice.date,
+                    dueDate: invoice.dueDate,
+                    status: invoice.amountPaid + request.amount >= invoice.totalAmount ? .paid : invoice.status,
+                    subtotal: invoice.subtotal,
+                    taxAmount: invoice.taxAmount,
+                    totalAmount: invoice.totalAmount,
+                    amountPaid: invoice.amountPaid + request.amount,
+                    items: invoice.items,
+                    periodStartDate: invoice.periodStartDate,
+                    periodEndDate: invoice.periodEndDate,
+                    pdfUrl: invoice.pdfUrl,
+                    notes: invoice.notes,
+                    createdAt: invoice.createdAt,
+                    updatedAt: Date()
+                )
+                invoices[index] = updatedInvoice
+
+                if selectedInvoice?.id == request.invoiceId {
+                    selectedInvoice = updatedInvoice
+                }
+
+                // Save updated invoice to local database
+                try await realmManager.saveInvoice(updatedInvoice, queueSync: false)
+            }
+
+            updatePendingSyncCount()
+
+            successMessage = String(localized: "Payment saved locally. Will sync when online.")
             showSuccess = true
 
             isRecordingPayment = false
@@ -867,6 +1318,26 @@ extension InvoiceListViewModel {
             pendingAmount: 5875.00,
             collectionRate: 0.92
         )
+        return viewModel
+    }
+
+    /// Creates a mock ViewModel in offline state for previews
+    static var previewOffline: InvoiceListViewModel {
+        let viewModel = InvoiceListViewModel()
+        viewModel.invoices = [.preview, .previewPaid]
+        viewModel.isOffline = true
+        viewModel.pendingSyncCount = 4
+        viewModel.totalCount = 2
+        viewModel.hasLoaded = true
+        viewModel.hasMoreData = false
+        return viewModel
+    }
+
+    /// Creates a mock ViewModel loading from cache for previews
+    static var previewLoadingFromCache: InvoiceListViewModel {
+        let viewModel = InvoiceListViewModel()
+        viewModel.isOffline = true
+        viewModel.isLoadingFromCache = true
         return viewModel
     }
 }
