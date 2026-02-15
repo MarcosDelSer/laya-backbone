@@ -10,3 +10,11 @@ export type {
   UseRefreshResult,
   UseAutoRefreshResult,
 } from './useRefresh';
+
+export {useNotifications} from './useNotifications';
+export type {
+  NotificationState,
+  NotificationActions,
+  UseNotificationsOptions,
+  UseNotificationsReturn,
+} from './useNotifications';
