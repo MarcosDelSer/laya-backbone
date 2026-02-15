@@ -7,4 +7,18 @@ Modules:
     coaching_service: Service for RAG-based special needs coaching guidance
 """
 
-__all__: list[str] = []
+from app.services.coaching_service import (
+    SAFETY_DISCLAIMER,
+    CoachingService,
+    CoachingServiceError,
+    InvalidChildError,
+    NoSourcesFoundError,
+)
+
+__all__: list[str] = [
+    "CoachingService",
+    "CoachingServiceError",
+    "InvalidChildError",
+    "NoSourcesFoundError",
+    "SAFETY_DISCLAIMER",
+]
