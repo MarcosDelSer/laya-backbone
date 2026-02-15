@@ -3,6 +3,8 @@
 Provides reusable dependencies for authentication and database access.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from fastapi import Depends
