@@ -179,6 +179,13 @@ struct ChildListView: View {
 
     private var childListContent: some View {
         VStack(spacing: 0) {
+            // Offline status banner
+            OfflineStatusBanner(
+                isOffline: viewModel.isOffline,
+                pendingSyncCount: viewModel.pendingSyncCount,
+                isLoadingFromCache: viewModel.isLoadingFromCache
+            )
+
             // Stats header
             statsHeader
 
@@ -371,13 +378,27 @@ struct ChildListView: View {
 
     private var loadingView: some View {
         VStack(spacing: 20) {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .controlSize(.large)
+            if viewModel.isOffline {
+                Image(systemName: "wifi.slash")
+                    .font(.system(size: 48))
+                    .foregroundColor(.orange)
+            } else {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .controlSize(.large)
+            }
 
-            Text(String(localized: "Loading children..."))
+            Text(viewModel.isLoadingFromCache
+                ? String(localized: "Loading from cache...")
+                : String(localized: "Loading children..."))
                 .font(.headline)
                 .foregroundColor(.secondary)
+
+            if viewModel.isOffline {
+                Text(String(localized: "You are offline. Showing cached data."))
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
