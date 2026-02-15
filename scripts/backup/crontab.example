@@ -1,0 +1,57 @@
+# LAYA Backup System - Crontab Configuration
+#
+# Installation Instructions:
+# 1. Copy this file content
+# 2. Edit your crontab: crontab -e
+# 3. Paste the schedule lines below
+# 4. Ensure environment variables are set or use /etc/environment or .env file
+#
+# Environment Setup:
+# You can source environment variables from a file:
+# SHELL=/bin/bash
+# PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+#
+# Or set them inline:
+# MYSQL_HOST=localhost
+# MYSQL_PORT=3306
+# MYSQL_USER=backup_user
+# MYSQL_PASSWORD=secure_password
+# MYSQL_DATABASE=laya_db
+# BACKUP_DIR=/var/backups/mysql
+#
+# =============================================================================
+# MySQL Backup - Daily at 2:00 AM
+# =============================================================================
+# Runs mysqldump with --single-transaction and gzip compression
+# Logs output to /var/log/mysql_backup.log
+0 2 * * * /path/to/laya-backbone/scripts/backup/mysql_backup.sh >> /var/log/mysql_backup.log 2>&1
+
+# =============================================================================
+# PostgreSQL Backup - Daily at 2:15 AM (to be implemented)
+# =============================================================================
+# 15 2 * * * /path/to/laya-backbone/scripts/backup/postgres_backup.sh >> /var/log/postgres_backup.log 2>&1
+
+# =============================================================================
+# Backup Cleanup - Daily at 3:00 AM (to be implemented)
+# =============================================================================
+# Implements retention policy: 7 daily, 4 weekly, 12 monthly
+# 0 3 * * * /path/to/laya-backbone/scripts/backup/cleanup_old_backups.sh >> /var/log/backup_cleanup.log 2>&1
+
+# =============================================================================
+# Backup Verification - Daily at 4:00 AM (to be implemented)
+# =============================================================================
+# Verifies backups by restoring to temp DB and running integrity checks
+# 0 4 * * * /path/to/laya-backbone/scripts/backup/verify_backup.sh >> /var/log/backup_verification.log 2>&1
+
+# =============================================================================
+# Notes:
+# =============================================================================
+# - Ensure the script paths are absolute paths
+# - Create log directories before running: sudo mkdir -p /var/log && sudo chmod 755 /var/log
+# - Create backup directories: sudo mkdir -p /var/backups/mysql && sudo chmod 700 /var/backups/mysql
+# - Consider using a dedicated backup user with minimal privileges
+# - Monitor log files regularly for backup failures
+# - Test backup restoration periodically
+# - Ensure sufficient disk space for backups
+# - Consider setting up email notifications on cron job failures
+#
