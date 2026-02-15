@@ -41,6 +41,12 @@ struct ChildListView: View {
     /// Child ID pending deletion
     @State private var childPendingDeletion: String?
 
+    /// Child being edited (for sheet presentation)
+    @State private var childBeingEdited: Child?
+
+    /// Whether to show the edit child sheet
+    @State private var showEditChild = false
+
     // MARK: - Body
 
     var body: some View {
@@ -112,6 +118,60 @@ struct ChildListView: View {
             }
         } message: {
             Text(String(localized: "Are you sure you want to delete this child? This action cannot be undone."))
+        }
+        .sheet(isPresented: $showAddChild) {
+            ChildFormView(
+                mode: .add,
+                viewModel: viewModel,
+                onSave: { _ in
+                    showAddChild = false
+                },
+                onCancel: {
+                    showAddChild = false
+                }
+            )
+        }
+        .sheet(isPresented: $showEditChild) {
+            if let child = childBeingEdited {
+                ChildFormView(
+                    mode: .edit(child),
+                    viewModel: viewModel,
+                    onSave: { _ in
+                        showEditChild = false
+                        childBeingEdited = nil
+                    },
+                    onCancel: {
+                        showEditChild = false
+                        childBeingEdited = nil
+                    }
+                )
+            }
+        }
+        .navigationDestination(for: String.self) { childId in
+            if let child = viewModel.getChild(byId: childId) {
+                ChildDetailView(
+                    child: child,
+                    onEdit: { childToEdit in
+                        childBeingEdited = childToEdit
+                        showEditChild = true
+                    },
+                    onDelete: { childToDelete in
+                        childPendingDeletion = childToDelete.id
+                        showDeleteConfirmation = true
+                    }
+                )
+            } else {
+                ProgressView()
+                    .task {
+                        // Try to fetch the child if not in cache
+                        if let fetchedChild = await viewModel.fetchChild(childId: childId) {
+                            viewModel.selectedChild = fetchedChild
+                        }
+                    }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .newChild)) { _ in
+            showAddChild = true
         }
     }
 
@@ -276,6 +336,13 @@ struct ChildListView: View {
             viewModel.selectedChild = child
         }) {
             Label(String(localized: "View Details"), systemImage: "info.circle")
+        }
+
+        Button(action: {
+            childBeingEdited = child
+            showEditChild = true
+        }) {
+            Label(String(localized: "Edit"), systemImage: "pencil")
         }
 
         Divider()
