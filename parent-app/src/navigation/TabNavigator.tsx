@@ -11,7 +11,7 @@ import {StyleSheet, View, Text} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
 import DailyFeedScreen from '../screens/DailyFeedScreen';
-import PhotosScreen from '../screens/PhotosScreen';
+import PhotoGalleryScreen from '../screens/PhotoGalleryScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import InvoicesScreen from '../screens/InvoicesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -117,7 +117,7 @@ function TabNavigator(): React.JSX.Element {
       />
       <Tab.Screen
         name="Photos"
-        component={PhotosScreen}
+        component={PhotoGalleryScreen}
         options={{
           title: 'Photos',
           tabBarLabel: 'Photos',
