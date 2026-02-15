@@ -13,9 +13,10 @@ function createWindow() {
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      // Security settings - will be enhanced in phase 2
+      // Security settings - prevent renderer from accessing Node.js APIs directly
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      sandbox: true
     }
   });
 
