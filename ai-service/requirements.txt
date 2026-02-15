@@ -19,3 +19,8 @@ pydantic-settings>=2.1.0
 
 # Form data parsing
 python-multipart>=0.0.6
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+aiosqlite>=0.19.0
