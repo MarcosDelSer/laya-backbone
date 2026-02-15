@@ -17,17 +17,9 @@ import type {RootStackParamList} from './src/types';
 // Import real screens
 import AttendanceScreen from './src/screens/AttendanceScreen';
 import MealLoggingScreen from './src/screens/MealLoggingScreen';
+import NapTrackingScreen from './src/screens/NapTrackingScreen';
 
 // Placeholder screens - will be replaced in subsequent subtasks
-
-function NapTrackingScreen(): React.JSX.Element {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Nap Tracking</Text>
-      <Text style={styles.subtitle}>Start/stop nap timer</Text>
-    </View>
-  );
-}
 
 function DiaperTrackingScreen(): React.JSX.Element {
   return (
