@@ -34,6 +34,11 @@ from app.models.activity import (  # noqa: E402, F401
     ActivityRecommendation,
     ActivityParticipation,
 )
+from app.models.analytics import (  # noqa: E402, F401
+    AnalyticsMetric,
+    ComplianceCheck,
+    EnrollmentForecast,
+)
 
 target_metadata = Base.metadata
 

@@ -7,6 +7,7 @@ Modules:
     base: Base declarative class for all models
     coaching: Models for special needs coaching domain
     activity: Models for activity intelligence domain
+    analytics: Models for analytics, forecasting, and compliance
 """
 
 from app.models.base import Base
@@ -22,6 +23,14 @@ from app.models.activity import (
     ActivityRecommendation,
     ActivityType,
 )
+from app.models.analytics import (
+    AnalyticsMetric,
+    ComplianceCheck,
+    ComplianceCheckType,
+    ComplianceStatus,
+    EnrollmentForecast,
+    MetricCategory,
+)
 
 __all__ = [
     "Base",
@@ -35,4 +44,11 @@ __all__ = [
     "ActivityDifficulty",
     "ActivityRecommendation",
     "ActivityParticipation",
+    # Analytics models
+    "AnalyticsMetric",
+    "EnrollmentForecast",
+    "ComplianceCheck",
+    "MetricCategory",
+    "ComplianceStatus",
+    "ComplianceCheckType",
 ]
