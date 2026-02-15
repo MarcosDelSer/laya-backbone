@@ -8,6 +8,7 @@ Modules:
     activity: Activity recommendation schemas
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
+    communication: Parent communication schemas
 """
 
 from app.schemas.activity import (
@@ -57,6 +58,20 @@ from app.schemas.coaching import (
     CoachingResponse,
     SpecialNeedType,
 )
+from app.schemas.communication import (
+    CommunicationPreferenceRequest,
+    CommunicationPreferenceResponse,
+    DevelopmentalArea,
+    GenerateReportRequest,
+    HomeActivitiesListResponse,
+    HomeActivitiesRequest,
+    HomeActivityBase,
+    HomeActivityResponse,
+    Language,
+    ParentReportListResponse,
+    ParentReportResponse,
+    ReportFrequency,
+)
 
 __all__ = [
     # Base schemas
@@ -102,4 +117,17 @@ __all__ = [
     "CoachingGuidance",
     "CoachingGuidanceResponse",
     "CoachingListResponse",
+    # Communication schemas
+    "Language",
+    "ReportFrequency",
+    "DevelopmentalArea",
+    "GenerateReportRequest",
+    "HomeActivitiesRequest",
+    "CommunicationPreferenceRequest",
+    "ParentReportResponse",
+    "HomeActivityBase",
+    "HomeActivityResponse",
+    "HomeActivitiesListResponse",
+    "CommunicationPreferenceResponse",
+    "ParentReportListResponse",
 ]
