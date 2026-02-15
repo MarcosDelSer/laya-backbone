@@ -4,44 +4,34 @@
  * React Native iOS application for parents to view their children's
  * daily reports, photos, messages, and invoices.
  *
- * This is a placeholder that will be expanded in subsequent subtasks.
+ * This component wraps the app with necessary providers and
+ * initializes the navigation structure.
  */
 
 import React from 'react';
-import {SafeAreaView, Text, StyleSheet} from 'react-native';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
+
+import AppNavigator from './src/navigation/AppNavigator';
 
 /**
- * Main App component - placeholder for initial project setup
+ * Main App component - entry point for the parent application.
  *
- * This will be replaced with proper navigation and screens
- * in subsequent implementation phases.
+ * Wraps the entire app with:
+ * - SafeAreaProvider: Handles safe area insets for iOS devices
+ * - AppNavigator: Root navigation structure
+ *
+ * Future additions:
+ * - AuthContext provider
+ * - NotificationContext provider
+ * - Error boundary
+ * - Splash screen handling
  */
 function App(): React.JSX.Element {
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>LAYA Parent App</Text>
-      <Text style={styles.subtitle}>Loading...</Text>
-    </SafeAreaView>
+    <SafeAreaProvider>
+      <AppNavigator />
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 8,
-  },
-});
 
 export default App;
