@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "015-admin-macos-app",
+  "state": "building",
+  "subtasks": {
+    "completed": 20,
+    "total": 50,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Child Management Module",
+    "id": null,
+    "total": 4
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 17,
+    "started_at": "2026-02-15T05:15:02.742385"
+  },
+  "last_update": "2026-02-15T06:00:23.883567"
+}
