@@ -430,8 +430,10 @@ async def create_activity_in_db(
             "id": activity_id,
             "name": name,
             "description": description,
-            "activity_type": activity_type.value,
-            "difficulty": difficulty.value,
+            # Use .name (uppercase: 'MOTOR') not .value (lowercase: 'motor')
+            # SQLAlchemy Enum expects the enum member name when reading from SQLite
+            "activity_type": activity_type.name,
+            "difficulty": difficulty.name,
             "duration_minutes": duration_minutes,
             "materials_needed": materials_json,
             "min_age_months": min_age_months,

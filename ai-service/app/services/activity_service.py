@@ -94,10 +94,15 @@ class ActivityService:
 
         # Apply activity type filtering if specified
         if activity_types:
-            type_values = [
-                ActivityType(t) if isinstance(t, str) else t for t in activity_types
-            ]
-            query = query.where(Activity.activity_type.in_(type_values))
+            type_values = []
+            for t in activity_types:
+                try:
+                    type_values.append(ActivityType(t) if isinstance(t, str) else t)
+                except ValueError:
+                    # Skip invalid activity types gracefully
+                    continue
+            if type_values:
+                query = query.where(Activity.activity_type.in_(type_values))
 
         # Execute query and fetch activities
         result = await self.db.execute(query)
@@ -367,7 +372,11 @@ class ActivityService:
         Returns:
             Activity if found, None otherwise.
         """
-        query = select(Activity).where(Activity.id == activity_id)
+        # Use cast for SQLite compatibility (TEXT storage) while maintaining PostgreSQL compatibility
+        from sqlalchemy import cast, String
+        query = select(Activity).where(
+            cast(Activity.id, String) == str(activity_id)
+        )
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
