@@ -205,6 +205,55 @@ class CoachingGuidanceRequest(BaseSchema):
     )
 
 
+class EvidenceSourceSchema(BaseSchema):
+    """Schema for evidence source citations.
+
+    Represents a source of evidence supporting coaching guidance,
+    such as research papers, clinical guidelines, or expert resources.
+
+    Attributes:
+        title: Title of the evidence source
+        authors: Authors of the source (if applicable)
+        publication_year: Year the source was published
+        source_type: Type of source (research, guideline, expert, etc.)
+        url: Optional URL to access the source
+        doi: Optional DOI identifier for academic sources
+    """
+
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Title of the evidence source",
+    )
+    authors: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Authors of the source (if applicable)",
+    )
+    publication_year: Optional[int] = Field(
+        default=None,
+        ge=1900,
+        le=2100,
+        description="Year the source was published",
+    )
+    source_type: str = Field(
+        default="research",
+        max_length=100,
+        description="Type of source (research, guideline, expert, etc.)",
+    )
+    url: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+        description="Optional URL to access the source",
+    )
+    doi: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Optional DOI identifier for academic sources",
+    )
+
+
 class CoachingGuidance(BaseSchema):
     """A single coaching guidance item with relevance information.
 
@@ -234,12 +283,15 @@ class CoachingGuidance(BaseSchema):
 class CoachingGuidanceResponse(BaseSchema):
     """Response schema for coaching guidance recommendations.
 
-    Contains a list of recommended coaching guidance items.
+    Contains a list of recommended coaching guidance items with
+    evidence-based citations and appropriate disclaimers.
 
     Attributes:
         child_id: The child this guidance is for
         guidance_items: List of coaching guidance items
         generated_at: When the guidance was generated
+        citations: List of evidence sources supporting the guidance
+        disclaimer: Important disclaimer about the guidance limitations
     """
 
     child_id: UUID = Field(
@@ -253,6 +305,17 @@ class CoachingGuidanceResponse(BaseSchema):
     generated_at: datetime = Field(
         ...,
         description="When the guidance was generated",
+    )
+    citations: list[EvidenceSourceSchema] = Field(
+        default_factory=list,
+        description="List of evidence sources supporting the guidance",
+    )
+    disclaimer: Optional[str] = Field(
+        default="This guidance is for informational purposes only and does not "
+        "constitute professional medical, therapeutic, or educational advice. "
+        "Always consult with qualified professionals for specific recommendations.",
+        max_length=2000,
+        description="Important disclaimer about the guidance limitations",
     )
 
 
