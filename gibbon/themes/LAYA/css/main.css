@@ -537,3 +537,356 @@ th,
     content: "";
   }
 }
+
+/* ==========================================================================
+   Section 6: Table Styling
+   ========================================================================== */
+
+/* Base table styling */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  overflow: hidden;
+  background-color: var(--laya-bg);
+  font-size: 14px;
+}
+
+/* Table container for responsive behavior */
+.table-responsive,
+.tableWrapper,
+.table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--laya-radius-lg);
+}
+
+/* Table header styling */
+thead {
+  background-color: var(--laya-surface);
+}
+
+thead th {
+  padding: 14px 16px;
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+  text-align: left;
+  border-bottom: 2px solid var(--laya-border);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-transform: none;
+}
+
+/* First and last header cell rounded corners */
+thead tr:first-child th:first-child {
+  border-top-left-radius: var(--laya-radius-lg);
+}
+
+thead tr:first-child th:last-child {
+  border-top-right-radius: var(--laya-radius-lg);
+}
+
+/* Table body styling */
+tbody {
+  background-color: var(--laya-bg);
+}
+
+tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--laya-border);
+  color: var(--laya-text);
+  font-size: 14px;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+/* Remove bottom border on last row */
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Last row rounded corners */
+tbody tr:last-child td:first-child {
+  border-bottom-left-radius: var(--laya-radius-lg);
+}
+
+tbody tr:last-child td:last-child {
+  border-bottom-right-radius: var(--laya-radius-lg);
+}
+
+/* Row hover effect - teal-50 */
+tbody tr:hover {
+  background-color: var(--laya-primary-50);
+}
+
+/* Alternating row colors (zebra striping) */
+tbody tr:nth-child(even) {
+  background-color: var(--laya-surface);
+}
+
+tbody tr:nth-child(even):hover {
+  background-color: var(--laya-primary-50);
+}
+
+/* Table footer styling */
+tfoot {
+  background-color: var(--laya-surface);
+}
+
+tfoot td,
+tfoot th {
+  padding: 14px 16px;
+  border-top: 2px solid var(--laya-border);
+  font-weight: var(--laya-font-weight-medium);
+  color: var(--laya-text-dark);
+  font-size: 14px;
+}
+
+/* Footer last row rounded corners */
+tfoot tr:last-child td:first-child,
+tfoot tr:last-child th:first-child {
+  border-bottom-left-radius: var(--laya-radius-lg);
+}
+
+tfoot tr:last-child td:last-child,
+tfoot tr:last-child th:last-child {
+  border-bottom-right-radius: var(--laya-radius-lg);
+}
+
+/* Gibbon-specific table classes */
+.fullWidth,
+.fullWidth table {
+  width: 100%;
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+}
+
+/* Gibbon oddEven row styling */
+.odd {
+  background-color: var(--laya-bg);
+}
+
+.even {
+  background-color: var(--laya-surface);
+}
+
+.odd:hover,
+.even:hover {
+  background-color: var(--laya-primary-50);
+}
+
+/* Data tables styling */
+.dataTable {
+  border: 1px solid var(--laya-border);
+  border-radius: var(--laya-radius-lg);
+  overflow: hidden;
+}
+
+.dataTable thead th {
+  background-color: var(--laya-surface);
+  padding: 14px 16px;
+  font-weight: var(--laya-font-weight-semibold);
+  border-bottom: 2px solid var(--laya-border);
+  font-size: 14px;
+}
+
+.dataTable tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--laya-border);
+  font-size: 14px;
+}
+
+.dataTable tbody tr:hover {
+  background-color: var(--laya-primary-50);
+}
+
+/* Sortable table headers */
+.dataTable th.sorting,
+.dataTable th.sorting_asc,
+.dataTable th.sorting_desc {
+  cursor: pointer;
+  position: relative;
+  padding-right: 28px;
+}
+
+.dataTable th.sorting:hover,
+.dataTable th.sorting_asc:hover,
+.dataTable th.sorting_desc:hover {
+  background-color: var(--laya-surface-hover);
+}
+
+.dataTable th.sorting_asc::after,
+.dataTable th.sorting_desc::after {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--laya-primary);
+}
+
+.dataTable th.sorting_asc::after {
+  content: "▲";
+}
+
+.dataTable th.sorting_desc::after {
+  content: "▼";
+}
+
+/* Compact table variant */
+table.compact td,
+table.compact th,
+.dataTable.compact td,
+.dataTable.compact th {
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+/* Table with no border */
+table.borderless,
+table.borderless td,
+table.borderless th {
+  border: none;
+}
+
+/* Table actions column */
+td.actions,
+th.actions,
+.table-actions {
+  text-align: center;
+  white-space: nowrap;
+  width: 1%;
+}
+
+/* Row selection highlight */
+tr.selected,
+tr.highlight-row {
+  background-color: var(--laya-primary-100) !important;
+}
+
+tr.selected:hover,
+tr.highlight-row:hover {
+  background-color: var(--laya-primary-200) !important;
+}
+
+/* Clickable rows */
+tr.clickable {
+  cursor: pointer;
+}
+
+tr.clickable:hover {
+  background-color: var(--laya-primary-50);
+}
+
+/* Table caption */
+caption {
+  padding: var(--laya-spacing-md);
+  font-weight: var(--laya-font-weight-semibold);
+  color: var(--laya-text-dark);
+  text-align: left;
+  caption-side: top;
+}
+
+/* Empty state for tables */
+.dataTable-empty,
+.no-results,
+td.empty-message {
+  padding: var(--laya-spacing-xl);
+  text-align: center;
+  color: var(--laya-text-muted);
+  font-style: italic;
+}
+
+/* Responsive table stacking on small screens */
+@media (max-width: 768px) {
+  table.responsive-stack thead {
+    display: none;
+  }
+
+  table.responsive-stack tr {
+    display: block;
+    margin-bottom: var(--laya-spacing-md);
+    border: 1px solid var(--laya-border);
+    border-radius: var(--laya-radius-md);
+    background-color: var(--laya-bg);
+  }
+
+  table.responsive-stack td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--laya-border-light);
+    font-size: 14px;
+  }
+
+  table.responsive-stack td:last-child {
+    border-bottom: none;
+  }
+
+  table.responsive-stack td::before {
+    content: attr(data-label);
+    font-weight: var(--laya-font-weight-semibold);
+    color: var(--laya-text-dark);
+    margin-right: var(--laya-spacing-md);
+  }
+}
+
+/* Gibbon full width override */
+.fullWidth td,
+.fullWidth th {
+  padding: 14px 16px;
+  border: 1px solid var(--laya-border);
+  font-size: 14px;
+}
+
+/* Mini tables in sidebars/widgets */
+.mini-table,
+.sidebar table,
+.widget table {
+  font-size: 13px;
+}
+
+.mini-table td,
+.mini-table th,
+.sidebar table td,
+.sidebar table th,
+.widget table td,
+.widget table th {
+  padding: 10px 12px;
+}
+
+/* Nested tables */
+table table {
+  margin: 0;
+  border-radius: var(--laya-radius-md);
+}
+
+/* Table loading state */
+table.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+table.loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border: 3px solid var(--laya-border);
+  border-top-color: var(--laya-primary);
+  border-radius: 50%;
+  animation: table-spin 0.8s linear infinite;
+}
+
+@keyframes table-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
