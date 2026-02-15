@@ -1,2 +1,5 @@
 # Auto Claude data directory
 .auto-claude/
+
+# Dependencies
+node_modules/
