@@ -6,6 +6,7 @@ database tables.
 Modules:
     base: Base declarative class for all models
     coaching: Models for special needs coaching domain
+    activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
 """
 
@@ -14,6 +15,13 @@ from app.models.coaching import (
     CoachingRecommendation,
     CoachingSession,
     EvidenceSource,
+)
+from app.models.activity import (
+    Activity,
+    ActivityDifficulty,
+    ActivityParticipation,
+    ActivityRecommendation,
+    ActivityType,
 )
 from app.models.analytics import (
     AnalyticsMetric,
@@ -30,11 +38,16 @@ __all__ = [
     "CoachingSession",
     "CoachingRecommendation",
     "EvidenceSource",
+    # Activity models
+    "Activity",
+    "ActivityType",
+    "ActivityDifficulty",
+    "ActivityRecommendation",
+    "ActivityParticipation",
     # Analytics models
     "AnalyticsMetric",
     "EnrollmentForecast",
     "ComplianceCheck",
-    # Analytics enums
     "MetricCategory",
     "ComplianceStatus",
     "ComplianceCheckType",

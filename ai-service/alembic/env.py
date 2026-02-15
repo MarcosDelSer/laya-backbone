@@ -29,6 +29,11 @@ from app.models import (  # noqa: E402, F401
     CoachingSession,
     EvidenceSource,
 )
+from app.models.activity import (  # noqa: E402, F401
+    Activity,
+    ActivityRecommendation,
+    ActivityParticipation,
+)
 from app.models.analytics import (  # noqa: E402, F401
     AnalyticsMetric,
     ComplianceCheck,

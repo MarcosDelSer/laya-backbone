@@ -5,6 +5,7 @@ business logic, database operations, and external integrations.
 
 Modules:
     coaching_service: Service for RAG-based special needs coaching guidance
+    activity_service: Service for activity intelligence and recommendations
     analytics_service: Service for business intelligence and analytics
 """
 
@@ -15,6 +16,7 @@ from app.services.coaching_service import (
     InvalidChildError,
     NoSourcesFoundError,
 )
+from app.services.activity_service import ActivityService
 from app.services.analytics_service import AnalyticsService
 
 __all__: list[str] = [
@@ -24,6 +26,8 @@ __all__: list[str] = [
     "InvalidChildError",
     "NoSourcesFoundError",
     "SAFETY_DISCLAIMER",
+    # Activity
+    "ActivityService",
     # Analytics
     "AnalyticsService",
 ]
