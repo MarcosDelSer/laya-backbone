@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.dependencies import get_current_user
+from app.routers import coaching
 
 app = FastAPI(
     title="LAYA AI Service",
@@ -21,6 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register API routers
+app.include_router(coaching.router, prefix="/api/v1/coaching", tags=["coaching"])
 
 
 @app.get("/")

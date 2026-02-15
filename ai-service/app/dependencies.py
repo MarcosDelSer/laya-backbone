@@ -3,7 +3,7 @@
 Provides reusable dependencies for authentication and database access.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials
@@ -37,10 +37,10 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
         security,
     ),
-) -> dict[str, Any] | None:
+) -> Optional[dict[str, Any]]:
     """Dependency to optionally get the current user if authenticated.
 
     Similar to get_current_user but returns None if no token is provided
