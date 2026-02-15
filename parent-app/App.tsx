@@ -13,7 +13,7 @@ import {StatusBar, BackHandler, Platform} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
-import TabNavigator from './src/navigation/TabNavigator';
+import RootNavigator from './src/navigation/RootNavigator';
 
 // Platform detection helper
 const isAndroid = Platform.OS === 'android';
@@ -75,7 +75,7 @@ function App(): React.JSX.Element {
         translucent={isAndroid}
       />
       <NavigationContainer>
-        <TabNavigator />
+        <RootNavigator />
       </NavigationContainer>
     </SafeAreaProvider>
   );

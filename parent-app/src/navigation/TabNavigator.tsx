@@ -12,6 +12,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 
 import type {RootTabParamList} from './types';
 import DailyFeedScreen from '../screens/DailyFeedScreen';
+import MessagingScreen from '../screens/MessagingScreen';
 
 /**
  * Tab icon properties
@@ -92,10 +93,12 @@ function PlaceholderScreen({
 /**
  * Temporary placeholder screens
  * TODO: Replace with actual screen imports once created in phase 6 & 7:
- * - PhotoGalleryScreen (subtask-6-2)
- * - InvoicesScreen (subtask-6-3)
- * - MessagingScreen (subtask-7-1)
+ * - PhotoGalleryScreen (subtask-6-2) - needs import
+ * - InvoicesScreen (subtask-6-3) - needs import
  * - DocumentsScreen (subtask-7-2)
+ *
+ * COMPLETED:
+ * - MessagingScreen (subtask-7-1) - imported above
  */
 
 function PhotoGalleryScreen(): React.JSX.Element {
@@ -116,14 +119,7 @@ function InvoicesScreen(): React.JSX.Element {
   );
 }
 
-function MessagingScreen(): React.JSX.Element {
-  return (
-    <PlaceholderScreen
-      title="Messages"
-      description="Communicate with your child's educators"
-    />
-  );
-}
+// MessagingScreen is imported from screens - placeholder removed
 
 function SignaturesScreen(): React.JSX.Element {
   return (
