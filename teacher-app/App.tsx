@@ -14,15 +14,10 @@ import {StyleSheet, Text, View} from 'react-native';
 
 import type {RootStackParamList} from './src/types';
 
+// Import real screens
+import AttendanceScreen from './src/screens/AttendanceScreen';
+
 // Placeholder screens - will be replaced in subsequent subtasks
-function AttendanceScreen(): React.JSX.Element {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Attendance</Text>
-      <Text style={styles.subtitle}>Check-in / Check-out</Text>
-    </View>
-  );
-}
 
 function MealLoggingScreen(): React.JSX.Element {
   return (
