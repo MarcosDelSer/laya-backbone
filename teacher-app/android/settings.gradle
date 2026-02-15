@@ -1,0 +1,40 @@
+// LAYA Teacher App - settings.gradle
+//
+// Gradle settings for the Teacher Android app.
+// Configures plugin management and project structure.
+
+pluginManagement {
+    // Include build scripts from React Native
+    includeBuild("../node_modules/@react-native/gradle-plugin")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    // Apply React Native Gradle Plugin for autolinking and Codegen
+    id("com.facebook.react.settings")
+}
+
+// Configure React Native autolinking
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+    ex.autolinkLibrariesFromCommand()
+}
+
+rootProject.name = 'TeacherApp'
+
+// Include the main app module
+include ':app'
+
+// Apply dependency resolution management
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+    }
+}

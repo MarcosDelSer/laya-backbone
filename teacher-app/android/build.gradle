@@ -1,0 +1,58 @@
+// LAYA Teacher App - Project-level build.gradle
+//
+// Top-level build file for the Teacher Android app.
+// Includes React Native and Firebase configuration.
+
+buildscript {
+    ext {
+        // Build configuration
+        buildToolsVersion = "35.0.0"
+        minSdkVersion = 29 // Android 10
+        compileSdkVersion = 35
+        targetSdkVersion = 34 // Android 14
+        ndkVersion = "26.1.10909125"
+        kotlinVersion = "1.9.24"
+
+        // React Native new architecture (disabled by default for stability)
+        newArchEnabled = false
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.6.0")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+
+        // Firebase Cloud Messaging for push notifications
+        // Note: google-services.json must be placed in android/app/
+        // Download from Firebase Console: https://console.firebase.google.com/
+        classpath("com.google.gms:google-services:4.4.2")
+    }
+}
+
+allprojects {
+    repositories {
+        // React Native local maven repository
+        maven {
+            url("$rootDir/../node_modules/react-native/android")
+        }
+        // JSC (JavaScriptCore) Android builds
+        maven {
+            url("$rootDir/../node_modules/jsc-android/dist")
+        }
+        // React Native community modules
+        mavenLocal()
+        google()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+    }
+}
+
+// Clean task configuration
+tasks.register('clean', Delete) {
+    delete rootProject.buildDir
+}
