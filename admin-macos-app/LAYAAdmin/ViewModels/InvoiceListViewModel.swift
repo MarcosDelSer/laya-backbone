@@ -513,10 +513,11 @@ final class InvoiceListViewModel: ObservableObject {
                 InvoiceItem(
                     id: UUID().uuidString,
                     description: item.description,
-                    category: item.category,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
-                    amount: item.quantity * item.unitPrice
+                    total: item.quantity * item.unitPrice,
+                    category: item.category,
+                    isQualifyingExpense: item.category.qualifiesForRL24
                 )
             } ?? [],
             periodStartDate: request.periodStartDate,
@@ -630,10 +631,11 @@ final class InvoiceListViewModel: ObservableObject {
                 InvoiceItem(
                     id: UUID().uuidString,
                     description: item.description,
-                    category: item.category,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
-                    amount: item.quantity * item.unitPrice
+                    total: item.quantity * item.unitPrice,
+                    category: item.category,
+                    isQualifyingExpense: item.category.qualifiesForRL24
                 )
             } ?? existingInvoice?.items ?? [],
             periodStartDate: request.periodStartDate ?? existingInvoice?.periodStartDate,
@@ -880,11 +882,14 @@ final class InvoiceListViewModel: ObservableObject {
         let payment = Payment(
             id: localId,
             invoiceId: request.invoiceId,
+            invoiceNumber: nil,
             amount: request.amount,
             paymentDate: request.paymentDate,
-            method: request.method,
-            reference: request.reference,
+            paymentMethod: request.paymentMethod,
+            referenceNumber: request.referenceNumber,
             notes: request.notes,
+            recordedById: nil,
+            recordedByName: nil,
             createdAt: Date()
         )
 
