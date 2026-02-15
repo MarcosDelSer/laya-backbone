@@ -85,6 +85,14 @@ export const API_CONFIG = {
       registerToken: '/api/notifications/register-token',
       unregisterToken: '/api/notifications/unregister-token',
     },
+
+    // Authentication endpoints
+    auth: {
+      login: '/api/auth/login',
+      logout: '/api/auth/logout',
+      refresh: '/api/auth/refresh',
+      me: '/api/auth/me',
+    },
   },
 } as const;
 
