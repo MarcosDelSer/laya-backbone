@@ -36,6 +36,7 @@ struct LAYAAdminApp: App {
 
     // MARK: - Body
 
+    @SceneBuilder
     var body: some Scene {
         // Main application window
         WindowGroup {
@@ -82,39 +83,20 @@ struct LAYAAdminApp: App {
             }
         }
 
-        // Menu bar extra with quick actions (macOS 14+)
-        #if os(macOS)
-        if showMenuBarExtra {
-            MenuBarExtra {
-                MenuBarView(
-                    authService: authService,
-                    notificationService: notificationService
-                )
-            } label: {
-                MenuBarLabel()
-            }
-            .menuBarExtraStyle(.window)
+        // Menu bar extra with quick actions
+        MenuBarExtra("LAYA Admin", systemImage: "building.2.fill") {
+            MenuBarView(
+                authService: authService,
+                notificationService: notificationService
+            )
         }
+        .menuBarExtraStyle(.window)
 
         // Settings window
         Settings {
             SettingsView()
                 .environmentObject(notificationService)
         }
-        #endif
-    }
-}
-
-// MARK: - Menu Bar Label
-
-/// Label view for the menu bar extra.
-/// Shows an icon that indicates app status.
-private struct MenuBarLabel: View {
-
-    var body: some View {
-        Image(systemName: "building.2.fill")
-            .symbolRenderingMode(.hierarchical)
-            .accessibilityLabel("LAYA Admin")
     }
 }
 
