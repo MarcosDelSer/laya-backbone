@@ -22,9 +22,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Add your model's MetaData object here for 'autogenerate' support
-# from app.models import Base
-# target_metadata = Base.metadata
-target_metadata = None
+# Import the Base from analytics models to enable autogenerate
+from app.models.analytics import Base
+
+target_metadata = Base.metadata
 
 # Override sqlalchemy.url with our async database URL from settings
 # Convert async URL to sync for Alembic operations that require sync connection
