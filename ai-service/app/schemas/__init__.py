@@ -9,6 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
+    rbac: Role-Based Access Control schemas
 """
 
 from app.schemas.activity import (
@@ -72,6 +73,32 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
+from app.schemas.rbac import (
+    AuditAction,
+    AuditLogBase,
+    AuditLogFilter,
+    AuditLogListResponse,
+    AuditLogRequest,
+    AuditLogResponse,
+    PermissionAction,
+    PermissionBase,
+    PermissionCheckRequest,
+    PermissionCheckResponse,
+    PermissionListResponse,
+    PermissionRequest,
+    PermissionResponse,
+    RevokeRoleRequest,
+    RoleBase,
+    RoleListResponse,
+    RoleRequest,
+    RoleResponse,
+    RoleType,
+    UserPermissionsResponse,
+    UserRoleAssignment,
+    UserRoleAssignmentBase,
+    UserRoleListResponse,
+    UserRoleResponse,
+)
 
 __all__ = [
     # Base schemas
@@ -130,4 +157,29 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
+    # RBAC schemas
+    "RoleType",
+    "AuditAction",
+    "PermissionAction",
+    "PermissionBase",
+    "PermissionRequest",
+    "PermissionResponse",
+    "PermissionListResponse",
+    "PermissionCheckRequest",
+    "PermissionCheckResponse",
+    "RoleBase",
+    "RoleRequest",
+    "RoleResponse",
+    "RoleListResponse",
+    "UserRoleAssignmentBase",
+    "UserRoleAssignment",
+    "UserRoleResponse",
+    "UserRoleListResponse",
+    "RevokeRoleRequest",
+    "UserPermissionsResponse",
+    "AuditLogBase",
+    "AuditLogRequest",
+    "AuditLogResponse",
+    "AuditLogListResponse",
+    "AuditLogFilter",
 ]
