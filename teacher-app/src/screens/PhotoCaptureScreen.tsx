@@ -28,6 +28,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import {launchCamera, CameraOptions, Asset} from 'react-native-image-picker';
 import {useCameraPermission} from '../hooks/useCameraPermission';
 import PermissionRequest from '../components/PermissionRequest';
 import ChildTagging from '../components/ChildTagging';
@@ -109,21 +110,59 @@ function PhotoCaptureScreen(): React.JSX.Element {
   }, [phase, children.length, loadChildren]);
 
   /**
-   * Simulate taking a photo (mock implementation)
-   * In production, this would use react-native-vision-camera or similar
+   * Launch camera and capture photo using react-native-image-picker
+   * Follows pattern from spec for Android camera integration
    */
-  const handleTakePhoto = useCallback(() => {
-    // Mock photo capture
-    const mockPhoto: CapturedPhoto = {
-      uri: 'https://via.placeholder.com/400x300/4A90D9/FFFFFF?text=Photo+Preview',
-      base64: '', // Would be actual base64 in production
-      width: 400,
-      height: 300,
-      filename: generatePhotoFilename(),
+  const handleTakePhoto = useCallback(async () => {
+    const cameraOptions: CameraOptions = {
+      mediaType: 'photo',
+      quality: 0.8,
+      saveToPhotos: true,
+      includeBase64: true,
+      maxWidth: 1920,
+      maxHeight: 1920,
     };
 
-    setCapturedPhoto(mockPhoto);
-    setPhase('preview');
+    try {
+      const result = await launchCamera(cameraOptions);
+
+      // Handle user cancellation
+      if (result.didCancel) {
+        return;
+      }
+
+      // Handle camera errors
+      if (result.errorCode) {
+        const errorMessages: Record<string, string> = {
+          camera_unavailable: 'Camera is not available on this device.',
+          permission: 'Camera permission was denied.',
+          others: 'An error occurred while capturing the photo.',
+        };
+        const errorMessage =
+          errorMessages[result.errorCode] || result.errorMessage || 'Failed to capture photo.';
+        Alert.alert('Camera Error', errorMessage);
+        return;
+      }
+
+      // Process captured photo
+      const asset: Asset | undefined = result.assets?.[0];
+      if (asset && asset.uri) {
+        const capturedPhotoData: CapturedPhoto = {
+          uri: asset.uri,
+          base64: asset.base64,
+          width: asset.width || 0,
+          height: asset.height || 0,
+          filename: asset.fileName || generatePhotoFilename(),
+        };
+
+        setCapturedPhoto(capturedPhotoData);
+        setPhase('preview');
+      } else {
+        Alert.alert('Error', 'No photo was captured. Please try again.');
+      }
+    } catch (error) {
+      Alert.alert('Camera Error', 'An unexpected error occurred. Please try again.');
+    }
   }, []);
 
   /**
@@ -212,17 +251,18 @@ function PhotoCaptureScreen(): React.JSX.Element {
   }
 
   /**
-   * Render camera view (mock implementation)
+   * Render camera launch view
+   * Uses react-native-image-picker which launches the system camera
    */
   if (phase === 'camera') {
     return (
       <View style={styles.container}>
-        {/* Mock camera preview */}
+        {/* Camera launch area */}
         <View style={styles.cameraPreview}>
           <View style={styles.cameraPlaceholder}>
-            <Text style={styles.cameraPlaceholderText}>Camera Preview</Text>
+            <Text style={styles.cameraPlaceholderText}>Capture Photo</Text>
             <Text style={styles.cameraPlaceholderSubtext}>
-              (Camera integration placeholder)
+              Tap the button below to open the camera
             </Text>
           </View>
         </View>
