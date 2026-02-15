@@ -11,27 +11,42 @@ import UserNotifications
 
 /// Main entry point for the LAYA Admin macOS application.
 /// Uses SwiftUI App lifecycle for modern macOS development.
+///
+/// Features:
+/// - Main window with navigation and content
+/// - Menu bar status item with quick actions
+/// - Settings window for app preferences
+/// - Custom keyboard shortcuts for navigation
 @main
 struct LAYAAdminApp: App {
 
     // MARK: - App State
 
+    /// App delegate for macOS-specific functionality
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     /// Notification service instance
     @StateObject private var notificationService = NotificationService.shared
 
+    /// Auth service instance for menu bar
+    @StateObject private var authService = AuthService.shared
+
+    /// Whether to show the menu bar extra
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
+
     // MARK: - Body
 
     var body: some Scene {
+        // Main application window
         WindowGroup {
             MainView()
                 .environmentObject(notificationService)
+                .environmentObject(authService)
         }
         .windowStyle(.automatic)
         .windowToolbarStyle(.unified)
         .commands {
-            // Custom menu commands will be added here
+            // Custom menu commands
             CommandGroup(replacing: .newItem) {
                 Button("New Child") {
                     NotificationCenter.default.post(name: .newChild, object: nil)
@@ -67,7 +82,21 @@ struct LAYAAdminApp: App {
             }
         }
 
+        // Menu bar extra with quick actions (macOS 14+)
         #if os(macOS)
+        if showMenuBarExtra {
+            MenuBarExtra {
+                MenuBarView(
+                    authService: authService,
+                    notificationService: notificationService
+                )
+            } label: {
+                MenuBarLabel()
+            }
+            .menuBarExtraStyle(.window)
+        }
+
+        // Settings window
         Settings {
             SettingsView()
                 .environmentObject(notificationService)
@@ -76,87 +105,16 @@ struct LAYAAdminApp: App {
     }
 }
 
-// MARK: - App Delegate
+// MARK: - Menu Bar Label
 
-/// AppDelegate for handling macOS-specific functionality
-/// including notifications and menu bar integration.
-class AppDelegate: NSObject, NSApplicationDelegate {
+/// Label view for the menu bar extra.
+/// Shows an icon that indicates app status.
+private struct MenuBarLabel: View {
 
-    /// Key for tracking first launch
-    private let hasRequestedNotificationPermissionKey = "hasRequestedNotificationPermission"
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        // Configure app on launch
-        configureAppearance()
-
-        // Setup notification service
-        setupNotifications()
-
-        // Register for notification action handlers
-        registerNotificationHandlers()
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        // Cleanup on termination
-    }
-
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        // Keep app running in menu bar even if main window is closed
-        return false
-    }
-
-    private func configureAppearance() {
-        // Allow the app to follow system appearance (Dark/Light mode)
-    }
-
-    /// Sets up the notification service and requests permission if needed
-    private func setupNotifications() {
-        // Request notification permission on first launch
-        let hasRequestedPermission = UserDefaults.standard.bool(forKey: hasRequestedNotificationPermissionKey)
-
-        if !hasRequestedPermission {
-            Task { @MainActor in
-                do {
-                    let granted = try await NotificationService.shared.requestAuthorization()
-                    UserDefaults.standard.set(true, forKey: hasRequestedNotificationPermissionKey)
-
-                    if granted {
-                        // Notification permission granted on first launch
-                    }
-                } catch {
-                    // Handle permission error silently
-                    UserDefaults.standard.set(true, forKey: hasRequestedNotificationPermissionKey)
-                }
-            }
-        }
-    }
-
-    /// Registers handlers for notification actions
-    private func registerNotificationHandlers() {
-        // Handle navigation to alert
-        NotificationCenter.default.addObserver(
-            forName: .navigateToAlert,
-            object: nil,
-            queue: .main
-        ) { notification in
-            guard let alertId = notification.userInfo?["alertId"] as? String else { return }
-            // Post a notification to show the alert in the UI
-            NotificationCenter.default.post(name: .showDashboard, object: nil)
-            // Additional navigation logic would go here
-            _ = alertId // Use alertId for navigation
-        }
-
-        // Handle alert acknowledgment
-        NotificationCenter.default.addObserver(
-            forName: .acknowledgeAlert,
-            object: nil,
-            queue: .main
-        ) { notification in
-            guard let alertId = notification.userInfo?["alertId"] as? String else { return }
-            // Handle alert acknowledgment
-            // This would typically call an API to mark the alert as acknowledged
-            _ = alertId // Use alertId for acknowledgment
-        }
+    var body: some View {
+        Image(systemName: "building.2.fill")
+            .symbolRenderingMode(.hierarchical)
+            .accessibilityLabel("LAYA Admin")
     }
 }
 
