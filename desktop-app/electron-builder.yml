@@ -1,0 +1,173 @@
+# Electron Builder Configuration for LAYA Desktop
+# https://www.electron.build/configuration/configuration
+
+appId: com.laya.desktop
+productName: LAYA Desktop
+copyright: Copyright © 2026 Abdelkefi Education
+
+# Build directories
+directories:
+  output: dist
+  buildResources: build
+
+# Files to include in the build
+files:
+  - main.js
+  - preload.js
+  - package.json
+
+# Windows build configuration
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # icon: build/icon.ico  # TODO: Add icon when available
+  artifactName: "${productName}-${version}-Setup.${ext}"
+
+  # =====================================================
+  # CODE SIGNING CONFIGURATION (Windows)
+  # =====================================================
+  # electron-builder automatically detects code signing certificate
+  # from environment variables. Set these in your CI/CD pipeline:
+  #
+  # Required Environment Variables:
+  #   CSC_LINK          - Path to .pfx certificate file OR base64-encoded certificate
+  #   CSC_KEY_PASSWORD  - Password for the certificate
+  #
+  # Optional Environment Variables:
+  #   WIN_CSC_LINK      - Windows-specific certificate (overrides CSC_LINK)
+  #   WIN_CSC_KEY_PASSWORD - Windows-specific password (overrides CSC_KEY_PASSWORD)
+  #
+  # For Azure Key Vault signing (recommended for CI/CD):
+  #   AZURE_KEY_VAULT_URI           - Key Vault URI
+  #   AZURE_KEY_VAULT_CLIENT_ID     - Service principal client ID
+  #   AZURE_KEY_VAULT_CLIENT_SECRET - Service principal secret
+  #   AZURE_KEY_VAULT_TENANT_ID     - Azure tenant ID
+  #   AZURE_KEY_VAULT_CERTIFICATE   - Certificate name in Key Vault
+  # =====================================================
+
+  # Sign additional DLLs (optional, improves security)
+  signDlls: false
+
+  # Timestamp server for code signing (ensures signature validity after cert expires)
+  # Popular options: http://timestamp.digicert.com, http://timestamp.sectigo.com
+  timeStampServer: http://timestamp.digicert.com
+
+  # RFC 3161 timestamp server (alternative format)
+  rfc3161TimeStampServer: http://timestamp.digicert.com
+
+  # Certificate subject name for signing (optional - uses CSC_LINK cert by default)
+  # Uncomment and set if you have multiple certificates
+  # certificateSubjectName: "Abdelkefi Education"
+
+  # Certificate SHA1 thumbprint (alternative to certificateSubjectName)
+  # Uncomment and set for precise certificate selection
+  # certificateSha1: ""
+
+  # Publisher name shown in Windows UAC prompts
+  publisherName: Abdelkefi Education
+
+  # Verify signature after signing
+  verifyUpdateCodeSignature: true
+
+# NSIS installer configuration (Windows)
+nsis:
+  # Use assisted installer for better UX (not one-click)
+  oneClick: false
+  # Allow user to change installation directory
+  allowToChangeInstallationDirectory: true
+  # Per-user installation (no admin rights required)
+  perMachine: false
+  # Allow user to select per-machine or per-user install
+  allowElevation: true
+  # Create desktop shortcut
+  createDesktopShortcut: true
+  # Create start menu shortcut
+  createStartMenuShortcut: true
+  # Shortcut name
+  shortcutName: LAYA Desktop
+  # Uninstaller display name
+  uninstallDisplayName: LAYA Desktop
+  # Include uninstaller in package
+  include: null
+  # Language for installer UI
+  language: 1033
+
+# =====================================================
+# AUTO-UPDATE PUBLISH CONFIGURATION
+# =====================================================
+# electron-builder generates app-update.yml automatically
+# Do NOT call setFeedURL() - electron-updater reads from generated config
+#
+# Choose ONE of the following publish configurations:
+# 1. Generic (self-hosted) - Default
+# 2. GitHub Releases
+# 3. S3/Spaces
+# =====================================================
+
+publish:
+  # Option 1: Generic HTTP server (default - self-hosted)
+  provider: generic
+  url: https://updates.laya.example.com/
+  # Channel for update detection (stable, beta, alpha)
+  channel: stable
+  # Use multiple range requests for large files (better for slow connections)
+  useMultipleRangeRequest: true
+
+  # --------------------------------------------------
+  # Option 2: GitHub Releases (uncomment to use)
+  # Requires GH_TOKEN environment variable
+  # --------------------------------------------------
+  # provider: github
+  # owner: abdelkefi-education
+  # repo: laya-desktop
+  # private: false
+  # releaseType: release
+  # # Channel mapping to GitHub releases
+  # channel: stable
+
+  # --------------------------------------------------
+  # Option 3: AWS S3 / DigitalOcean Spaces (uncomment to use)
+  # Requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+  # --------------------------------------------------
+  # provider: s3
+  # bucket: laya-desktop-updates
+  # region: us-east-1
+  # acl: public-read
+  # channel: stable
+
+# =====================================================
+# BUILD SETTINGS
+# =====================================================
+
+# Build version injection from CI/CD
+# Set BUILD_NUMBER in your CI pipeline
+buildVersion: ${env.BUILD_NUMBER}
+
+# Compression settings (normal is good balance of size and speed)
+compression: normal
+
+# Remove unused package scripts to reduce size
+removePackageScripts: true
+
+# Generate release info for auto-updater
+releaseInfo:
+  releaseName: "LAYA Desktop v${version}"
+  releaseNotes: "See https://updates.laya.example.com/changelog for details"
+
+# =====================================================
+# ENVIRONMENT VARIABLE REFERENCE
+# =====================================================
+# Code Signing (Windows):
+#   CSC_LINK              - Path/base64 of .pfx certificate
+#   CSC_KEY_PASSWORD      - Certificate password
+#
+# Publishing:
+#   GH_TOKEN              - GitHub personal access token (for GitHub releases)
+#   AWS_ACCESS_KEY_ID     - AWS access key (for S3)
+#   AWS_SECRET_ACCESS_KEY - AWS secret key (for S3)
+#
+# Build:
+#   BUILD_NUMBER          - CI build number for versioning
+# =====================================================

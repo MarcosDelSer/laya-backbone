@@ -91,6 +91,55 @@ TestAsyncSessionLocal = sessionmaker(
 pytest_plugins = ("pytest_asyncio",)
 
 
+# SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
+SQLITE_CREATE_COACHING_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS coaching_sessions (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    context TEXT,
+    special_need_types TEXT,
+    category VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coaching_recommendations (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES coaching_sessions(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    priority VARCHAR(20) NOT NULL DEFAULT 'medium',
+    relevance_score REAL NOT NULL DEFAULT 0.0,
+    target_audience VARCHAR(100) NOT NULL DEFAULT 'educator',
+    prerequisites TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS evidence_sources (
+    id TEXT PRIMARY KEY,
+    recommendation_id TEXT NOT NULL REFERENCES coaching_recommendations(id) ON DELETE CASCADE,
+    source_type VARCHAR(50) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    authors TEXT,
+    publication VARCHAR(200),
+    year INTEGER,
+    doi VARCHAR(100),
+    url VARCHAR(500),
+    isbn VARCHAR(20),
+    accessed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_sessions_child ON coaching_sessions(child_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_sessions_user ON coaching_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_recommendations_session ON coaching_recommendations(session_id);
+CREATE INDEX IF NOT EXISTS idx_coaching_recommendations_category ON coaching_recommendations(category);
+CREATE INDEX IF NOT EXISTS idx_evidence_sources_recommendation ON evidence_sources(recommendation_id);
+"""
+
 # SQLite-compatible activity tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_ACTIVITY_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS activities (
