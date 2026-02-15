@@ -273,3 +273,24 @@ INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `val
 INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'notifyOnCheckOut', 'Notify Parents on Check-Out', 'Send notification to parents when child is checked out', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
 INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'notifyOnIncident', 'Notify Parents on Incident', 'Send notification to parents when incident is logged', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
 ";
+
+// v1.5.00 - Enhanced incident reporting with detailed classification
+++$count;
+$sql[$count][0] = '1.5.00';
+$sql[$count][1] = "
+ALTER TABLE `gibbonCareIncident` ADD COLUMN `incidentCategory` ENUM('Fall','Collision','Bite','Scratch','Pinch','Equipment','Outdoor','Illness','Allergic Reaction','Behavioral','Other') NULL AFTER `severity`;end
+ALTER TABLE `gibbonCareIncident` ADD COLUMN `bodyPart` VARCHAR(100) NULL COMMENT 'Body part affected (e.g., head, arm, leg)' AFTER `incidentCategory`;end
+ALTER TABLE `gibbonCareIncident` ADD COLUMN `medicalConsulted` ENUM('Y','N') NOT NULL DEFAULT 'N' COMMENT 'Whether medical professional was consulted' AFTER `bodyPart`;end
+ALTER TABLE `gibbonCareIncident` ADD COLUMN `followUpRequired` ENUM('Y','N') NOT NULL DEFAULT 'N' COMMENT 'Whether follow-up care is needed' AFTER `medicalConsulted`;end
+ALTER TABLE `gibbonCareIncident` ADD COLUMN `photoPath` VARCHAR(255) NULL COMMENT 'Path to incident photo documentation' AFTER `followUpRequired`;end
+ALTER TABLE `gibbonCareIncident` ADD COLUMN `directorNotified` ENUM('Y','N') NOT NULL DEFAULT 'N' COMMENT 'Whether director was notified for escalation' AFTER `photoPath`;end
+ALTER TABLE `gibbonCareIncident` ADD COLUMN `directorNotifiedTime` DATETIME NULL COMMENT 'When director was notified' AFTER `directorNotified`;end
+ALTER TABLE `gibbonCareIncident` ADD COLUMN `linkedInterventionPlanID` INT UNSIGNED NULL COMMENT 'Link to intervention plan if applicable' AFTER `directorNotifiedTime`;end
+ALTER TABLE `gibbonCareIncident` ADD KEY `incidentCategory` (`incidentCategory`);end
+ALTER TABLE `gibbonCareIncident` ADD KEY `severity` (`severity`);end
+ALTER TABLE `gibbonCareIncident` ADD KEY `directorNotified` (`directorNotified`);end
+ALTER TABLE `gibbonCareIncident` ADD KEY `linkedInterventionPlanID` (`linkedInterventionPlanID`);end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'incidentEscalationSeverities', 'Escalation Severities', 'Comma-separated list of severity levels that auto-escalate to director', 'High,Critical') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'patternDetectionThreshold', 'Pattern Detection Threshold', 'Number of incidents within period to trigger pattern alert', '3') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'patternDetectionPeriodDays', 'Pattern Detection Period', 'Number of days to look back for pattern detection', '30') ON DUPLICATE KEY UPDATE scope=scope;end
+";
