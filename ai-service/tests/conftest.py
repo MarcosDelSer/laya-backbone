@@ -507,6 +507,12 @@ def sample_child_id_activity() -> UUID:
 
 
 @pytest.fixture
+def sample_child_id(sample_child_id_activity: UUID) -> UUID:
+    """Alias for sample_child_id_activity for backward compatibility."""
+    return sample_child_id_activity
+
+
+@pytest.fixture
 def sample_activity_data() -> Dict[str, Any]:
     """Fixture for sample activity data for creating test activities."""
     return {
@@ -566,6 +572,9 @@ class MockActivityParticipation:
         self.created_at = created_at
         self.updated_at = updated_at
 
+    def __repr__(self) -> str:
+        return f"<ActivityParticipation(id={self.id}, child_id={self.child_id}, status={self.completion_status})>"
+
 
 class MockActivityRecommendation:
     """Mock ActivityRecommendation object for testing."""
@@ -581,6 +590,9 @@ class MockActivityRecommendation:
         self.generated_at = generated_at
         self.created_at = created_at
         self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<ActivityRecommendation(id={self.id}, child_id={self.child_id}, score={self.relevance_score})>"
 
 
 async def create_activity_in_db(
