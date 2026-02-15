@@ -1,0 +1,71 @@
+# Electron Builder Configuration for LAYA Desktop
+# https://www.electron.build/configuration/configuration
+
+appId: com.laya.desktop
+productName: LAYA Desktop
+copyright: Copyright © 2026 Abdelkefi Education
+
+# Build directories
+directories:
+  output: dist
+  buildResources: build
+
+# Files to include in the build
+files:
+  - main.js
+  - preload.js
+  - package.json
+
+# Windows build configuration
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # Code signing uses environment variables: CSC_LINK, CSC_KEY_PASSWORD
+  # These are automatically detected by electron-builder
+  icon: build/icon.ico
+  artifactName: "${productName}-${version}-Setup.${ext}"
+
+# NSIS installer configuration (Windows)
+nsis:
+  # Use assisted installer for better UX (not one-click)
+  oneClick: false
+  # Allow user to change installation directory
+  allowToChangeInstallationDirectory: true
+  # Per-user installation (no admin rights required)
+  perMachine: false
+  # Allow user to select per-machine or per-user install
+  allowElevation: true
+  # Create desktop shortcut
+  createDesktopShortcut: true
+  # Create start menu shortcut
+  createStartMenuShortcut: true
+  # Shortcut name
+  shortcutName: LAYA Desktop
+  # Uninstaller display name
+  uninstallDisplayName: LAYA Desktop
+  # Include uninstaller in package
+  include: null
+  # Language for installer UI
+  language: 1033
+
+# Auto-update configuration
+# electron-builder generates app-update.yml automatically
+# Do NOT call setFeedURL() - electron-updater reads from generated config
+publish:
+  provider: generic
+  url: https://updates.laya.example.com/
+  # For GitHub releases, use:
+  # provider: github
+  # owner: your-org
+  # repo: your-repo
+
+# Build version injection
+buildVersion: ${env.BUILD_NUMBER}
+
+# Compression settings
+compression: normal
+
+# Remove unused locales to reduce size
+removePackageScripts: true
