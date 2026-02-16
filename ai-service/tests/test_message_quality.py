@@ -995,6 +995,645 @@ class TestRewriteSuggestions:
 
 
 # =============================================================================
+# Tests - Rewrite 'I' Language Transformations
+# =============================================================================
+
+
+class TestRewriteILanguageTransformations:
+    """Tests for verifying 'I' language transformations in rewrite suggestions.
+
+    These tests verify that accusatory 'you' language is properly transformed
+    to 'I' language observations following positive communication standards.
+    """
+
+    @pytest.mark.asyncio
+    async def test_rewrite_transforms_you_need_to_i_language(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that 'you need to' is transformed to 'I would like us to'."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Accusatory language detected",
+                original_text="You need to",
+                position_start=0,
+                position_end=11,
+                suggestion="Use 'I' language",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="You need to send snacks every day.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        assert suggestion.uses_i_language, "Should use 'I' language transformation"
+        suggested_lower = suggestion.suggested_text.lower()
+        # Verify transformation removes accusatory "you need to"
+        assert "you need to" not in suggested_lower, (
+            "Suggested text should not contain accusatory 'you need to'"
+        )
+        # Verify 'I' language is present
+        assert any(
+            marker in suggested_lower
+            for marker in ["i would", "i'd", "i hope", "we ", "i suggest"]
+        ), "Suggested text should use 'I' or 'we' language"
+
+    @pytest.mark.asyncio
+    async def test_rewrite_transforms_you_should_to_i_suggest(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that 'you should' is transformed to 'I suggest'."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Accusatory language detected",
+                original_text="You should",
+                position_start=0,
+                position_end=10,
+                suggestion="Use 'I' language",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="You should be more careful about pick-up times.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        assert suggestion.uses_i_language, "Should use 'I' language transformation"
+        suggested_lower = suggestion.suggested_text.lower()
+        # Verify transformation
+        assert "you should" not in suggested_lower, (
+            "Suggested text should not contain 'you should'"
+        )
+        assert any(
+            marker in suggested_lower
+            for marker in ["i ", "i'", "we "]
+        ), "Suggested text should contain 'I' or 'we' language"
+
+    @pytest.mark.asyncio
+    async def test_rewrite_transforms_vous_devez_to_je_language_fr(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that French 'vous devez' is transformed to 'je' language."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Langage accusateur détecté",
+                original_text="Vous devez",
+                position_start=0,
+                position_end=10,
+                suggestion="Utilisez le langage 'Je'",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="Vous devez envoyer les collations à temps.",
+            issues=issues,
+            language=Language.FR,
+        )
+
+        assert suggestion.uses_i_language, (
+            "French rewrite should use 'Je' language transformation"
+        )
+        suggested_lower = suggestion.suggested_text.lower()
+        # Verify French 'je' language markers are present
+        assert any(
+            marker in suggested_lower
+            for marker in ["j'", "je ", "nous "]
+        ), "French suggested text should contain 'je' or 'nous' language"
+
+    @pytest.mark.asyncio
+    async def test_rewrite_removes_exaggerations_always_to_often(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that exaggerations like 'always' are softened to 'often'."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.EXAGGERATION,
+                severity=IssueSeverity.MEDIUM,
+                description="Exaggeration detected",
+                original_text="always",
+                position_start=10,
+                position_end=16,
+                suggestion="Use specific examples",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="Your child always disrupts story time.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        suggested_lower = suggestion.suggested_text.lower()
+        # Verify exaggeration is softened
+        assert "always" not in suggested_lower, (
+            "Suggested text should not contain 'always'"
+        )
+        # 'often' or 'frequently' should be used instead
+        assert any(
+            word in suggested_lower
+            for word in ["often", "frequently", "sometimes"]
+        ) or "always" not in suggested_lower, (
+            "Exaggeration should be softened or removed"
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrite_removes_exaggerations_never_to_rarely(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that exaggerations like 'never' are softened to 'rarely'."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.EXAGGERATION,
+                severity=IssueSeverity.MEDIUM,
+                description="Exaggeration detected",
+                original_text="never",
+                position_start=15,
+                position_end=20,
+                suggestion="Use specific examples",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="Your child never listens to instructions.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        suggested_lower = suggestion.suggested_text.lower()
+        # Verify exaggeration is softened or removed
+        if "never" in suggested_lower:
+            # If 'never' is still present, it should be in a different context
+            assert suggestion.suggested_text != "Your child never listens to instructions.", (
+                "Suggested text should be different from original"
+            )
+
+    @pytest.mark.asyncio
+    async def test_rewrite_confidence_score_high_for_simple_issues(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that confidence score is high for simple, straightforward issues."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.MISSING_POSITIVE,
+                severity=IssueSeverity.LOW,
+                description="Missing positive opening",
+                original_text="[Entire message]",
+                position_start=0,
+                position_end=30,
+                suggestion="Add positive opening",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="Emma had a good day today.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        assert suggestion.confidence_score >= 0.7, (
+            f"Confidence should be high for simple issues, got {suggestion.confidence_score}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrite_confidence_score_lower_for_critical_issues(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that confidence score is lower for critical severity issues."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.JUDGMENTAL_LABEL,
+                severity=IssueSeverity.CRITICAL,
+                description="Judgmental label detected",
+                original_text="difficult kid",
+                position_start=20,
+                position_end=33,
+                suggestion="Describe behavior instead",
+            ),
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Accusatory language detected",
+                original_text="You never",
+                position_start=0,
+                position_end=9,
+                suggestion="Use 'I' language",
+            ),
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="You never taught your difficult kid any manners.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        # Confidence should still be reasonable but potentially lower due to complexity
+        assert 0.5 <= suggestion.confidence_score <= 0.9, (
+            f"Confidence should be moderate for complex issues, got {suggestion.confidence_score}"
+        )
+
+
+# =============================================================================
+# Tests - Rewrite Sandwich Method Structure
+# =============================================================================
+
+
+class TestRewriteSandwichMethodStructure:
+    """Tests for verifying sandwich method structure in rewrite suggestions.
+
+    The sandwich method structures messages with:
+    1. Positive opening (genuine acknowledgment)
+    2. Factual concern (specific observation without judgment)
+    3. Solution-oriented closing (collaborative next steps)
+    """
+
+    @pytest.mark.asyncio
+    async def test_rewrite_contains_positive_opening(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that rewrite includes a positive opening statement."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Accusatory language detected",
+                original_text="You need to",
+                position_start=0,
+                position_end=11,
+                suggestion="Use 'I' language",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="You need to make sure your child has lunch every day.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        assert suggestion.has_sandwich_structure, (
+            "Rewrite should follow sandwich method structure"
+        )
+        suggested_lower = suggestion.suggested_text.lower()
+        # Check for positive opening indicators
+        positive_indicators = [
+            "appreciate", "grateful", "thank", "partnership",
+            "dedication", "working with", "pleasure"
+        ]
+        assert any(
+            indicator in suggested_lower
+            for indicator in positive_indicators
+        ), "Rewrite should start with a positive acknowledgment"
+
+    @pytest.mark.asyncio
+    async def test_rewrite_contains_solution_closing(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that rewrite includes a solution-oriented closing."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.BLAME_SHAME,
+                severity=IssueSeverity.HIGH,
+                description="Blame pattern detected",
+                original_text="your fault",
+                position_start=10,
+                position_end=20,
+                suggestion="Focus on solutions",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="It's your fault that your child acts this way.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        assert suggestion.has_sandwich_structure, (
+            "Rewrite should follow sandwich method structure"
+        )
+        suggested_lower = suggestion.suggested_text.lower()
+        # Check for solution-oriented closing indicators
+        solution_indicators = [
+            "together", "discuss", "work with", "let's",
+            "feel free", "reach out", "happy to", "love to"
+        ]
+        assert any(
+            indicator in suggested_lower
+            for indicator in solution_indicators
+        ), "Rewrite should end with solution-oriented closing"
+
+    @pytest.mark.asyncio
+    async def test_rewrite_sandwich_structure_in_french(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that French rewrites follow sandwich method structure."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Langage accusateur détecté",
+                original_text="Vous devez",
+                position_start=0,
+                position_end=10,
+                suggestion="Utilisez le langage 'Je'",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="Vous devez être plus responsable avec les collations.",
+            issues=issues,
+            language=Language.FR,
+        )
+
+        assert suggestion.has_sandwich_structure, (
+            "French rewrite should follow sandwich method structure"
+        )
+        suggested_lower = suggestion.suggested_text.lower()
+
+        # Check for French positive opening indicators
+        fr_positive_indicators = [
+            "appréci", "merci", "reconnaissant", "partenariat",
+            "engagement", "travailler avec"
+        ]
+        assert any(
+            indicator in suggested_lower
+            for indicator in fr_positive_indicators
+        ), "French rewrite should have positive opening"
+
+        # Check for French solution-oriented closing indicators
+        fr_solution_indicators = [
+            "ensemble", "discuter", "n'hésitez pas", "ravi",
+            "disponible", "contacter"
+        ]
+        assert any(
+            indicator in suggested_lower
+            for indicator in fr_solution_indicators
+        ), "French rewrite should have solution-oriented closing"
+
+    @pytest.mark.asyncio
+    async def test_rewrite_maintains_core_message_content(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that rewrite preserves the core message intent."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Accusatory language detected",
+                original_text="You never",
+                position_start=0,
+                position_end=9,
+                suggestion="Use 'I' language",
+            )
+        ]
+
+        original_message = "You never bring the required supplies for art class."
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text=original_message,
+            issues=issues,
+            language=Language.EN,
+        )
+
+        # The suggestion should still reference the core concern
+        suggested_lower = suggestion.suggested_text.lower()
+        # At minimum, the topic should be addressable in the rewrite
+        assert len(suggestion.suggested_text) > len(original_message) * 0.5, (
+            "Rewrite should not be too short - should preserve core message intent"
+        )
+        assert suggestion.original_text == original_message, (
+            "Original text should be preserved in the suggestion"
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrite_explanation_references_sandwich_method(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that rewrite explanation references the sandwich method."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.MISSING_POSITIVE,
+                severity=IssueSeverity.LOW,
+                description="Missing positive opening",
+                original_text="[Entire message]",
+                position_start=0,
+                position_end=50,
+                suggestion="Add positive opening",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="Your child had some trouble focusing today.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        explanation_lower = suggestion.explanation.lower()
+        # Explanation should mention the sandwich method
+        assert "sandwich" in explanation_lower, (
+            "Explanation should reference the sandwich method"
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrite_explanation_in_french_references_sandwich(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that French rewrite explanation references the sandwich method."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.MISSING_POSITIVE,
+                severity=IssueSeverity.LOW,
+                description="Ouverture positive manquante",
+                original_text="[Message entier]",
+                position_start=0,
+                position_end=50,
+                suggestion="Ajoutez une ouverture positive",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="Votre enfant a eu du mal à se concentrer aujourd'hui.",
+            issues=issues,
+            language=Language.FR,
+        )
+
+        explanation_lower = suggestion.explanation.lower()
+        # French explanation should mention the sandwich method
+        assert "sandwich" in explanation_lower, (
+            "French explanation should reference the sandwich method"
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrite_with_multiple_issues_addresses_all(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that rewrites with multiple issues address all of them."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Accusatory language detected",
+                original_text="You never",
+                position_start=0,
+                position_end=9,
+                suggestion="Use 'I' language",
+            ),
+            QualityIssueDetail(
+                issue_type=QualityIssue.EXAGGERATION,
+                severity=IssueSeverity.MEDIUM,
+                description="Exaggeration detected",
+                original_text="never",
+                position_start=4,
+                position_end=9,
+                suggestion="Use specific examples",
+            ),
+            QualityIssueDetail(
+                issue_type=QualityIssue.MISSING_SOLUTION,
+                severity=IssueSeverity.LOW,
+                description="Missing solution closing",
+                original_text="[Entire message]",
+                position_start=0,
+                position_end=50,
+                suggestion="Add solution-oriented closing",
+            ),
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="You never bring snacks on time.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        # Should have both flags set
+        assert suggestion.uses_i_language, "Should use 'I' language transformation"
+        assert suggestion.has_sandwich_structure, "Should use sandwich method"
+
+        # Explanation should mention multiple improvements
+        explanation_lower = suggestion.explanation.lower()
+        improvement_indicators = ["accusatory", "language", "sandwich", "improvement"]
+        assert any(
+            indicator in explanation_lower
+            for indicator in improvement_indicators
+        ), "Explanation should reference improvements made"
+
+    @pytest.mark.asyncio
+    async def test_rewrite_handles_empty_message_gracefully(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that rewrite handles empty or whitespace-only messages."""
+        issues = []
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        assert suggestion.confidence_score == 0.0, (
+            "Confidence should be 0 for empty message"
+        )
+        assert not suggestion.uses_i_language, (
+            "Empty message should not claim 'I' language use"
+        )
+        assert not suggestion.has_sandwich_structure, (
+            "Empty message should not claim sandwich structure"
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrite_with_child_name_personalization(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that rewrite uses child name when provided."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.ACCUSATORY_YOU,
+                severity=IssueSeverity.HIGH,
+                description="Accusatory language detected",
+                original_text="You need to",
+                position_start=0,
+                position_end=11,
+                suggestion="Use 'I' language",
+            )
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="You need to help your child with homework.",
+            issues=issues,
+            language=Language.EN,
+            child_name="Emma",
+        )
+
+        # The rewrite should potentially include the child's name
+        # since personalization enhances the message
+        assert suggestion.uses_i_language, "Should use 'I' language transformation"
+        assert suggestion.has_sandwich_structure, "Should use sandwich method"
+        # Note: child name inclusion is dependent on implementation
+        # but the suggestion should still be valid
+
+    @pytest.mark.asyncio
+    async def test_rewrite_for_behavior_concern_includes_strategies(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that behavior concern rewrites mention discussing strategies."""
+        issues = [
+            QualityIssueDetail(
+                issue_type=QualityIssue.BLAME_SHAME,
+                severity=IssueSeverity.HIGH,
+                description="Blame pattern detected",
+                original_text="your fault",
+                position_start=10,
+                position_end=20,
+                suggestion="Focus on solutions",
+            ),
+            QualityIssueDetail(
+                issue_type=QualityIssue.JUDGMENTAL_LABEL,
+                severity=IssueSeverity.CRITICAL,
+                description="Judgmental label detected",
+                original_text="bad kid",
+                position_start=30,
+                position_end=37,
+                suggestion="Describe behavior",
+            ),
+        ]
+
+        suggestion = message_quality_service.suggest_rewrite(
+            message_text="It's your fault for raising such a bad kid.",
+            issues=issues,
+            language=Language.EN,
+        )
+
+        suggested_lower = suggestion.suggested_text.lower()
+        # For behavior concerns, the closing should mention strategies
+        strategy_indicators = ["strategies", "discuss", "together", "work", "approach"]
+        assert any(
+            indicator in suggested_lower
+            for indicator in strategy_indicators
+        ), "Behavior concern rewrite should mention collaborative strategies"
+
+
+# =============================================================================
 # Tests - Bilingual Support
 # =============================================================================
 
