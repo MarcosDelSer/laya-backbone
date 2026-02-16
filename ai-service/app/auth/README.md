@@ -155,6 +155,11 @@ class RoleMapping:
 ## Security Considerations
 
 1. **Shared Secret**: Both Gibbon and AI Service must use the same `JWT_SECRET_KEY`
+   - See [JWT Shared Secret Setup Guide](../../../docs/JWT_SHARED_SECRET_SETUP.md) for detailed configuration
+   - Use `./scripts/generate-jwt-secret.sh` to generate a secure secret
+   - Store secrets in environment variables (`.env` files)
+   - Never commit secrets to version control
+   - Rotate secrets every 90 days
 2. **Token Expiration**: JWT tokens expire after 1 hour (3600 seconds)
 3. **Source Tracking**: Tokens include a `source` claim to identify origin
 4. **Role Validation**: Always validate roles before granting access
@@ -167,6 +172,9 @@ class RoleMapping:
 - `gibbon/modules/System/auth_token.php` - Gibbon token exchange endpoint
 - `tests/test_auth_bridges.py` - Role mapping tests
 - `tests/test_middleware_auth.py` - Middleware tests
+- `docs/JWT_SHARED_SECRET_SETUP.md` - **Shared secret configuration guide**
+- `scripts/generate-jwt-secret.sh` - **Secure secret generator**
+- `.env.example` files - **Environment configuration templates**
 
 ## Future Enhancements
 
