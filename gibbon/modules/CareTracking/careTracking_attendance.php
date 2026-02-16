@@ -23,6 +23,8 @@ use Gibbon\Forms\Form;
 use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -47,6 +49,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateway via DI container
     $attendanceGateway = $container->get(AttendanceGateway::class);
 
+    // Get AI Sync service for webhook notifications
+    try {
+        $settingGateway = $container->get(SettingGateway::class);
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
+
     // Handle check-in/check-out actions
     $action = $_POST['action'] ?? '';
     $childID = $_POST['gibbonPersonID'] ?? null;
@@ -69,6 +79,24 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
 
             if ($result !== false) {
                 $page->addSuccess(__('Child has been checked in successfully.'));
+
+                // Trigger webhook for AI sync
+                if ($aiSyncService !== null) {
+                    try {
+                        $attendanceData = [
+                            'gibbonCareAttendanceID' => $result,
+                            'gibbonPersonID' => $childID,
+                            'date' => $date,
+                            'checkInTime' => $time,
+                            'lateArrival' => $lateArrival,
+                            'notes' => $notes,
+                            'checkInByID' => $gibbonPersonID,
+                        ];
+                        $aiSyncService->syncCheckIn($result, $attendanceData);
+                    } catch (Exception $e) {
+                        // Silently fail - don't break UX if webhook fails
+                    }
+                }
             } else {
                 $page->addError(__('Failed to check in child.'));
             }
@@ -91,6 +119,25 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
 
                 if ($result !== false) {
                     $page->addSuccess(__('Child has been checked out successfully.'));
+
+                    // Trigger webhook for AI sync
+                    if ($aiSyncService !== null) {
+                        try {
+                            $attendanceData = [
+                                'gibbonCareAttendanceID' => $attendanceID,
+                                'gibbonPersonID' => $childID,
+                                'date' => $date,
+                                'checkOutTime' => $time,
+                                'earlyDeparture' => $earlyDeparture,
+                                'pickupPersonName' => $pickupPersonName,
+                                'notes' => $notes,
+                                'checkOutByID' => $gibbonPersonID,
+                            ];
+                            $aiSyncService->syncCheckOut($attendanceID, $attendanceData);
+                        } catch (Exception $e) {
+                            // Silently fail - don't break UX if webhook fails
+                        }
+                    }
                 } else {
                     $page->addError(__('Failed to check out child.'));
                 }

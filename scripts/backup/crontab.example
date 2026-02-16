@@ -1,0 +1,102 @@
+# LAYA Backup System - Crontab Configuration
+#
+# Installation Instructions:
+# 1. Copy this file content
+# 2. Edit your crontab: crontab -e
+# 3. Paste the schedule lines below
+# 4. Ensure environment variables are set or use /etc/environment or .env file
+#
+# Environment Setup:
+# You can source environment variables from a file:
+# SHELL=/bin/bash
+# PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+#
+# Or set them inline:
+# MYSQL_HOST=localhost
+# MYSQL_PORT=3306
+# MYSQL_USER=backup_user
+# MYSQL_PASSWORD=secure_password
+# MYSQL_DATABASE=laya_db
+# BACKUP_DIR=/var/backups/mysql
+#
+# PostgreSQL Environment Variables:
+# PGHOST=localhost
+# PGPORT=5432
+# PGUSER=backup_user
+# PGPASSWORD=secure_password
+# PGDATABASE=laya_db
+# BACKUP_DIR=/var/backups/postgres
+#
+# =============================================================================
+# MySQL Backup - Daily at 2:00 AM
+# =============================================================================
+# Runs mysqldump with --single-transaction and gzip compression
+# Logs output to /var/log/mysql_backup.log
+0 2 * * * /path/to/laya-backbone/scripts/backup/mysql_backup.sh >> /var/log/mysql_backup.log 2>&1
+
+# =============================================================================
+# PostgreSQL Backup - Daily at 2:15 AM
+# =============================================================================
+# Runs pg_dump with comprehensive options and gzip compression
+# Logs output to /var/log/postgres_backup.log
+15 2 * * * /path/to/laya-backbone/scripts/backup/postgres_backup.sh >> /var/log/postgres_backup.log 2>&1
+
+# =============================================================================
+# Docker Volume Backup - Daily at 2:30 AM
+# =============================================================================
+# Backs up all Docker volumes using docker run with tar compression
+# Automatically detects and backs up all persistent Docker volumes
+30 2 * * * /path/to/laya-backbone/scripts/backup/docker_volume_backup.sh >> /var/log/docker_volume_backup.log 2>&1
+
+# =============================================================================
+# Backup Retention Policy - Daily at 3:00 AM
+# =============================================================================
+# Implements retention policy: 7 daily, 4 weekly, 12 monthly
+# Cleans up old backups while preserving important snapshots
+0 3 * * * /path/to/laya-backbone/scripts/backup/retention_policy.sh >> /var/log/retention_policy.log 2>&1
+
+# =============================================================================
+# Photo and Upload Backup - Daily at 3:30 AM
+# =============================================================================
+# Backs up photos and uploaded files using rsync with --delete flag
+# Ensures backup is an exact mirror of source (removes deleted files)
+30 3 * * * /path/to/laya-backbone/scripts/backup/photo_backup.sh >> /var/log/photo_backup.log 2>&1
+
+# =============================================================================
+# Backup Verification - Daily at 4:00 AM
+# =============================================================================
+# Verifies latest backup by restoring to temp DB and running integrity checks
+# Uses --latest flag to verify the most recent backup automatically
+0 4 * * * /path/to/laya-backbone/scripts/backup/verify_backup.sh --latest >> /var/log/backup_verification.log 2>&1
+
+# =============================================================================
+# Remote Storage Backup - Daily at 5:00 AM
+# =============================================================================
+# Syncs local backups to remote storage (S3 or rsync to remote server)
+# Runs after all local backups, retention, and verification are complete
+#
+# For AWS S3 (uncomment and configure):
+# 0 5 * * * REMOTE_BACKUP_METHOD=s3 AWS_S3_BUCKET=s3://my-laya-backups /path/to/laya-backbone/scripts/backup/remote_backup.sh >> /var/log/remote_backup.log 2>&1
+#
+# For Rsync to remote server (uncomment and configure):
+# 0 5 * * * REMOTE_BACKUP_METHOD=rsync REMOTE_USER=backup_user REMOTE_HOST=backup.example.com REMOTE_PATH=/backups/laya SSH_KEY=/home/user/.ssh/id_rsa /path/to/laya-backbone/scripts/backup/remote_backup.sh >> /var/log/remote_backup.log 2>&1
+
+# =============================================================================
+# Notes:
+# =============================================================================
+# - Ensure the script paths are absolute paths
+# - Create log directories before running: sudo mkdir -p /var/log && sudo chmod 755 /var/log
+# - Create backup directories:
+#   sudo mkdir -p /var/backups/mysql && sudo chmod 700 /var/backups/mysql
+#   sudo mkdir -p /var/backups/postgres && sudo chmod 700 /var/backups/postgres
+#   sudo mkdir -p /var/backups/docker-volumes && sudo chmod 700 /var/backups/docker-volumes
+#   sudo mkdir -p /var/backups/photos && sudo chmod 700 /var/backups/photos
+#   sudo mkdir -p /var/backups/uploads && sudo chmod 700 /var/backups/uploads
+# - Ensure Docker is installed and running for docker_volume_backup.sh
+# - Add your user to the docker group: sudo usermod -aG docker $USER
+# - Consider using a dedicated backup user with minimal privileges
+# - Monitor log files regularly for backup failures
+# - Test backup restoration periodically
+# - Ensure sufficient disk space for backups
+# - Consider setting up email notifications on cron job failures
+#

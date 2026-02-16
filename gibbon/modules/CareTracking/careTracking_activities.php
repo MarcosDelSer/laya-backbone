@@ -24,6 +24,8 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\ActivityGateway;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -48,6 +50,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateways via DI container
     $activityGateway = $container->get(ActivityGateway::class);
     $attendanceGateway = $container->get(AttendanceGateway::class);
+
+    // Get AI Sync service for webhook notifications
+    try {
+        $settingGateway = $container->get(SettingGateway::class);
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
 
     // Activity type options
     $activityTypes = [
@@ -99,6 +109,26 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
 
             if ($result !== false) {
                 $page->addSuccess(__('Activity has been logged successfully.'));
+
+                // Trigger webhook for AI sync
+                if ($aiSyncService !== null) {
+                    try {
+                        $activityData = [
+                            'gibbonCareActivityID' => $result,
+                            'gibbonPersonID' => $childID,
+                            'date' => $date,
+                            'activityName' => $activityName,
+                            'activityType' => $activityType,
+                            'duration' => $duration,
+                            'participation' => $participation,
+                            'notes' => $notes,
+                            'recordedByID' => $gibbonPersonID,
+                        ];
+                        $aiSyncService->syncCareActivity($result, $activityData);
+                    } catch (Exception $e) {
+                        // Silently fail - don't break UX if webhook fails
+                    }
+                }
             } else {
                 $page->addError(__('Failed to log activity.'));
             }
@@ -134,6 +164,26 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                 );
                 if ($result !== false) {
                     $successCount++;
+
+                    // Trigger webhook for AI sync
+                    if ($aiSyncService !== null) {
+                        try {
+                            $activityData = [
+                                'gibbonCareActivityID' => $result,
+                                'gibbonPersonID' => $childID,
+                                'date' => $date,
+                                'activityName' => $activityName,
+                                'activityType' => $activityType,
+                                'duration' => $duration,
+                                'participation' => $participation,
+                                'notes' => $notes,
+                                'recordedByID' => $gibbonPersonID,
+                            ];
+                            $aiSyncService->syncCareActivity($result, $activityData);
+                        } catch (Exception $e) {
+                            // Silently fail - don't break UX if webhook fails
+                        }
+                    }
                 }
             }
             if ($successCount > 0) {
