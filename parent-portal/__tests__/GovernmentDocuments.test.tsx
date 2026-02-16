@@ -300,7 +300,7 @@ describe('GovernmentDocumentUpload Component', () => {
   describe('Modal Visibility', () => {
     it('renders when isOpen is true', () => {
       render(<GovernmentDocumentUpload {...defaultProps} isOpen={true} />)
-      expect(screen.getByText('Upload Document')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Upload Document' })).toBeInTheDocument()
     })
 
     it('does not render when isOpen is false', () => {
