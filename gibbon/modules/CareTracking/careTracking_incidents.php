@@ -24,6 +24,7 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\IncidentGateway;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\CareTracking\Domain\PatternDetectionService;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -48,6 +49,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateways via DI container
     $incidentGateway = $container->get(IncidentGateway::class);
     $attendanceGateway = $container->get(AttendanceGateway::class);
+    $patternDetectionService = $container->get(PatternDetectionService::class);
 
     // Incident type options
     $incidentTypes = [
@@ -113,8 +115,11 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         }
     }
 
-    // Page header
-    echo '<h2>' . __('Incident Reporting') . '</h2>';
+    // Page header with Add New Incident button
+    echo '<div class="flex justify-between items-center mb-4">';
+    echo '<h2 class="m-0">' . __('Incident Reporting') . '</h2>';
+    echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/CareTracking/careTracking_incidents_add.php&date=' . $date . '" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">' . __('Add New Incident') . '</a>';
+    echo '</div>';
 
     // Date navigation form
     $form = Form::create('dateFilter', $session->get('absoluteURL') . '/index.php');
@@ -300,6 +305,44 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         echo '<p class="text-gray-500 mb-4">' . __('No children are currently checked in.') . '</p>';
     }
 
+    // Section: Pattern Alerts (children with detected patterns)
+    $pendingPatternAlerts = $patternDetectionService->getPendingPatternAlerts($gibbonSchoolYearID);
+
+    if (!empty($pendingPatternAlerts)) {
+        echo '<h3 class="text-lg font-semibold mt-6 mb-3">' . __('Pattern Alerts') . '</h3>';
+        echo '<div class="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">';
+        echo '<p class="text-sm text-purple-600 mb-3">' . __('The following children have incident patterns that may require attention.') . '</p>';
+
+        echo '<div class="space-y-2">';
+        foreach ($pendingPatternAlerts as $alert) {
+            $childName = Format::name('', $alert['preferredName'], $alert['surname'], 'Student', false, true);
+            $patternTypeColor = match($alert['patternType']) {
+                'Frequency'  => 'blue',
+                'Severity'   => 'red',
+                'Category'   => 'orange',
+                'Behavioral' => 'purple',
+                default      => 'gray',
+            };
+
+            echo '<div class="bg-white rounded p-3 flex items-center justify-between">';
+            echo '<div>';
+            echo '<span class="font-medium">' . htmlspecialchars($childName) . '</span>';
+            echo ' <span class="bg-' . $patternTypeColor . '-100 text-' . $patternTypeColor . '-800 text-xs px-2 py-1 rounded">' . __($alert['patternType']) . '</span>';
+            echo '<p class="text-sm text-gray-600 mt-1">';
+            echo __('Incidents: %d in %d days', [$alert['incidentCount'], $alert['periodDays']]);
+            if (!empty($alert['patternDescription'])) {
+                echo ' - ' . htmlspecialchars(substr($alert['patternDescription'], 0, 100));
+            }
+            echo '</p>';
+            echo '</div>';
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/CareTracking/careTracking_incidents_view.php&gibbonCareIncidentID=' . ($alert['incidentIDs'] ? json_decode($alert['incidentIDs'])[0] : '') . '" class="bg-purple-500 text-white text-xs px-3 py-1 rounded hover:bg-purple-600">' . __('Review') . '</a>';
+            echo '</div>';
+        }
+        echo '</div>';
+
+        echo '</div>';
+    }
+
     // Section: Today's Incident Records
     echo '<h3 class="text-lg font-semibold mt-6 mb-3">' . __('Incident Records') . '</h3>';
 
@@ -385,6 +428,27 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                 return '<span class="text-green-600" title="' . __('Parent Acknowledged') . '">&#10003;</span>';
             }
             return '<span class="text-gray-400">-</span>';
+        });
+
+    // Actions column with View, Edit, PDF links
+    $table->addColumn('actions', __('Actions'))
+        ->notSortable()
+        ->format(function ($row) use ($session) {
+            $baseURL = $session->get('absoluteURL') . '/index.php?q=/modules/CareTracking/careTracking_incidents';
+            $incidentID = $row['gibbonCareIncidentID'];
+
+            $actions = '';
+            $actions .= '<a href="' . $baseURL . '_view.php&gibbonCareIncidentID=' . $incidentID . '" class="text-blue-600 hover:text-blue-800 mr-2" title="' . __('View') . '">';
+            $actions .= '<span class="text-sm">&#128065;</span>';
+            $actions .= '</a>';
+            $actions .= '<a href="' . $baseURL . '_edit.php&gibbonCareIncidentID=' . $incidentID . '" class="text-yellow-600 hover:text-yellow-800 mr-2" title="' . __('Edit') . '">';
+            $actions .= '<span class="text-sm">&#9998;</span>';
+            $actions .= '</a>';
+            $actions .= '<a href="' . $baseURL . '_pdf.php&gibbonCareIncidentID=' . $incidentID . '" class="text-red-600 hover:text-red-800" title="' . __('PDF') . '" target="_blank">';
+            $actions .= '<span class="text-sm">&#128196;</span>';
+            $actions .= '</a>';
+
+            return $actions;
         });
 
     // Output table
