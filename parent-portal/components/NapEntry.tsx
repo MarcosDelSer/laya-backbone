@@ -1,3 +1,7 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 interface NapEntryProps {
   nap: {
     id: string;
@@ -7,10 +11,10 @@ interface NapEntryProps {
   };
 }
 
-const qualityConfig: Record<NapEntryProps['nap']['quality'], { label: string; badgeClass: string }> = {
-  good: { label: 'Good sleep', badgeClass: 'badge-success' },
-  fair: { label: 'Fair sleep', badgeClass: 'badge-warning' },
-  poor: { label: 'Poor sleep', badgeClass: 'badge-neutral' },
+const qualityBadgeClasses: Record<NapEntryProps['nap']['quality'], string> = {
+  good: 'badge-success',
+  fair: 'badge-warning',
+  poor: 'badge-neutral',
 };
 
 function calculateDuration(startTime: string, endTime: string): string {
@@ -54,7 +58,10 @@ function calculateDuration(startTime: string, endTime: string): string {
 }
 
 export function NapEntry({ nap }: NapEntryProps) {
-  const qualityInfo = qualityConfig[nap.quality];
+  const t = useTranslations();
+
+  const qualityLabel = t(`dashboard.napQuality.${nap.quality}`);
+  const badgeClass = qualityBadgeClasses[nap.quality];
   const duration = calculateDuration(nap.startTime, nap.endTime);
 
   return (
@@ -81,9 +88,7 @@ export function NapEntry({ nap }: NapEntryProps) {
             {nap.startTime} - {nap.endTime}
           </span>
         </div>
-        <span className={`badge mt-1 ${qualityInfo.badgeClass}`}>
-          {qualityInfo.label}
-        </span>
+        <span className={`badge mt-1 ${badgeClass}`}>{qualityLabel}</span>
       </div>
     </div>
   );

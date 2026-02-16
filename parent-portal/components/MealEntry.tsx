@@ -1,3 +1,7 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 interface MealEntryProps {
   meal: {
     id: string;
@@ -8,21 +12,19 @@ interface MealEntryProps {
   };
 }
 
-const mealTypeLabels: Record<MealEntryProps['meal']['type'], string> = {
-  breakfast: 'Breakfast',
-  lunch: 'Lunch',
-  snack: 'Snack',
-};
-
-const amountConfig: Record<MealEntryProps['meal']['amount'], { label: string; badgeClass: string }> = {
-  all: { label: 'Ate all', badgeClass: 'badge-success' },
-  most: { label: 'Ate most', badgeClass: 'badge-info' },
-  some: { label: 'Ate some', badgeClass: 'badge-warning' },
-  none: { label: 'Did not eat', badgeClass: 'badge-neutral' },
+const amountBadgeClasses: Record<MealEntryProps['meal']['amount'], string> = {
+  all: 'badge-success',
+  most: 'badge-info',
+  some: 'badge-warning',
+  none: 'badge-neutral',
 };
 
 export function MealEntry({ meal }: MealEntryProps) {
-  const amountInfo = amountConfig[meal.amount];
+  const t = useTranslations();
+
+  const mealTypeLabel = t(`dailyReports.mealTypes.${meal.type}`);
+  const amountLabel = t(`dashboard.mealAmount.${meal.amount}`);
+  const badgeClass = amountBadgeClasses[meal.amount];
 
   return (
     <div className="flex items-start space-x-3">
@@ -43,15 +45,13 @@ export function MealEntry({ meal }: MealEntryProps) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
-          <p className="font-medium text-gray-900">{mealTypeLabels[meal.type]}</p>
+          <p className="font-medium text-gray-900">{mealTypeLabel}</p>
           <span className="text-sm text-gray-500">{meal.time}</span>
         </div>
         {meal.notes && (
           <p className="text-sm text-gray-600 mt-0.5">{meal.notes}</p>
         )}
-        <span className={`badge mt-1 ${amountInfo.badgeClass}`}>
-          {amountInfo.label}
-        </span>
+        <span className={`badge mt-1 ${badgeClass}`}>{amountLabel}</span>
       </div>
     </div>
   );

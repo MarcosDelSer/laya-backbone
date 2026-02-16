@@ -1,7 +1,11 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
 import { MealEntry } from './MealEntry';
 import { NapEntry } from './NapEntry';
 import { ActivityEntry } from './ActivityEntry';
 import { PhotoGallery } from './PhotoGallery';
+import { useFormatting } from '@/lib/hooks/useFormatting';
 
 interface MealData {
   id: string;
@@ -44,39 +48,18 @@ export interface DailyReportCardProps {
   };
 }
 
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  // Check if it's today
-  if (date.toDateString() === today.toDateString()) {
-    return 'Today';
-  }
-
-  // Check if it's yesterday
-  if (date.toDateString() === yesterday.toDateString()) {
-    return 'Yesterday';
-  }
-
-  // Otherwise return formatted date
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
-  });
+interface SectionHeaderProps {
+  title: string;
+  count?: number;
+  entryLabel: string;
 }
 
-function SectionHeader({ title, count }: { title: string; count?: number }) {
+function SectionHeader({ title, count, entryLabel }: SectionHeaderProps) {
   return (
     <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-4">
       <h4 className="font-medium text-gray-900">{title}</h4>
       {count !== undefined && count > 0 && (
-        <span className="text-sm text-gray-500">
-          {count} {count === 1 ? 'entry' : 'entries'}
-        </span>
+        <span className="text-sm text-gray-500">{entryLabel}</span>
       )}
     </div>
   );
@@ -89,7 +72,34 @@ function EmptyState({ message }: { message: string }) {
 }
 
 export function DailyReportCard({ report }: DailyReportCardProps) {
-  const formattedDate = formatDate(report.date);
+  const t = useTranslations();
+  const { formatDate, isToday, isPast } = useFormatting();
+
+  /**
+   * Format the report date with locale-aware formatting.
+   * Returns "Today", "Yesterday", or a formatted date.
+   */
+  const getFormattedDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // Check if it's today
+    if (date.toDateString() === today.toDateString()) {
+      return t('common.today');
+    }
+
+    // Check if it's yesterday
+    if (date.toDateString() === yesterday.toDateString()) {
+      return t('common.yesterday');
+    }
+
+    // Otherwise return locale-formatted date
+    return formatDate(date, 'long');
+  };
+
+  const formattedDate = getFormattedDate(report.date);
 
   return (
     <div className="card">
@@ -114,7 +124,7 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Daily Report
+                {t('dailyReports.dailyReport')}
               </h3>
               <p className="text-sm text-gray-600">{formattedDate}</p>
             </div>
@@ -123,17 +133,17 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
           <div className="hidden sm:flex items-center space-x-2">
             {report.meals.length > 0 && (
               <span className="badge badge-success">
-                {report.meals.length} Meal{report.meals.length > 1 ? 's' : ''}
+                {t('dailyReports.badges.meal', { count: report.meals.length })}
               </span>
             )}
             {report.naps.length > 0 && (
               <span className="badge badge-info">
-                {report.naps.length} Nap{report.naps.length > 1 ? 's' : ''}
+                {t('dailyReports.badges.nap', { count: report.naps.length })}
               </span>
             )}
             {report.activities.length > 0 && (
               <span className="badge badge-warning">
-                {report.activities.length} Activit{report.activities.length > 1 ? 'ies' : 'y'}
+                {t('dailyReports.badges.activity', { count: report.activities.length })}
               </span>
             )}
           </div>
@@ -144,7 +154,11 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
         {/* Photos Section */}
         {report.photos.length > 0 && (
           <div className="mb-6">
-            <SectionHeader title="Photos" count={report.photos.length} />
+            <SectionHeader
+              title={t('dailyReports.sections.photos')}
+              count={report.photos.length}
+              entryLabel={t('common.entry', { count: report.photos.length })}
+            />
             <PhotoGallery photos={report.photos} maxDisplay={4} />
           </div>
         )}
@@ -153,7 +167,11 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 mb-6">
           {/* Meals Section */}
           <div>
-            <SectionHeader title="Meals" count={report.meals.length} />
+            <SectionHeader
+              title={t('dailyReports.sections.meals')}
+              count={report.meals.length}
+              entryLabel={t('common.entry', { count: report.meals.length })}
+            />
             {report.meals.length > 0 ? (
               <div className="space-y-4">
                 {report.meals.map((meal) => (
@@ -161,13 +179,17 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
                 ))}
               </div>
             ) : (
-              <EmptyState message="No meals recorded" />
+              <EmptyState message={t('dailyReports.emptyStates.noMealsRecorded')} />
             )}
           </div>
 
           {/* Naps Section */}
           <div>
-            <SectionHeader title="Nap Time" count={report.naps.length} />
+            <SectionHeader
+              title={t('dailyReports.sections.napTime')}
+              count={report.naps.length}
+              entryLabel={t('common.entry', { count: report.naps.length })}
+            />
             {report.naps.length > 0 ? (
               <div className="space-y-4">
                 {report.naps.map((nap) => (
@@ -175,14 +197,18 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
                 ))}
               </div>
             ) : (
-              <EmptyState message="No naps recorded" />
+              <EmptyState message={t('dailyReports.emptyStates.noNapsRecorded')} />
             )}
           </div>
         </div>
 
         {/* Activities Section */}
         <div>
-          <SectionHeader title="Activities" count={report.activities.length} />
+          <SectionHeader
+            title={t('dailyReports.sections.activities')}
+            count={report.activities.length}
+            entryLabel={t('common.entry', { count: report.activities.length })}
+          />
           {report.activities.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {report.activities.map((activity) => (
@@ -190,7 +216,7 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
               ))}
             </div>
           ) : (
-            <EmptyState message="No activities recorded" />
+            <EmptyState message={t('dailyReports.emptyStates.noActivitiesRecorded')} />
           )}
         </div>
       </div>
