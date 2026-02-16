@@ -107,6 +107,70 @@ const nextConfig = {
 
     return config;
   },
+
+  // Custom HTTP headers for static asset caching optimization
+  async headers() {
+    return [
+      {
+        // Versioned static assets (JS, CSS with hash) - cache for 1 year
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        // Public static assets - cache for 1 month
+        source: '/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=2592000, must-revalidate',
+          },
+        ],
+      },
+      {
+        // Images from public directory - cache for 1 month
+        source: '/images/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=2592000, must-revalidate',
+          },
+        ],
+      },
+      {
+        // Favicon and manifest - cache for 1 week
+        source: '/(favicon.ico|manifest.json|robots.txt)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=604800, must-revalidate',
+          },
+        ],
+      },
+      {
+        // API routes - no cache
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+          {
+            key: 'Expires',
+            value: '0',
+          },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = withBundleAnalyzer(nextConfig);

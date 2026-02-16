@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.dependencies import get_current_user
+from app.middleware import CacheHeadersMiddleware
 from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
@@ -27,6 +28,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Configure cache headers middleware for static asset optimization
+app.add_middleware(CacheHeadersMiddleware)
 
 # Register API routers
 app.include_router(coaching.router, prefix="/api/v1/coaching", tags=["coaching"])
