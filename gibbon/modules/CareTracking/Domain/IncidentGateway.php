@@ -323,6 +323,73 @@ class IncidentGateway extends QueryableGateway
     }
 
     /**
+     * Log a detailed incident with all enhanced fields.
+     *
+     * @param array $data Incident data containing:
+     *   - gibbonPersonID (required): Child's person ID
+     *   - gibbonSchoolYearID (required): School year ID
+     *   - date (required): Date of incident (Y-m-d)
+     *   - time (required): Time of incident (H:i:s)
+     *   - type (required): Incident type (Minor Injury, Major Injury, Illness, Behavioral, Other)
+     *   - severity (required): Severity level (Low, Medium, High, Critical)
+     *   - description (required): Description of the incident
+     *   - recordedByID (required): ID of staff member recording the incident
+     *   - actionTaken (optional): Action taken in response
+     *   - incidentCategory (optional): Category (Bump, Cut, Bite, Fall, Allergic Reaction, Fever, Other)
+     *   - bodyPart (optional): Body part affected
+     *   - medicalConsulted (optional): Whether medical was consulted (Y/N)
+     *   - followUpRequired (optional): Whether follow-up is required (Y/N)
+     *   - photoPath (optional): Path to incident photo
+     *   - directorNotified (optional): Whether director was notified (Y/N)
+     *   - directorNotifiedTime (optional): Timestamp of director notification
+     *   - linkedInterventionPlanID (optional): Linked intervention plan ID
+     * @return int|false The new incident ID on success, false on failure
+     */
+    public function logDetailedIncident(array $data)
+    {
+        // Required fields validation
+        $requiredFields = ['gibbonPersonID', 'gibbonSchoolYearID', 'date', 'time', 'type', 'severity', 'description', 'recordedByID'];
+        foreach ($requiredFields as $field) {
+            if (!isset($data[$field]) || $data[$field] === '') {
+                return false;
+            }
+        }
+
+        // Build insert data with required fields
+        $insertData = [
+            'gibbonPersonID' => $data['gibbonPersonID'],
+            'gibbonSchoolYearID' => $data['gibbonSchoolYearID'],
+            'date' => $data['date'],
+            'time' => $data['time'],
+            'type' => $data['type'],
+            'severity' => $data['severity'],
+            'description' => $data['description'],
+            'recordedByID' => $data['recordedByID'],
+        ];
+
+        // Add optional fields if provided
+        $optionalFields = [
+            'actionTaken',
+            'incidentCategory',
+            'bodyPart',
+            'medicalConsulted',
+            'followUpRequired',
+            'photoPath',
+            'directorNotified',
+            'directorNotifiedTime',
+            'linkedInterventionPlanID',
+        ];
+
+        foreach ($optionalFields as $field) {
+            if (isset($data[$field]) && $data[$field] !== '') {
+                $insertData[$field] = $data[$field];
+            }
+        }
+
+        return $this->insert($insertData);
+    }
+
+    /**
      * Mark parent as notified for an incident.
      *
      * @param int $gibbonCareIncidentID
