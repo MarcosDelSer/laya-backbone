@@ -410,3 +410,196 @@ export interface ApiErrorResponse {
   detail: string;
   statusCode?: number;
 }
+
+// ============================================================================
+// Portfolio Types
+// ============================================================================
+
+/**
+ * Portfolio item type categories.
+ */
+export type PortfolioItemType = 'photo' | 'video' | 'document' | 'artwork';
+
+/**
+ * Observation type categories.
+ */
+export type ObservationType =
+  | 'anecdotal'
+  | 'running_record'
+  | 'learning_story'
+  | 'checklist'
+  | 'time_sample';
+
+/**
+ * Milestone status.
+ */
+export type MilestoneStatus = 'not_started' | 'in_progress' | 'achieved';
+
+/**
+ * Developmental domain categories.
+ */
+export type DevelopmentalDomain =
+  | 'cognitive'
+  | 'physical'
+  | 'social_emotional'
+  | 'language'
+  | 'creative';
+
+/**
+ * Work sample type categories.
+ */
+export type WorkSampleType =
+  | 'drawing'
+  | 'writing'
+  | 'craft'
+  | 'photo'
+  | 'recording'
+  | 'other';
+
+/**
+ * Individual portfolio item (photo/video/document).
+ */
+export interface PortfolioItem {
+  id: string;
+  childId: string;
+  type: PortfolioItemType;
+  title: string;
+  caption: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  date: string;
+  uploadedBy: string;
+  tags: string[];
+  isPrivate: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Observation note for a child.
+ */
+export interface Observation {
+  id: string;
+  childId: string;
+  type: ObservationType;
+  title: string;
+  content: string;
+  date: string;
+  observedBy: string;
+  domains: DevelopmentalDomain[];
+  linkedMilestones: string[];
+  linkedWorkSamples: string[];
+  isPrivate: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Developmental milestone for tracking progress.
+ */
+export interface Milestone {
+  id: string;
+  childId: string;
+  domain: DevelopmentalDomain;
+  title: string;
+  description: string;
+  expectedAgeMonths?: number;
+  status: MilestoneStatus;
+  achievedDate?: string;
+  notes?: string;
+  evidenceIds: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Work sample documentation.
+ */
+export interface WorkSample {
+  id: string;
+  childId: string;
+  type: WorkSampleType;
+  title: string;
+  description: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  date: string;
+  domains: DevelopmentalDomain[];
+  teacherNotes?: string;
+  familyContribution?: string;
+  isPrivate: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Request payload for creating a portfolio item.
+ */
+export interface CreatePortfolioItemRequest {
+  childId: string;
+  type: PortfolioItemType;
+  title: string;
+  caption: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  date: string;
+  tags?: string[];
+  isPrivate?: boolean;
+}
+
+/**
+ * Request payload for creating an observation.
+ */
+export interface CreateObservationRequest {
+  childId: string;
+  type: ObservationType;
+  title: string;
+  content: string;
+  date: string;
+  domains?: DevelopmentalDomain[];
+  linkedMilestones?: string[];
+  linkedWorkSamples?: string[];
+  isPrivate?: boolean;
+}
+
+/**
+ * Request payload for creating a milestone.
+ */
+export interface CreateMilestoneRequest {
+  childId: string;
+  domain: DevelopmentalDomain;
+  title: string;
+  description: string;
+  expectedAgeMonths?: number;
+  status?: MilestoneStatus;
+  notes?: string;
+}
+
+/**
+ * Request payload for creating a work sample.
+ */
+export interface CreateWorkSampleRequest {
+  childId: string;
+  type: WorkSampleType;
+  title: string;
+  description: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  date: string;
+  domains?: DevelopmentalDomain[];
+  teacherNotes?: string;
+  isPrivate?: boolean;
+}
+
+/**
+ * Portfolio summary for a child.
+ */
+export interface PortfolioSummary {
+  childId: string;
+  totalItems: number;
+  totalObservations: number;
+  totalMilestones: number;
+  milestonesAchieved: number;
+  totalWorkSamples: number;
+  recentActivity: string;
+}
