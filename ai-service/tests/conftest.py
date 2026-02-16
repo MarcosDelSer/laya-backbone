@@ -1,7 +1,7 @@
 """Pytest fixtures and test configuration for LAYA AI Service.
 
 Provides reusable fixtures for async testing, database sessions,
-test data, and authentication mocking for coaching, activity, communication, and storage domains.
+test data, and authentication mocking for coaching, activity, and communication domains.
 """
 
 from __future__ import annotations
@@ -245,6 +245,90 @@ CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(chi
 """
 
 
+# SQLite-compatible document tables (PostgreSQL ENUM not supported in SQLite)
+SQLITE_CREATE_DOCUMENT_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    type VARCHAR(20) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content_url TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS document_templates (
+    id TEXT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(20) NOT NULL,
+    description TEXT,
+    template_content TEXT NOT NULL,
+    required_fields TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS signatures (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    signer_id TEXT NOT NULL,
+    signature_image_url TEXT NOT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    device_info TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS signature_requests (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    requester_id TEXT NOT NULL,
+    signer_id TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'sent',
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    viewed_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    expires_at TIMESTAMP,
+    notification_sent INTEGER NOT NULL DEFAULT 0,
+    notification_method VARCHAR(50),
+    message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS document_audit_logs (
+    id TEXT PRIMARY KEY,
+    event_type VARCHAR(50) NOT NULL,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+    signature_request_id TEXT REFERENCES signature_requests(id) ON DELETE SET NULL,
+    event_data TEXT,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+CREATE INDEX IF NOT EXISTS idx_documents_created_by ON documents(created_by);
+CREATE INDEX IF NOT EXISTS idx_document_templates_type ON document_templates(type);
+CREATE INDEX IF NOT EXISTS idx_document_templates_is_active ON document_templates(is_active);
+CREATE INDEX IF NOT EXISTS idx_signatures_document_id ON signatures(document_id);
+CREATE INDEX IF NOT EXISTS idx_signatures_signer_id ON signatures(signer_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_document_id ON signature_requests(document_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_signer_id ON signature_requests(signer_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_document_id ON document_audit_logs(document_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_user_id ON document_audit_logs(user_id);
+"""
+
+
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -294,54 +378,6 @@ CREATE INDEX IF NOT EXISTS idx_evidence_sources_recommendation ON evidence_sourc
 """
 
 
-# SQLite-compatible storage tables (PostgreSQL ENUM/UUID types not supported in SQLite)
-SQLITE_CREATE_STORAGE_TABLES_SQL = """
-CREATE TABLE IF NOT EXISTS files (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    filename VARCHAR(255) NOT NULL,
-    original_filename VARCHAR(255) NOT NULL,
-    content_type VARCHAR(100) NOT NULL,
-    size_bytes INTEGER NOT NULL,
-    storage_backend VARCHAR(20) NOT NULL DEFAULT 'local',
-    storage_path VARCHAR(500) NOT NULL,
-    checksum VARCHAR(64),
-    is_public INTEGER NOT NULL DEFAULT 0,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS file_thumbnails (
-    id TEXT PRIMARY KEY,
-    file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    size VARCHAR(20) NOT NULL,
-    width INTEGER NOT NULL,
-    height INTEGER NOT NULL,
-    storage_path VARCHAR(500) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS storage_quotas (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL UNIQUE,
-    quota_bytes INTEGER NOT NULL DEFAULT 104857600,
-    used_bytes INTEGER NOT NULL DEFAULT 0,
-    file_count INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
-CREATE INDEX IF NOT EXISTS idx_files_content_type ON files(content_type);
-CREATE INDEX IF NOT EXISTS idx_files_storage_backend ON files(storage_backend);
-CREATE INDEX IF NOT EXISTS idx_files_is_public ON files(is_public);
-CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
-CREATE INDEX IF NOT EXISTS idx_file_thumbnails_file ON file_thumbnails(file_id);
-CREATE INDEX IF NOT EXISTS idx_storage_quotas_owner ON storage_quotas(owner_id);
-"""
-
-
 @pytest.fixture(scope="session")
 def event_loop_policy():
     """Use default event loop policy for tests."""
@@ -381,9 +417,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
-    # Create storage tables via raw SQL (SQLite compatibility)
+    # Create document tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_STORAGE_TABLES_SQL.strip().split(';'):
+        for statement in SQLITE_CREATE_DOCUMENT_TABLES_SQL.strip().split(';'):
             statement = statement.strip()
             if statement:
                 await conn.execute(text(statement))
@@ -410,10 +446,12 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
-        # Drop storage tables (thumbnails have FK to files)
-        await conn.execute(text("DROP TABLE IF EXISTS file_thumbnails"))
-        await conn.execute(text("DROP TABLE IF EXISTS files"))
-        await conn.execute(text("DROP TABLE IF EXISTS storage_quotas"))
+        # Drop document tables (child tables first due to foreign keys)
+        await conn.execute(text("DROP TABLE IF EXISTS document_audit_logs"))
+        await conn.execute(text("DROP TABLE IF EXISTS signature_requests"))
+        await conn.execute(text("DROP TABLE IF EXISTS signatures"))
+        await conn.execute(text("DROP TABLE IF EXISTS document_templates"))
+        await conn.execute(text("DROP TABLE IF EXISTS documents"))
 
 
 @pytest_asyncio.fixture
@@ -1604,566 +1642,3 @@ async def sample_home_activities(
         activities.append(activity)
 
     return activities
-
-
-# ============================================================================
-# Storage fixtures
-# ============================================================================
-
-
-class MockFile:
-    """Mock File object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        owner_id,
-        filename,
-        original_filename,
-        content_type,
-        size_bytes,
-        storage_backend,
-        storage_path,
-        checksum,
-        is_public,
-        description,
-        created_at,
-        updated_at,
-    ):
-        self.id = id
-        self.owner_id = owner_id
-        self.filename = filename
-        self.original_filename = original_filename
-        self.content_type = content_type
-        self.size_bytes = size_bytes
-        self.storage_backend = storage_backend
-        self.storage_path = storage_path
-        self.checksum = checksum
-        self.is_public = is_public
-        self.description = description
-        self.created_at = created_at
-        self.updated_at = updated_at
-        self.thumbnails = []
-
-    def __repr__(self) -> str:
-        return f"<File(id={self.id}, filename='{self.original_filename}', size={self.size_bytes}, backend={self.storage_backend})>"
-
-
-class MockFileThumbnail:
-    """Mock FileThumbnail object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        file_id,
-        size,
-        width,
-        height,
-        storage_path,
-        created_at,
-    ):
-        self.id = id
-        self.file_id = file_id
-        self.size = size
-        self.width = width
-        self.height = height
-        self.storage_path = storage_path
-        self.created_at = created_at
-
-    def __repr__(self) -> str:
-        return f"<FileThumbnail(id={self.id}, file_id={self.file_id}, size={self.size}, {self.width}x{self.height})>"
-
-
-class MockStorageQuota:
-    """Mock StorageQuota object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        owner_id,
-        quota_bytes,
-        used_bytes,
-        file_count,
-        created_at,
-        updated_at,
-    ):
-        self.id = id
-        self.owner_id = owner_id
-        self.quota_bytes = quota_bytes
-        self.used_bytes = used_bytes
-        self.file_count = file_count
-        self.created_at = created_at
-        self.updated_at = updated_at
-
-    def __repr__(self) -> str:
-        usage_percent = (self.used_bytes / self.quota_bytes * 100) if self.quota_bytes > 0 else 0
-        return f"<StorageQuota(id={self.id}, owner_id={self.owner_id}, usage={usage_percent:.1f}%, files={self.file_count})>"
-
-    @property
-    def available_bytes(self) -> int:
-        """Calculate available storage space in bytes."""
-        return max(0, self.quota_bytes - self.used_bytes)
-
-    @property
-    def usage_percentage(self) -> float:
-        """Calculate storage usage as a percentage."""
-        if self.quota_bytes <= 0:
-            return 0.0
-        return (self.used_bytes / self.quota_bytes) * 100
-
-
-async def create_file_in_db(
-    session: AsyncSession,
-    owner_id: UUID,
-    filename: str,
-    original_filename: str,
-    content_type: str,
-    size_bytes: int,
-    storage_backend: str = "local",
-    storage_path: Optional[str] = None,
-    checksum: Optional[str] = None,
-    is_public: bool = False,
-    description: Optional[str] = None,
-) -> MockFile:
-    """Helper function to create a file record directly in SQLite database."""
-    file_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-    if storage_path is None:
-        storage_path = f"/storage/{storage_backend}/{file_id}/{filename}"
-
-    await session.execute(
-        text("""
-            INSERT INTO files (
-                id, owner_id, filename, original_filename, content_type,
-                size_bytes, storage_backend, storage_path, checksum,
-                is_public, description, created_at, updated_at
-            ) VALUES (
-                :id, :owner_id, :filename, :original_filename, :content_type,
-                :size_bytes, :storage_backend, :storage_path, :checksum,
-                :is_public, :description, :created_at, :updated_at
-            )
-        """),
-        {
-            "id": file_id,
-            "owner_id": str(owner_id),
-            "filename": filename,
-            "original_filename": original_filename,
-            "content_type": content_type,
-            "size_bytes": size_bytes,
-            "storage_backend": storage_backend,
-            "storage_path": storage_path,
-            "checksum": checksum,
-            "is_public": 1 if is_public else 0,
-            "description": description,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockFile(
-        id=UUID(file_id),
-        owner_id=owner_id,
-        filename=filename,
-        original_filename=original_filename,
-        content_type=content_type,
-        size_bytes=size_bytes,
-        storage_backend=storage_backend,
-        storage_path=storage_path,
-        checksum=checksum,
-        is_public=is_public,
-        description=description,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-async def create_file_thumbnail_in_db(
-    session: AsyncSession,
-    file_id: UUID,
-    size: str,
-    width: int,
-    height: int,
-    storage_path: Optional[str] = None,
-) -> MockFileThumbnail:
-    """Helper function to create a file thumbnail record directly in SQLite database."""
-    thumbnail_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-    if storage_path is None:
-        storage_path = f"/storage/thumbnails/{file_id}_{size}.jpg"
-
-    await session.execute(
-        text("""
-            INSERT INTO file_thumbnails (
-                id, file_id, size, width, height, storage_path, created_at
-            ) VALUES (
-                :id, :file_id, :size, :width, :height, :storage_path, :created_at
-            )
-        """),
-        {
-            "id": thumbnail_id,
-            "file_id": str(file_id),
-            "size": size,
-            "width": width,
-            "height": height,
-            "storage_path": storage_path,
-            "created_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockFileThumbnail(
-        id=UUID(thumbnail_id),
-        file_id=file_id,
-        size=size,
-        width=width,
-        height=height,
-        storage_path=storage_path,
-        created_at=now,
-    )
-
-
-async def create_storage_quota_in_db(
-    session: AsyncSession,
-    owner_id: UUID,
-    quota_bytes: int = 104857600,  # 100 MB default
-    used_bytes: int = 0,
-    file_count: int = 0,
-) -> MockStorageQuota:
-    """Helper function to create a storage quota record directly in SQLite database."""
-    quota_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-
-    await session.execute(
-        text("""
-            INSERT INTO storage_quotas (
-                id, owner_id, quota_bytes, used_bytes, file_count, created_at, updated_at
-            ) VALUES (
-                :id, :owner_id, :quota_bytes, :used_bytes, :file_count, :created_at, :updated_at
-            )
-        """),
-        {
-            "id": quota_id,
-            "owner_id": str(owner_id),
-            "quota_bytes": quota_bytes,
-            "used_bytes": used_bytes,
-            "file_count": file_count,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockStorageQuota(
-        id=UUID(quota_id),
-        owner_id=owner_id,
-        quota_bytes=quota_bytes,
-        used_bytes=used_bytes,
-        file_count=file_count,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-@pytest.fixture
-def sample_file_data(test_user_id: UUID) -> Dict[str, Any]:
-    """Create sample file data for testing."""
-    return {
-        "owner_id": test_user_id,
-        "filename": "abc123_test_image.jpg",
-        "original_filename": "test_image.jpg",
-        "content_type": "image/jpeg",
-        "size_bytes": 1024 * 100,  # 100 KB
-        "storage_backend": "local",
-        "storage_path": "/storage/local/test_image.jpg",
-        "checksum": "sha256_abc123def456",
-        "is_public": False,
-        "description": "A test image file",
-    }
-
-
-@pytest.fixture
-def sample_public_file_data(test_user_id: UUID) -> Dict[str, Any]:
-    """Create sample public file data for testing."""
-    return {
-        "owner_id": test_user_id,
-        "filename": "xyz789_public_doc.pdf",
-        "original_filename": "public_doc.pdf",
-        "content_type": "application/pdf",
-        "size_bytes": 1024 * 500,  # 500 KB
-        "storage_backend": "s3",
-        "storage_path": "s3://bucket/public_doc.pdf",
-        "checksum": "sha256_xyz789ghi012",
-        "is_public": True,
-        "description": "A public PDF document",
-    }
-
-
-@pytest.fixture
-def sample_upload_request_data() -> Dict[str, Any]:
-    """Create sample file upload request data."""
-    return {
-        "description": "Test file upload",
-        "is_public": False,
-    }
-
-
-@pytest.fixture
-def sample_thumbnail_sizes() -> Dict[str, Dict[str, int]]:
-    """Return standard thumbnail size dimensions."""
-    return {
-        "small": {"width": 100, "height": 100},
-        "medium": {"width": 300, "height": 300},
-        "large": {"width": 600, "height": 600},
-    }
-
-
-@pytest_asyncio.fixture
-async def sample_file(
-    db_session: AsyncSession,
-    sample_file_data: Dict[str, Any],
-) -> MockFile:
-    """Create a sample file in the database."""
-    return await create_file_in_db(db_session, **sample_file_data)
-
-
-@pytest_asyncio.fixture
-async def sample_public_file(
-    db_session: AsyncSession,
-    sample_public_file_data: Dict[str, Any],
-) -> MockFile:
-    """Create a sample public file in the database."""
-    return await create_file_in_db(db_session, **sample_public_file_data)
-
-
-@pytest_asyncio.fixture
-async def sample_file_with_thumbnails(
-    db_session: AsyncSession,
-    sample_file_data: Dict[str, Any],
-    sample_thumbnail_sizes: Dict[str, Dict[str, int]],
-) -> MockFile:
-    """Create a sample file with thumbnails in the database."""
-    file = await create_file_in_db(db_session, **sample_file_data)
-
-    for size_name, dimensions in sample_thumbnail_sizes.items():
-        thumbnail = await create_file_thumbnail_in_db(
-            db_session,
-            file_id=file.id,
-            size=size_name,
-            width=dimensions["width"],
-            height=dimensions["height"],
-        )
-        file.thumbnails.append(thumbnail)
-
-    return file
-
-
-@pytest_asyncio.fixture
-async def sample_files(
-    db_session: AsyncSession,
-    test_user_id: UUID,
-) -> List[MockFile]:
-    """Create multiple sample files with varied properties."""
-    files_data = [
-        {
-            "filename": "image1.jpg",
-            "original_filename": "vacation_photo.jpg",
-            "content_type": "image/jpeg",
-            "size_bytes": 1024 * 150,
-            "storage_backend": "local",
-            "is_public": False,
-            "description": "Vacation photo",
-        },
-        {
-            "filename": "document.pdf",
-            "original_filename": "report.pdf",
-            "content_type": "application/pdf",
-            "size_bytes": 1024 * 250,
-            "storage_backend": "local",
-            "is_public": False,
-            "description": "Monthly report",
-        },
-        {
-            "filename": "presentation.pptx",
-            "original_filename": "slides.pptx",
-            "content_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "size_bytes": 1024 * 500,
-            "storage_backend": "s3",
-            "is_public": True,
-            "description": "Team presentation",
-        },
-        {
-            "filename": "avatar.png",
-            "original_filename": "profile_pic.png",
-            "content_type": "image/png",
-            "size_bytes": 1024 * 50,
-            "storage_backend": "local",
-            "is_public": True,
-            "description": "Profile picture",
-        },
-        {
-            "filename": "data.json",
-            "original_filename": "export_data.json",
-            "content_type": "application/json",
-            "size_bytes": 1024 * 10,
-            "storage_backend": "s3",
-            "is_public": False,
-            "description": "Data export file",
-        },
-    ]
-
-    files = []
-    for data in files_data:
-        file = await create_file_in_db(
-            db_session,
-            owner_id=test_user_id,
-            **data,
-        )
-        files.append(file)
-
-    return files
-
-
-@pytest_asyncio.fixture
-async def sample_storage_quota(
-    db_session: AsyncSession,
-    test_user_id: UUID,
-) -> MockStorageQuota:
-    """Create a sample storage quota in the database."""
-    return await create_storage_quota_in_db(
-        db_session,
-        owner_id=test_user_id,
-        quota_bytes=104857600,  # 100 MB
-        used_bytes=10485760,  # 10 MB used
-        file_count=5,
-    )
-
-
-@pytest_asyncio.fixture
-async def sample_storage_quota_near_limit(
-    db_session: AsyncSession,
-) -> MockStorageQuota:
-    """Create a storage quota that is almost full."""
-    near_limit_user_id = UUID("99999999-9999-9999-9999-999999999999")
-    return await create_storage_quota_in_db(
-        db_session,
-        owner_id=near_limit_user_id,
-        quota_bytes=10485760,  # 10 MB
-        used_bytes=10000000,  # ~9.5 MB used (95%)
-        file_count=50,
-    )
-
-
-@pytest_asyncio.fixture
-async def sample_empty_storage_quota(
-    db_session: AsyncSession,
-) -> MockStorageQuota:
-    """Create an empty storage quota (no files uploaded yet)."""
-    empty_user_id = UUID("88888888-8888-8888-8888-888888888888")
-    return await create_storage_quota_in_db(
-        db_session,
-        owner_id=empty_user_id,
-        quota_bytes=52428800,  # 50 MB
-        used_bytes=0,
-        file_count=0,
-    )
-
-
-@pytest.fixture
-def sample_file_content() -> bytes:
-    """Create sample file content for upload testing."""
-    return b"This is sample file content for testing purposes."
-
-
-@pytest.fixture
-def sample_image_content() -> bytes:
-    """Create a minimal valid JPEG file content for testing.
-
-    This creates a 1x1 pixel red JPEG image.
-    """
-    # Minimal 1x1 red JPEG
-    return bytes([
-        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-        0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-        0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-        0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-        0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
-        0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
-        0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
-        0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01,
-        0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00,
-        0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-        0x09, 0x0A, 0x0B, 0xFF, 0xC4, 0x00, 0xB5, 0x10, 0x00, 0x02, 0x01, 0x03,
-        0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7D,
-        0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21, 0x31, 0x41, 0x06,
-        0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xA1, 0x08,
-        0x23, 0x42, 0xB1, 0xC1, 0x15, 0x52, 0xD1, 0xF0, 0x24, 0x33, 0x62, 0x72,
-        0x82, 0x09, 0x0A, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x25, 0x26, 0x27, 0x28,
-        0x29, 0x2A, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x43, 0x44, 0x45,
-        0x46, 0x47, 0x48, 0x49, 0x4A, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59,
-        0x5A, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6A, 0x73, 0x74, 0x75,
-        0x76, 0x77, 0x78, 0x79, 0x7A, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89,
-        0x8A, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0xA2, 0xA3,
-        0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6,
-        0xB7, 0xB8, 0xB9, 0xBA, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9,
-        0xCA, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xE1, 0xE2,
-        0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xF1, 0xF2, 0xF3, 0xF4,
-        0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01,
-        0x00, 0x00, 0x3F, 0x00, 0xFB, 0xD5, 0xDB, 0x20, 0x00, 0x00, 0x00, 0xFF,
-        0xD9
-    ])
-
-
-# Storage-related test constants
-
-ALLOWED_CONTENT_TYPES = [
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    "application/pdf",
-    "application/json",
-    "text/plain",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-]
-
-
-@pytest.fixture
-def allowed_content_types() -> List[str]:
-    """Return list of allowed content types for upload."""
-    return ALLOWED_CONTENT_TYPES
-
-
-IMAGE_CONTENT_TYPES = [
-    "image/jpeg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-]
-
-
-@pytest.fixture
-def image_content_types() -> List[str]:
-    """Return list of image content types that support thumbnails."""
-    return IMAGE_CONTENT_TYPES
-
-
-DEFAULT_QUOTA_BYTES = 104857600  # 100 MB
-
-
-@pytest.fixture
-def default_quota_bytes() -> int:
-    """Return the default storage quota in bytes (100 MB)."""
-    return DEFAULT_QUOTA_BYTES
-
-
-MAX_FILE_SIZE_BYTES = 52428800  # 50 MB
-
-
-@pytest.fixture
-def max_file_size_bytes() -> int:
-    """Return the maximum allowed file size in bytes (50 MB)."""
-    return MAX_FILE_SIZE_BYTES
