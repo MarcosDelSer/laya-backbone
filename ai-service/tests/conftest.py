@@ -262,9 +262,9 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS token_blacklist (
     id TEXT PRIMARY KEY,
     token TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
     blacklisted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    expires_at TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
