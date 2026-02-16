@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas.messaging import (
+    MarkAsReadRequest,
+    MessageCreate,
+    MessageListResponse,
+    MessageResponse,
     SenderType,
     ThreadCreate,
     ThreadListResponse,
@@ -24,6 +28,7 @@ from app.schemas.messaging import (
 )
 from app.services.messaging_service import (
     InvalidThreadError,
+    MessageNotFoundError,
     MessagingService,
     MessagingServiceError,
     ThreadNotFoundError,
@@ -366,6 +371,312 @@ async def archive_thread(
         return await service.archive_thread(
             thread_id=thread_id,
             user_id=user_id,
+        )
+    except ThreadNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+# =============================================================================
+# Message Endpoints
+# =============================================================================
+
+
+@router.post("/threads/{thread_id}/messages", response_model=MessageResponse)
+async def send_message(
+    thread_id: UUID,
+    request: MessageCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> MessageResponse:
+    """Send a message in a thread.
+
+    Creates a new message within an existing conversation thread. The message
+    is associated with the current user as the sender and can include optional
+    attachments.
+
+    Args:
+        thread_id: Unique identifier of the thread to send the message in
+        request: The message creation request containing content and attachments
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        MessageResponse containing:
+        - id: Unique identifier of the created message
+        - thread_id: Thread the message belongs to
+        - sender_id: ID of the message sender
+        - sender_type: Type of sender (parent, educator, director, admin)
+        - content: The message content
+        - content_type: Type of content (text, rich_text)
+        - is_read: Whether the message has been read (False for new messages)
+        - attachments: List of attachments included with the message
+        - created_at: Message creation timestamp
+
+    Raises:
+        HTTPException 400: When the thread is archived or message data is invalid
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user does not have access to the thread
+        HTTPException 404: When thread is not found
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        sender_id = UUID(current_user["sub"])
+        sender_type = _get_user_type(current_user)
+
+        return await service.send_message(
+            thread_id=thread_id,
+            request=request,
+            sender_id=sender_id,
+            sender_type=sender_type,
+        )
+    except ThreadNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except InvalidThreadError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.get("/threads/{thread_id}/messages", response_model=MessageListResponse)
+async def list_messages(
+    thread_id: UUID,
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+        description="Maximum number of messages to return",
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="Number of messages to skip for pagination",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> MessageListResponse:
+    """List messages in a thread.
+
+    Retrieves messages from a conversation thread with pagination support.
+    Messages are returned in chronological order (oldest first).
+
+    Args:
+        thread_id: Unique identifier of the thread
+        limit: Maximum number of messages to return (default: 50, max: 100)
+        offset: Number of messages to skip for pagination (default: 0)
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        MessageListResponse containing:
+        - messages: List of MessageResponse objects
+        - total: Total number of messages in the thread
+        - limit: Number of items per page
+        - offset: Current offset
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user does not have access to the thread
+        HTTPException 404: When thread is not found
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        user_id = UUID(current_user["sub"])
+
+        messages = await service.list_messages(
+            thread_id=thread_id,
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+        )
+
+        return MessageListResponse(
+            messages=messages,
+            total=len(messages),
+            limit=limit,
+            skip=offset,
+        )
+    except ThreadNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.patch("/messages/read")
+async def mark_messages_as_read(
+    request: MarkAsReadRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, int]:
+    """Mark messages as read.
+
+    Updates the read status of one or more messages. Only marks messages
+    that the user has access to and that were not sent by them.
+
+    Args:
+        request: The mark-as-read request containing message IDs
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        Dictionary containing:
+        - marked_count: Number of messages successfully marked as read
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        user_id = UUID(current_user["sub"])
+
+        marked_count = await service.mark_messages_as_read(
+            message_ids=request.message_ids,
+            user_id=user_id,
+        )
+
+        return {"marked_count": marked_count}
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.patch("/threads/{thread_id}/read")
+async def mark_thread_as_read(
+    thread_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, int]:
+    """Mark all messages in a thread as read.
+
+    Updates the read status of all unread messages in a thread that were
+    not sent by the current user.
+
+    Args:
+        thread_id: Unique identifier of the thread
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        Dictionary containing:
+        - marked_count: Number of messages successfully marked as read
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user does not have access to the thread
+        HTTPException 404: When thread is not found
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        user_id = UUID(current_user["sub"])
+
+        marked_count = await service.mark_thread_as_read(
+            thread_id=thread_id,
+            user_id=user_id,
+        )
+
+        return {"marked_count": marked_count}
+    except ThreadNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.get("/messages/{message_id}", response_model=MessageResponse)
+async def get_message(
+    message_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> MessageResponse:
+    """Get a message by ID.
+
+    Retrieves a single message by its unique identifier. Validates that
+    the current user has permission to access the message.
+
+    Args:
+        message_id: Unique identifier of the message
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        MessageResponse containing all message data
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user does not have access to the message
+        HTTPException 404: When message is not found
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        user_id = UUID(current_user["sub"])
+
+        return await service.get_message(
+            message_id=message_id,
+            user_id=user_id,
+        )
+    except MessageNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
         )
     except ThreadNotFoundError as e:
         raise HTTPException(
