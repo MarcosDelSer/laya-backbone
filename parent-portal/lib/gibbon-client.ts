@@ -10,6 +10,11 @@ import type {
   Child,
   DailyReport,
   Document,
+  GovernmentDocument,
+  GovernmentDocumentChecklist,
+  GovernmentDocumentStats,
+  GovernmentDocumentTypeDefinition,
+  GovernmentDocumentUploadRequest,
   Invoice,
   Message,
   MessageThread,
@@ -50,6 +55,15 @@ const ENDPOINTS = {
   DOCUMENT: (id: string) => `/api/v1/documents/${id}`,
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
+
+  // Government Documents
+  GOVERNMENT_DOCUMENTS: '/api/v1/government-documents',
+  GOVERNMENT_DOCUMENT: (id: string) => `/api/v1/government-documents/${id}`,
+  GOVERNMENT_DOCUMENT_TYPES: '/api/v1/government-documents/types',
+  GOVERNMENT_DOCUMENT_CHECKLIST: '/api/v1/government-documents/checklist',
+  GOVERNMENT_DOCUMENT_STATS: '/api/v1/government-documents/stats',
+  GOVERNMENT_DOCUMENT_UPLOAD: '/api/v1/government-documents/upload',
+  GOVERNMENT_DOCUMENT_FILE: (id: string) => `/api/v1/government-documents/${id}/file`,
 } as const;
 
 // ============================================================================
@@ -326,6 +340,118 @@ export function getDocumentPdfUrl(documentId: string): string {
 export async function getPendingDocumentsCount(): Promise<number> {
   const response = await getDocuments({ status: 'pending', limit: 1 });
   return response.total;
+}
+
+// ============================================================================
+// Government Documents API
+// ============================================================================
+
+/**
+ * Parameters for fetching government documents.
+ */
+export interface GovernmentDocumentParams extends PaginationParams {
+  personId?: string;
+  status?: 'missing' | 'pending_verification' | 'verified' | 'rejected' | 'expired';
+  category?: 'child_identity' | 'parent_identity' | 'health' | 'immigration';
+}
+
+/**
+ * Fetch government documents with optional filters.
+ */
+export async function getGovernmentDocuments(
+  params?: GovernmentDocumentParams
+): Promise<PaginatedResponse<GovernmentDocument>> {
+  return gibbonClient.get<PaginatedResponse<GovernmentDocument>>(ENDPOINTS.GOVERNMENT_DOCUMENTS, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      person_id: params?.personId,
+      status: params?.status,
+      category: params?.category,
+    },
+  });
+}
+
+/**
+ * Fetch a specific government document by ID.
+ */
+export async function getGovernmentDocument(documentId: string): Promise<GovernmentDocument> {
+  return gibbonClient.get<GovernmentDocument>(ENDPOINTS.GOVERNMENT_DOCUMENT(documentId));
+}
+
+/**
+ * Fetch all available government document types.
+ */
+export async function getGovernmentDocumentTypes(): Promise<GovernmentDocumentTypeDefinition[]> {
+  return gibbonClient.get<GovernmentDocumentTypeDefinition[]>(ENDPOINTS.GOVERNMENT_DOCUMENT_TYPES);
+}
+
+/**
+ * Fetch the family document checklist.
+ */
+export async function getGovernmentDocumentChecklist(): Promise<GovernmentDocumentChecklist> {
+  return gibbonClient.get<GovernmentDocumentChecklist>(ENDPOINTS.GOVERNMENT_DOCUMENT_CHECKLIST);
+}
+
+/**
+ * Fetch government document statistics.
+ */
+export async function getGovernmentDocumentStats(): Promise<GovernmentDocumentStats> {
+  return gibbonClient.get<GovernmentDocumentStats>(ENDPOINTS.GOVERNMENT_DOCUMENT_STATS);
+}
+
+/**
+ * Upload a government document.
+ */
+export async function uploadGovernmentDocument(
+  request: GovernmentDocumentUploadRequest
+): Promise<GovernmentDocument> {
+  const formData = new FormData();
+  formData.append('person_id', request.personId);
+  formData.append('document_type_id', request.documentTypeId);
+  formData.append('file', request.file);
+
+  if (request.documentNumber) {
+    formData.append('document_number', request.documentNumber);
+  }
+  if (request.issueDate) {
+    formData.append('issue_date', request.issueDate);
+  }
+  if (request.expirationDate) {
+    formData.append('expiration_date', request.expirationDate);
+  }
+  if (request.notes) {
+    formData.append('notes', request.notes);
+  }
+
+  return gibbonClient.post<GovernmentDocument>(ENDPOINTS.GOVERNMENT_DOCUMENT_UPLOAD, formData);
+}
+
+/**
+ * Get the file download URL for a government document.
+ */
+export function getGovernmentDocumentFileUrl(documentId: string): string {
+  return `${process.env.NEXT_PUBLIC_GIBBON_URL || 'http://localhost:8080/gibbon'}${ENDPOINTS.GOVERNMENT_DOCUMENT_FILE(documentId)}`;
+}
+
+/**
+ * Delete a government document.
+ */
+export async function deleteGovernmentDocument(documentId: string): Promise<void> {
+  return gibbonClient.delete<void>(ENDPOINTS.GOVERNMENT_DOCUMENT(documentId));
+}
+
+/**
+ * Get documents requiring attention (missing, expired, or expiring soon).
+ */
+export async function getGovernmentDocumentsRequiringAttention(): Promise<GovernmentDocument[]> {
+  const [missing, expired, pendingVerification] = await Promise.all([
+    getGovernmentDocuments({ status: 'missing' }),
+    getGovernmentDocuments({ status: 'expired' }),
+    getGovernmentDocuments({ status: 'pending_verification' }),
+  ]);
+
+  return [...missing.items, ...expired.items, ...pendingVerification.items];
 }
 
 // ============================================================================

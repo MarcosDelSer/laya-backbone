@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         cacheDirectory=".phpunit.cache"
+         beStrictAboutOutputDuringTests="true"
+         beStrictAboutTestsThatDoNotTestAnything="false">
+    <testsuites>
+        <testsuite name="System Module Tests">
+            <directory>modules/System/tests</directory>
+        </testsuite>
+        <testsuite name="AISync Module Tests">
+            <directory>modules/AISync/tests</directory>
+        </testsuite>
+        <testsuite name="NotificationEngine Module Tests">
+            <directory>modules/NotificationEngine/tests</directory>
+        </testsuite>
+        <testsuite name="PhotoManagement Module Tests">
+            <directory>modules/PhotoManagement/tests</directory>
+        </testsuite>
+        <testsuite name="CareTracking Module Tests">
+            <directory>modules/CareTracking/tests</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory suffix=".php">modules/System/Domain</directory>
+            <directory suffix=".php">modules/AISync/Domain</directory>
+            <directory suffix=".php">modules/NotificationEngine/Domain</directory>
+            <directory suffix=".php">modules/PhotoManagement/Domain</directory>
+            <directory suffix=".php">modules/CareTracking/Domain</directory>
+        </include>
+        <exclude>
+            <directory>modules/*/tests</directory>
+            <directory>vendor</directory>
+        </exclude>
+    </source>
+    <coverage>
+        <report>
+            <text outputFile="php://stdout" showUncoveredFiles="true"/>
+            <html outputDirectory="coverage"/>
+        </report>
+    </coverage>
+    <php>
+        <ini name="display_errors" value="1"/>
+        <ini name="error_reporting" value="-1"/>
+        <ini name="memory_limit" value="-1"/>
+    </php>
+</phpunit>

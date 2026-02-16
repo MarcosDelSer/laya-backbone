@@ -70,8 +70,6 @@ export async function login(
   const response = await api.post<LoginResponse>(
     API_CONFIG.endpoints.auth.login,
     credentials,
-    undefined,
-    'gibbon',
   );
 
   // If login successful, set the session token for subsequent requests
@@ -100,9 +98,6 @@ export async function login(
 export async function logout(): Promise<ApiResponse<void>> {
   const response = await api.post<void>(
     API_CONFIG.endpoints.auth.logout,
-    undefined,
-    undefined,
-    'gibbon',
   );
 
   // Clear session token regardless of server response
@@ -136,8 +131,6 @@ export async function refreshAccessToken(
   const response = await api.post<RefreshResponse>(
     API_CONFIG.endpoints.auth.refresh,
     {refreshToken},
-    undefined,
-    'gibbon',
   );
 
   // Update session token on successful refresh
@@ -162,7 +155,7 @@ export async function refreshAccessToken(
  * ```
  */
 export async function getCurrentUser(): Promise<ApiResponse<Parent>> {
-  return api.get<Parent>(API_CONFIG.endpoints.auth.me, undefined, 'gibbon');
+  return api.get<Parent>(API_CONFIG.endpoints.auth.me);
 }
 
 /**
