@@ -801,6 +801,450 @@ class MessageQualityService:
         # Ensure score stays within bounds
         return max(0, min(100, score))
 
+    def suggest_rewrite(
+        self,
+        message_text: str,
+        issues: list[QualityIssueDetail],
+        language: Language,
+        child_name: Optional[str] = None,
+    ) -> RewriteSuggestion:
+        """Generate a rewrite suggestion using 'I' language and sandwich method.
+
+        Transforms problematic messages into positive, constructive communication
+        using two key techniques:
+        1. 'I' language transformation - replaces accusatory 'you' statements
+           with 'I' observations (e.g., "You never..." becomes "I noticed...")
+        2. Sandwich method - structures message with:
+           - Positive opening (genuine acknowledgment)
+           - Factual concern (specific observation without judgment)
+           - Solution-oriented closing (collaborative next steps)
+
+        Args:
+            message_text: The original message text to rewrite
+            issues: List of detected quality issues to address
+            language: Language for the rewritten message
+            child_name: Optional child's name for personalization
+
+        Returns:
+            RewriteSuggestion with the improved message and explanation
+        """
+        if not message_text or not message_text.strip():
+            # Return minimal suggestion for empty input
+            return RewriteSuggestion(
+                original_text=message_text or "",
+                suggested_text="",
+                explanation="No message text provided to rewrite.",
+                uses_i_language=False,
+                has_sandwich_structure=False,
+                confidence_score=0.0,
+            )
+
+        # Extract the core concern from the original message
+        core_concern = self._extract_core_concern(message_text, language)
+
+        # Build sandwich structure components
+        positive_opening = self._generate_positive_opening(
+            message_text=message_text,
+            language=language,
+            child_name=child_name,
+        )
+
+        factual_observation = self._transform_to_i_language(
+            text=core_concern,
+            issues=issues,
+            language=language,
+        )
+
+        solution_closing = self._generate_solution_closing(
+            issues=issues,
+            language=language,
+        )
+
+        # Combine into sandwich structure
+        suggested_text = self._build_sandwich_message(
+            positive_opening=positive_opening,
+            factual_observation=factual_observation,
+            solution_closing=solution_closing,
+            language=language,
+        )
+
+        # Generate explanation based on issues addressed
+        explanation = self._generate_rewrite_explanation(
+            issues=issues,
+            language=language,
+        )
+
+        # Calculate confidence based on number and severity of issues
+        confidence_score = self._calculate_rewrite_confidence(issues)
+
+        return RewriteSuggestion(
+            original_text=message_text,
+            suggested_text=suggested_text,
+            explanation=explanation,
+            uses_i_language=True,
+            has_sandwich_structure=True,
+            confidence_score=confidence_score,
+        )
+
+    def _extract_core_concern(
+        self,
+        message_text: str,
+        language: Language,
+    ) -> str:
+        """Extract the core concern or observation from a message.
+
+        Strips away accusatory language and emotional content to find
+        the underlying factual observation.
+
+        Args:
+            message_text: The original message text
+            language: Language of the message
+
+        Returns:
+            The core concern extracted from the message
+        """
+        text = message_text.strip()
+
+        # Remove common accusatory openings
+        if language == Language.FR:
+            accusatory_starts = [
+                r"^vous\s+(?:devez|devriez|n'avez\s+pas|avez\s+oublié)",
+                r"^votre\s+enfant\s+(?:ne\s+)?(?:fait|peut|veut)",
+                r"^il\s+faut\s+que\s+vous",
+                r"^pourquoi\s+(?:vous|votre)",
+            ]
+        else:
+            accusatory_starts = [
+                r"^you\s+(?:need\s+to|have\s+to|should|must|never|always|don't|didn't|can't)",
+                r"^your\s+child\s+(?:is\s+)?(?:always|never|can't|won't)",
+                r"^why\s+(?:don't|didn't|can't|won't)\s+you",
+            ]
+
+        result = text
+        for pattern in accusatory_starts:
+            result = re.sub(pattern, "", result, flags=re.IGNORECASE).strip()
+
+        # If we stripped too much, return original with first char lowered
+        if len(result) < 10 and len(text) > 10:
+            result = text[0].lower() + text[1:] if text else text
+
+        return result
+
+    def _transform_to_i_language(
+        self,
+        text: str,
+        issues: list[QualityIssueDetail],
+        language: Language,
+    ) -> str:
+        """Transform text to use 'I' language instead of accusatory 'you'.
+
+        Applies 'I' language transformation patterns to convert accusatory
+        statements into observations from the speaker's perspective.
+
+        Args:
+            text: The text to transform
+            issues: Detected issues that may guide transformation
+            language: Language for the transformation
+
+        Returns:
+            Text transformed to use 'I' language
+        """
+        result = text
+
+        if language == Language.FR:
+            # French 'I' language transformations
+            transformations = [
+                # "Vous devez/devriez" -> "J'aimerais"
+                (r"\bvous\s+devez\b", "j'aimerais que nous"),
+                (r"\bvous\s+devriez\b", "je suggère que vous"),
+                # "Vous n'avez pas" -> "J'ai remarqué que"
+                (r"\bvous\s+n'avez\s+pas\b", "j'ai remarqué que vous n'avez pas"),
+                # "Votre enfant est/fait" -> "J'ai observé que"
+                (r"\bvotre\s+enfant\s+(?:est|fait)\b", "j'ai observé que votre enfant"),
+                # "Il faut que vous" -> "Je vous invite à"
+                (r"\bil\s+faut\s+que\s+vous\b", "je vous invite à"),
+                # Exaggerations
+                (r"\btoujours\b", "souvent"),
+                (r"\bjamais\b", "rarement"),
+            ]
+        else:
+            # English 'I' language transformations
+            transformations = [
+                # "You need to/have to" -> "I would like"
+                (r"\byou\s+need\s+to\b", "I would like us to"),
+                (r"\byou\s+have\s+to\b", "I hope we can"),
+                (r"\byou\s+should\b", "I suggest"),
+                (r"\byou\s+must\b", "I believe it would help if we"),
+                # "You don't/didn't/can't" -> "I noticed"
+                (r"\byou\s+don't\b", "I noticed that you don't"),
+                (r"\byou\s+didn't\b", "I noticed that you didn't"),
+                (r"\byou\s+can't\b", "I understand that you may find it difficult to"),
+                (r"\byou\s+won't\b", "I've observed that you haven't"),
+                # "Your child is/does" -> "I observed"
+                (r"\byour\s+child\s+(?:is|does)\b", "I observed that your child"),
+                (r"\byour\s+child\s+always\b", "I've noticed your child often"),
+                (r"\byour\s+child\s+never\b", "I've noticed your child rarely"),
+                # Exaggerations
+                (r"\balways\b", "often"),
+                (r"\bnever\b", "rarely"),
+                (r"\bevery\s+time\b", "frequently"),
+            ]
+
+        for pattern, replacement in transformations:
+            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+
+        # Ensure first character is properly capitalized
+        if result:
+            result = result[0].upper() + result[1:] if len(result) > 1 else result.upper()
+
+        return result
+
+    def _generate_positive_opening(
+        self,
+        message_text: str,
+        language: Language,
+        child_name: Optional[str] = None,
+    ) -> str:
+        """Generate a positive opening for the sandwich method.
+
+        Creates a genuine positive acknowledgment to start the message
+        on a supportive note.
+
+        Args:
+            message_text: The original message for context
+            language: Language for the opening
+            child_name: Optional child's name for personalization
+
+        Returns:
+            A positive opening statement
+        """
+        # Use child name if provided, otherwise generic
+        name_ref = child_name or (
+            "votre enfant" if language == Language.FR else "your child"
+        )
+
+        if language == Language.FR:
+            openings = [
+                f"J'apprécie vraiment votre engagement envers {name_ref}.",
+                f"Merci de prendre le temps de lire ce message concernant {name_ref}.",
+                f"Je suis reconnaissant(e) de pouvoir travailler avec vous pour soutenir {name_ref}.",
+                f"Nous apprécions toujours votre collaboration pour le bien-être de {name_ref}.",
+            ]
+        else:
+            openings = [
+                f"I truly appreciate your dedication to {name_ref}.",
+                f"Thank you for taking the time to read this message about {name_ref}.",
+                f"I'm grateful for the opportunity to work with you to support {name_ref}.",
+                f"We always appreciate your partnership in {name_ref}'s well-being.",
+            ]
+
+        # Select opening based on message content hash for consistency
+        opening_index = hash(message_text) % len(openings)
+        return openings[opening_index]
+
+    def _generate_solution_closing(
+        self,
+        issues: list[QualityIssueDetail],
+        language: Language,
+    ) -> str:
+        """Generate a solution-oriented closing for the sandwich method.
+
+        Creates a collaborative, forward-looking closing that invites
+        partnership and focuses on solutions.
+
+        Args:
+            issues: Detected issues that may inform the solution approach
+            language: Language for the closing
+
+        Returns:
+            A solution-oriented closing statement
+        """
+        # Determine if this is a behavior concern based on issues
+        is_behavior_concern = any(
+            issue.issue_type in [
+                QualityIssue.BLAME_SHAME,
+                QualityIssue.JUDGMENTAL_LABEL,
+            ]
+            for issue in issues
+        )
+
+        if language == Language.FR:
+            if is_behavior_concern:
+                closing = (
+                    "Je serais ravi(e) de discuter ensemble de stratégies "
+                    "que nous pourrions essayer. N'hésitez pas à me contacter "
+                    "pour en parler davantage."
+                )
+            else:
+                closing = (
+                    "Travaillons ensemble pour trouver la meilleure approche. "
+                    "Je suis disponible pour en discuter quand cela vous convient."
+                )
+        else:
+            if is_behavior_concern:
+                closing = (
+                    "I would love to discuss strategies we could try together. "
+                    "Please feel free to reach out so we can talk more about this."
+                )
+            else:
+                closing = (
+                    "Let's work together to find the best approach. "
+                    "I'm available to discuss this whenever it's convenient for you."
+                )
+
+        return closing
+
+    def _build_sandwich_message(
+        self,
+        positive_opening: str,
+        factual_observation: str,
+        solution_closing: str,
+        language: Language,
+    ) -> str:
+        """Build the final message using sandwich structure.
+
+        Combines the three parts of the sandwich method into a cohesive,
+        well-structured message.
+
+        Args:
+            positive_opening: The positive opening statement
+            factual_observation: The factual observation (core concern)
+            solution_closing: The solution-oriented closing
+            language: Language for connectors and formatting
+
+        Returns:
+            The complete sandwich-structured message
+        """
+        if language == Language.FR:
+            connector = "J'aimerais partager une observation : "
+        else:
+            connector = "I wanted to share an observation: "
+
+        # Ensure observation starts with lowercase after connector
+        if factual_observation:
+            observation = factual_observation[0].lower() + factual_observation[1:]
+        else:
+            observation = factual_observation
+
+        # Build the sandwich structure with proper spacing
+        parts = [
+            positive_opening,
+            connector + observation,
+            solution_closing,
+        ]
+
+        return "\n\n".join(parts)
+
+    def _generate_rewrite_explanation(
+        self,
+        issues: list[QualityIssueDetail],
+        language: Language,
+    ) -> str:
+        """Generate an explanation of the rewrite changes.
+
+        Explains what improvements were made and why, helping educators
+        learn to write better messages.
+
+        Args:
+            issues: The issues that were addressed
+            language: Language for the explanation
+
+        Returns:
+            Explanation of the rewrite improvements
+        """
+        if not issues:
+            if language == Language.FR:
+                return "Le message a été restructuré selon la méthode sandwich pour une communication plus positive."
+            else:
+                return "The message has been restructured using the sandwich method for more positive communication."
+
+        # Get unique issue types
+        issue_types = list(set(issue.issue_type for issue in issues))
+
+        if language == Language.FR:
+            improvements = []
+            for issue_type in issue_types[:3]:  # Limit to top 3 for readability
+                if issue_type == QualityIssue.ACCUSATORY_YOU:
+                    improvements.append("le langage accusateur 'vous' a été transformé en langage 'Je'")
+                elif issue_type == QualityIssue.JUDGMENTAL_LABEL:
+                    improvements.append("les étiquettes jugeantes ont été remplacées par des observations factuelles")
+                elif issue_type == QualityIssue.BLAME_SHAME:
+                    improvements.append("le blâme a été remplacé par une approche collaborative")
+                elif issue_type == QualityIssue.EXAGGERATION:
+                    improvements.append("les exagérations ont été atténuées avec des termes plus précis")
+                elif issue_type == QualityIssue.MISSING_POSITIVE:
+                    improvements.append("une ouverture positive a été ajoutée")
+                elif issue_type == QualityIssue.MISSING_SOLUTION:
+                    improvements.append("une conclusion orientée solution a été ajoutée")
+                else:
+                    improvements.append(f"le problème '{issue_type.value}' a été corrigé")
+
+            return (
+                "Cette réécriture améliore le message en utilisant la méthode sandwich "
+                f"(ouverture positive, observation factuelle, conclusion collaborative). "
+                f"Améliorations spécifiques : {'; '.join(improvements)}."
+            )
+        else:
+            improvements = []
+            for issue_type in issue_types[:3]:  # Limit to top 3 for readability
+                if issue_type == QualityIssue.ACCUSATORY_YOU:
+                    improvements.append("accusatory 'you' language transformed to 'I' language")
+                elif issue_type == QualityIssue.JUDGMENTAL_LABEL:
+                    improvements.append("judgmental labels replaced with factual observations")
+                elif issue_type == QualityIssue.BLAME_SHAME:
+                    improvements.append("blame replaced with collaborative approach")
+                elif issue_type == QualityIssue.EXAGGERATION:
+                    improvements.append("exaggerations softened with more precise terms")
+                elif issue_type == QualityIssue.MISSING_POSITIVE:
+                    improvements.append("positive opening added")
+                elif issue_type == QualityIssue.MISSING_SOLUTION:
+                    improvements.append("solution-oriented closing added")
+                else:
+                    improvements.append(f"'{issue_type.value}' issue addressed")
+
+            return (
+                "This rewrite improves the message using the sandwich method "
+                f"(positive opening, factual observation, collaborative closing). "
+                f"Specific improvements: {'; '.join(improvements)}."
+            )
+
+    def _calculate_rewrite_confidence(
+        self,
+        issues: list[QualityIssueDetail],
+    ) -> float:
+        """Calculate confidence score for the rewrite suggestion.
+
+        Higher confidence for simpler messages with fewer issues,
+        lower confidence for complex messages with many issues.
+
+        Args:
+            issues: List of detected issues
+
+        Returns:
+            Confidence score between 0.0 and 1.0
+        """
+        if not issues:
+            return 0.95
+
+        # Base confidence starts high and decreases with issue count
+        base_confidence = 0.9
+        issue_penalty = len(issues) * 0.05
+
+        # Higher severity issues reduce confidence more
+        severity_penalty = 0.0
+        for issue in issues:
+            if issue.severity == IssueSeverity.CRITICAL:
+                severity_penalty += 0.1
+            elif issue.severity == IssueSeverity.HIGH:
+                severity_penalty += 0.05
+            elif issue.severity == IssueSeverity.MEDIUM:
+                severity_penalty += 0.02
+
+        confidence = base_confidence - issue_penalty - severity_penalty
+
+        # Ensure confidence stays in valid range
+        return max(0.5, min(1.0, confidence))
+
     def _generate_rewrite_suggestions(
         self,
         message_text: str,
@@ -824,71 +1268,15 @@ class MessageQualityService:
 
         # Generate suggestion for the overall message if there are issues
         if issues:
-            suggestion = self._create_message_rewrite(
+            suggestion = self.suggest_rewrite(
                 message_text=message_text,
                 issues=issues,
                 language=language,
             )
-            if suggestion:
+            if suggestion and suggestion.suggested_text:
                 suggestions.append(suggestion)
 
         return suggestions
-
-    def _create_message_rewrite(
-        self,
-        message_text: str,
-        issues: list[QualityIssueDetail],
-        language: Language,
-    ) -> Optional[RewriteSuggestion]:
-        """Create a rewrite suggestion for the message.
-
-        This is a placeholder implementation. In production, this would
-        use AI to generate contextually appropriate rewrites.
-
-        Args:
-            message_text: The original message text
-            issues: List of detected quality issues
-            language: Language for the suggestion
-
-        Returns:
-            RewriteSuggestion or None if no rewrite is needed
-        """
-        if not issues:
-            return None
-
-        # Get the most severe issue type for explanation
-        most_severe = max(issues, key=lambda i: {
-            IssueSeverity.CRITICAL: 4,
-            IssueSeverity.HIGH: 3,
-            IssueSeverity.MEDIUM: 2,
-            IssueSeverity.LOW: 1,
-        }[i.severity])
-
-        if language == Language.FR:
-            explanation = (
-                f"Cette réécriture aborde le problème de '{most_severe.issue_type.value}' "
-                f"en utilisant le langage 'Je' et une approche constructive."
-            )
-            suggested_prefix = "J'ai remarqué que "
-        else:
-            explanation = (
-                f"This rewrite addresses the '{most_severe.issue_type.value}' issue "
-                f"by using 'I' language and a constructive approach."
-            )
-            suggested_prefix = "I noticed that "
-
-        # Create a simple rewrite suggestion
-        # In production, this would be generated by AI
-        suggested_text = suggested_prefix + message_text.lower()
-
-        return RewriteSuggestion(
-            original_text=message_text,
-            suggested_text=suggested_text,
-            explanation=explanation,
-            uses_i_language=True,
-            has_sandwich_structure=False,
-            confidence_score=0.7,
-        )
 
     def _generate_analysis_notes(
         self,
