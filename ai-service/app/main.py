@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.dependencies import get_current_user
-from app.middleware import CacheHeadersMiddleware
+from app.middleware import CacheHeadersMiddleware, GzipCompressionMiddleware
 from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
@@ -31,6 +31,11 @@ app.add_middleware(
 
 # Configure cache headers middleware for static asset optimization
 app.add_middleware(CacheHeadersMiddleware)
+
+# Configure gzip compression middleware for response size optimization
+# Note: This should be added last (closest to app) to compress all responses
+# including headers added by other middleware
+app.add_middleware(GzipCompressionMiddleware, minimum_size=500, compresslevel=6)
 
 # Register API routers
 app.include_router(coaching.router, prefix="/api/v1/coaching", tags=["coaching"])
