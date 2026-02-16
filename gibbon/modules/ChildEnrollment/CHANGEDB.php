@@ -1,0 +1,253 @@
+<?php
+/*
+Gibbon: the flexible, open school platform
+Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
+Copyright © 2010, Gibbon Foundation
+Gibbon™, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+// Child Enrollment Module - Database Change Log
+// USE ;end TO SEPARATE SQL STATEMENTS. DON'T USE ;end IN ANY OTHER PLACES!
+
+$sql = array();
+$count = 0;
+
+// v1.0.00 - Initial release - Quebec-compliant Fiche d'Inscription
+++$count;
+$sql[$count][0] = '1.0.00';
+$sql[$count][1] = "
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentForm` (
+    `gibbonChildEnrollmentFormID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonPersonID` INT UNSIGNED NOT NULL COMMENT 'Child being enrolled',
+    `gibbonFamilyID` INT UNSIGNED NOT NULL COMMENT 'Family of the child',
+    `gibbonSchoolYearID` INT UNSIGNED NOT NULL,
+    `formNumber` VARCHAR(50) NOT NULL UNIQUE,
+    `status` ENUM('Draft','Submitted','Approved','Rejected','Expired') NOT NULL DEFAULT 'Draft',
+    `version` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Document version number',
+    `admissionDate` DATE NULL COMMENT 'Expected admission date',
+    `childFirstName` VARCHAR(100) NOT NULL,
+    `childLastName` VARCHAR(100) NOT NULL,
+    `childDateOfBirth` DATE NOT NULL,
+    `childAddress` VARCHAR(255) NULL,
+    `childCity` VARCHAR(100) NULL,
+    `childPostalCode` VARCHAR(20) NULL,
+    `languagesSpoken` VARCHAR(255) NULL COMMENT 'Comma-separated list of languages',
+    `notes` TEXT NULL,
+    `submittedAt` DATETIME NULL,
+    `approvedAt` DATETIME NULL,
+    `approvedByID` INT UNSIGNED NULL COMMENT 'Staff who approved',
+    `rejectedAt` DATETIME NULL,
+    `rejectedByID` INT UNSIGNED NULL COMMENT 'Staff who rejected',
+    `rejectionReason` TEXT NULL,
+    `createdByID` INT UNSIGNED NOT NULL COMMENT 'User who created the form',
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_person` (`gibbonPersonID`),
+    INDEX `idx_family` (`gibbonFamilyID`),
+    INDEX `idx_school_year` (`gibbonSchoolYearID`),
+    INDEX `idx_status` (`status`),
+    INDEX `idx_admission_date` (`admissionDate`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentParent` (
+    `gibbonChildEnrollmentParentID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonChildEnrollmentFormID` INT UNSIGNED NOT NULL,
+    `parentNumber` ENUM('1','2') NOT NULL COMMENT 'Parent 1 or Parent 2',
+    `name` VARCHAR(150) NOT NULL,
+    `relationship` VARCHAR(50) NOT NULL COMMENT 'Mother, Father, Guardian, etc.',
+    `address` VARCHAR(255) NULL,
+    `city` VARCHAR(100) NULL,
+    `postalCode` VARCHAR(20) NULL,
+    `homePhone` VARCHAR(30) NULL,
+    `cellPhone` VARCHAR(30) NULL,
+    `workPhone` VARCHAR(30) NULL,
+    `email` VARCHAR(150) NULL,
+    `employer` VARCHAR(150) NULL,
+    `workAddress` VARCHAR(255) NULL,
+    `workHours` VARCHAR(100) NULL COMMENT 'e.g., 9AM-5PM',
+    `isPrimaryContact` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_form` (`gibbonChildEnrollmentFormID`),
+    INDEX `idx_parent_number` (`parentNumber`),
+    CONSTRAINT `fk_parent_form` FOREIGN KEY (`gibbonChildEnrollmentFormID`)
+        REFERENCES `gibbonChildEnrollmentForm`(`gibbonChildEnrollmentFormID`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentAuthorizedPickup` (
+    `gibbonChildEnrollmentAuthorizedPickupID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonChildEnrollmentFormID` INT UNSIGNED NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `relationship` VARCHAR(50) NOT NULL,
+    `phone` VARCHAR(30) NOT NULL,
+    `photoPath` VARCHAR(255) NULL COMMENT 'Path to uploaded photo',
+    `priority` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Order of priority',
+    `notes` TEXT NULL,
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_form` (`gibbonChildEnrollmentFormID`),
+    INDEX `idx_priority` (`priority`),
+    CONSTRAINT `fk_pickup_form` FOREIGN KEY (`gibbonChildEnrollmentFormID`)
+        REFERENCES `gibbonChildEnrollmentForm`(`gibbonChildEnrollmentFormID`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentEmergencyContact` (
+    `gibbonChildEnrollmentEmergencyContactID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonChildEnrollmentFormID` INT UNSIGNED NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `relationship` VARCHAR(50) NOT NULL,
+    `phone` VARCHAR(30) NOT NULL,
+    `alternatePhone` VARCHAR(30) NULL,
+    `priority` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Order of priority for contact',
+    `notes` TEXT NULL,
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_form` (`gibbonChildEnrollmentFormID`),
+    INDEX `idx_priority` (`priority`),
+    CONSTRAINT `fk_emergency_form` FOREIGN KEY (`gibbonChildEnrollmentFormID`)
+        REFERENCES `gibbonChildEnrollmentForm`(`gibbonChildEnrollmentFormID`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentHealth` (
+    `gibbonChildEnrollmentHealthID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonChildEnrollmentFormID` INT UNSIGNED NOT NULL,
+    `allergies` TEXT NULL COMMENT 'JSON array of allergies with details',
+    `medicalConditions` TEXT NULL COMMENT 'Description of medical conditions',
+    `hasEpiPen` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `epiPenInstructions` TEXT NULL COMMENT 'Instructions for EpiPen use',
+    `medications` TEXT NULL COMMENT 'JSON array of medications with dosage and schedule',
+    `doctorName` VARCHAR(150) NULL,
+    `doctorPhone` VARCHAR(30) NULL,
+    `doctorAddress` VARCHAR(255) NULL,
+    `healthInsuranceNumber` VARCHAR(50) NULL COMMENT 'Quebec RAMQ number',
+    `healthInsuranceExpiry` DATE NULL,
+    `specialNeeds` TEXT NULL COMMENT 'Description of special needs',
+    `developmentalNotes` TEXT NULL COMMENT 'Developmental considerations',
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `idx_form_unique` (`gibbonChildEnrollmentFormID`),
+    CONSTRAINT `fk_health_form` FOREIGN KEY (`gibbonChildEnrollmentFormID`)
+        REFERENCES `gibbonChildEnrollmentForm`(`gibbonChildEnrollmentFormID`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentNutrition` (
+    `gibbonChildEnrollmentNutritionID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonChildEnrollmentFormID` INT UNSIGNED NOT NULL,
+    `dietaryRestrictions` TEXT NULL COMMENT 'Dietary restrictions (religious, cultural, etc.)',
+    `foodAllergies` TEXT NULL COMMENT 'Food allergies (separate from medical allergies)',
+    `feedingInstructions` TEXT NULL COMMENT 'Special feeding instructions',
+    `isBottleFeeding` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `bottleFeedingInfo` TEXT NULL COMMENT 'Bottle feeding details (formula type, schedule)',
+    `foodPreferences` TEXT NULL COMMENT 'Foods the child likes',
+    `foodDislikes` TEXT NULL COMMENT 'Foods the child dislikes',
+    `mealPlanNotes` TEXT NULL,
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `idx_form_unique` (`gibbonChildEnrollmentFormID`),
+    CONSTRAINT `fk_nutrition_form` FOREIGN KEY (`gibbonChildEnrollmentFormID`)
+        REFERENCES `gibbonChildEnrollmentForm`(`gibbonChildEnrollmentFormID`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentAttendance` (
+    `gibbonChildEnrollmentAttendanceID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonChildEnrollmentFormID` INT UNSIGNED NOT NULL,
+    `mondayAm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `mondayPm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `tuesdayAm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `tuesdayPm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `wednesdayAm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `wednesdayPm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `thursdayAm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `thursdayPm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `fridayAm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `fridayPm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `saturdayAm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `saturdayPm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `sundayAm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `sundayPm` ENUM('Y','N') NOT NULL DEFAULT 'N',
+    `expectedHoursPerWeek` DECIMAL(4,1) NULL COMMENT 'Expected hours per week',
+    `expectedArrivalTime` TIME NULL,
+    `expectedDepartureTime` TIME NULL,
+    `notes` TEXT NULL,
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `idx_form_unique` (`gibbonChildEnrollmentFormID`),
+    CONSTRAINT `fk_attendance_form` FOREIGN KEY (`gibbonChildEnrollmentFormID`)
+        REFERENCES `gibbonChildEnrollmentForm`(`gibbonChildEnrollmentFormID`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentSignature` (
+    `gibbonChildEnrollmentSignatureID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonChildEnrollmentFormID` INT UNSIGNED NOT NULL,
+    `signatureType` ENUM('Parent1','Parent2','Director') NOT NULL,
+    `signatureData` MEDIUMTEXT NOT NULL COMMENT 'Base64-encoded signature image (SVG or PNG)',
+    `signerName` VARCHAR(150) NOT NULL COMMENT 'Name of person who signed',
+    `signedAt` DATETIME NOT NULL,
+    `ipAddress` VARCHAR(45) NULL COMMENT 'IP address at time of signing',
+    `userAgent` VARCHAR(255) NULL COMMENT 'Browser/device info',
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_form` (`gibbonChildEnrollmentFormID`),
+    INDEX `idx_signature_type` (`signatureType`),
+    INDEX `idx_signed_at` (`signedAt`),
+    UNIQUE KEY `idx_form_type` (`gibbonChildEnrollmentFormID`, `signatureType`),
+    CONSTRAINT `fk_signature_form` FOREIGN KEY (`gibbonChildEnrollmentFormID`)
+        REFERENCES `gibbonChildEnrollmentForm`(`gibbonChildEnrollmentFormID`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonChildEnrollmentAudit` (
+    `gibbonChildEnrollmentAuditID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonChildEnrollmentFormID` INT UNSIGNED NOT NULL,
+    `action` ENUM('Created','Updated','StatusChange','Signed','Viewed','Exported','Deleted') NOT NULL,
+    `fieldName` VARCHAR(100) NULL COMMENT 'Field that was changed (for updates)',
+    `oldValue` TEXT NULL COMMENT 'Previous value',
+    `newValue` TEXT NULL COMMENT 'New value',
+    `performedByID` INT UNSIGNED NOT NULL COMMENT 'User who performed the action',
+    `ipAddress` VARCHAR(45) NULL,
+    `userAgent` VARCHAR(255) NULL,
+    `notes` TEXT NULL,
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_form` (`gibbonChildEnrollmentFormID`),
+    INDEX `idx_action` (`action`),
+    INDEX `idx_performed_by` (`performedByID`),
+    INDEX `idx_timestamp` (`timestampCreated`),
+    CONSTRAINT `fk_audit_form` FOREIGN KEY (`gibbonChildEnrollmentFormID`)
+        REFERENCES `gibbonChildEnrollmentForm`(`gibbonChildEnrollmentFormID`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'formNumberPrefix', 'Form Number Prefix', 'Prefix for generated form numbers (e.g., ENR-)', 'ENR-') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'requireBothParentSignatures', 'Require Both Parent Signatures', 'Require signatures from both parents (Y/N)', 'N') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'requireDirectorSignature', 'Require Director Signature', 'Require director signature for approval (Y/N)', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'formExpiryDays', 'Form Expiry Days', 'Number of days before a draft form expires', '30') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'minEmergencyContacts', 'Minimum Emergency Contacts', 'Minimum number of emergency contacts required', '2') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'minAuthorizedPickups', 'Minimum Authorized Pickups', 'Minimum number of authorized pickup persons required', '1') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'facilityName', 'Facility Name', 'Name of the childcare facility for PDF documents', '') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'facilityAddress', 'Facility Address', 'Address of the childcare facility for PDF documents', '') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'facilityPhone', 'Facility Phone', 'Phone number of the childcare facility', '') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Child Enrollment', 'facilityPermitNumber', 'Facility Permit Number', 'Quebec Ministry of Family permit number', '') ON DUPLICATE KEY UPDATE scope=scope;end
+";
+
+// v1.0.01 - Placeholder for future bug fixes
+++$count;
+$sql[$count][0] = '1.0.01';
+$sql[$count][1] = "";
