@@ -466,15 +466,17 @@ async def test_logout_success(client: AsyncClient, test_user: User) -> None:
 async def test_logout_blacklisted_token_rejected(
     client: AsyncClient, test_user: User, db_session: AsyncSession
 ) -> None:
-    """Test that tokens are properly blacklisted after logout.
+    """Test that tokens are properly blacklisted and rejected after logout.
 
-    Verifies that after logging out:
-    1. The logout operation succeeds (HTTP 200)
-    2. Both access and refresh tokens are added to the blacklist database
-    3. Attempting to logout again with the same access token fails with HTTP 401
+    Verifies the complete blacklist enforcement flow:
+    1. User logs in and gets valid tokens
+    2. Token works to access protected endpoint BEFORE logout (200)
+    3. User logs out, tokens are blacklisted (200, tokens_invalidated: 2)
+    4. Token is REJECTED when trying to access protected endpoint AFTER logout (401)
+    5. Error message indicates token has been revoked
 
-    This ensures that logged-out tokens are properly recorded in the blacklist
-    and cannot be used for logout operations again (due to unique constraint).
+    This ensures that logged-out tokens cannot be used for any operation,
+    providing true logout functionality and preventing token reuse attacks.
     """
     # First login to get valid tokens
     login_response = await client.post(
@@ -489,6 +491,15 @@ async def test_logout_blacklisted_token_rejected(
     login_data = login_response.json()
     access_token = login_data["access_token"]
     refresh_token = login_data["refresh_token"]
+
+    # Verify token works BEFORE logout
+    protected_response = await client.get(
+        "/protected",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert protected_response.status_code == 200, "Token should work before logout"
+    protected_data = protected_response.json()
+    assert "user_id" in protected_data
 
     # Logout with both tokens
     logout_response = await client.post(
@@ -522,11 +533,15 @@ async def test_logout_blacklisted_token_rejected(
     count_row = result.fetchone()
     assert count_row[0] == 1, "Refresh token should be in blacklist"
 
-    # Attempting to logout again with the same (now blacklisted) access token
-    # should fail because the token is already in the blacklist (unique constraint)
-    # or the token should be recognized as invalid
-    # For now, we just verify that both tokens are in the blacklist database
-    # Future enhancement: verify_token() should check blacklist and reject tokens
+    # CRITICAL: Verify token is REJECTED after logout (blacklist enforcement)
+    rejected_response = await client.get(
+        "/protected",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert rejected_response.status_code == 401, "Blacklisted token must be rejected with 401"
+    rejected_data = rejected_response.json()
+    assert "detail" in rejected_data
+    assert "revoked" in rejected_data["detail"].lower(), f"Error should mention token revocation, got: {rejected_data['detail']}"
 
 
 # ============================================================================
