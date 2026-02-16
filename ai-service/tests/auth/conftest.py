@@ -304,7 +304,7 @@ async def create_user_in_db(
             "password_hash": password_hash,
             "first_name": first_name,
             "last_name": last_name,
-            "role": role.value,
+            "role": role.name,  # Use enum name (TEACHER) not value (teacher)
             "is_active": 1 if is_active else 0,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
