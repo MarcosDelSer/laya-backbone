@@ -3,7 +3,7 @@
   "spec": "045-user-onboarding-wizard",
   "state": "building",
   "subtasks": {
-    "completed": 4,
+    "completed": 5,
     "total": 10,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 5,
+    "number": 6,
     "started_at": "2026-02-16T02:57:22.472291"
   },
-  "last_update": "2026-02-16T03:16:46.243437"
+  "last_update": "2026-02-16T03:21:13.560368"
 }
