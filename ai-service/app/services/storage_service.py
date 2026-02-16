@@ -4,14 +4,21 @@ Provides business logic for file upload, storage, and management.
 Implements local filesystem and S3 backend support with thumbnail generation.
 """
 
+import asyncio
 import hashlib
+import io
 import os
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Optional
 from uuid import UUID, uuid4
 
+import boto3
+from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
 from sqlalchemy import cast, func, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -62,6 +69,16 @@ class FileTooLargeError(StorageServiceError):
     pass
 
 
+class S3StorageError(StorageServiceError):
+    """Raised when S3 storage operation fails."""
+
+    pass
+
+
+# Thread pool for running sync S3 operations
+_s3_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="s3_")
+
+
 class StorageService:
     """Service class for file storage and management logic.
 
@@ -84,6 +101,51 @@ class StorageService:
         self._allowed_file_types = set(settings.allowed_file_types.split(","))
         self._storage_backend = StorageBackend(settings.storage_backend)
         self._default_quota_bytes = settings.storage_quota_mb * 1024 * 1024
+
+        # Initialize S3 client if using S3 backend
+        self._s3_client = None
+        self._s3_bucket_name = settings.s3_bucket_name
+        if self._storage_backend == StorageBackend.S3:
+            self._init_s3_client()
+
+    def _init_s3_client(self) -> None:
+        """Initialize the S3 client with configured credentials.
+
+        Creates a boto3 S3 client using settings from the application config.
+        Supports custom endpoints for S3-compatible services like MinIO.
+
+        Raises:
+            S3StorageError: If S3 configuration is missing or invalid.
+        """
+        if not self._s3_bucket_name:
+            raise S3StorageError(
+                "S3 bucket name is required when using S3 storage backend. "
+                "Set the S3_BUCKET_NAME environment variable."
+            )
+
+        # Build boto3 config
+        boto_config = BotoConfig(
+            signature_version="s3v4",
+            retries={"max_attempts": 3, "mode": "standard"},
+        )
+
+        # Build client arguments
+        client_kwargs = {
+            "service_name": "s3",
+            "region_name": settings.s3_region,
+            "config": boto_config,
+        }
+
+        # Add credentials if provided
+        if settings.s3_access_key_id and settings.s3_secret_access_key:
+            client_kwargs["aws_access_key_id"] = settings.s3_access_key_id
+            client_kwargs["aws_secret_access_key"] = settings.s3_secret_access_key
+
+        # Add custom endpoint if provided (for S3-compatible services)
+        if settings.s3_endpoint_url:
+            client_kwargs["endpoint_url"] = settings.s3_endpoint_url
+
+        self._s3_client = boto3.client(**client_kwargs)
 
     async def upload_file(
         self,
@@ -151,9 +213,8 @@ class StorageService:
                 file_content, stored_filename, owner_id
             )
         else:
-            # S3 support will be added in subtask-4-2
-            storage_path = await self._upload_to_local(
-                file_content, stored_filename, owner_id
+            storage_path = await self._upload_to_s3(
+                file_content, stored_filename, owner_id, content_type
             )
 
         # Create file record
@@ -215,8 +276,7 @@ class StorageService:
         if file_record.storage_backend == StorageBackend.LOCAL:
             file_content = await self._download_from_local(file_record.storage_path)
         else:
-            # S3 support will be added in subtask-4-2
-            file_content = await self._download_from_local(file_record.storage_path)
+            file_content = await self._download_from_s3(file_record.storage_path)
 
         return file_content, file_record
 
@@ -256,8 +316,10 @@ class StorageService:
             for thumbnail in file_record.thumbnails:
                 await self._delete_from_local(thumbnail.storage_path)
         else:
-            # S3 support will be added in subtask-4-2
-            await self._delete_from_local(file_record.storage_path)
+            await self._delete_from_s3(file_record.storage_path)
+            # Delete thumbnails if they exist
+            for thumbnail in file_record.thumbnails:
+                await self._delete_from_s3(thumbnail.storage_path)
 
         # Delete database record (thumbnails deleted via cascade)
         await self.db.delete(file_record)
@@ -588,3 +650,142 @@ class StorageService:
             Absolute Path object.
         """
         return self._local_storage_path / storage_path
+
+    # S3 storage methods
+
+    async def _upload_to_s3(
+        self,
+        content: bytes,
+        filename: str,
+        owner_id: UUID,
+        content_type: str,
+    ) -> str:
+        """Upload file to S3 storage.
+
+        Creates an owner-prefixed key structure and stores the file in S3.
+
+        Args:
+            content: File content as bytes.
+            filename: Stored filename.
+            owner_id: UUID of the owner for key organization.
+            content_type: MIME type of the file.
+
+        Returns:
+            S3 key path for the file.
+
+        Raises:
+            S3StorageError: If the upload fails.
+        """
+        if self._s3_client is None:
+            raise S3StorageError("S3 client not initialized")
+
+        # Create S3 key with owner prefix
+        s3_key = f"{owner_id}/{filename}"
+
+        # Run S3 upload in thread pool
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(
+                _s3_executor,
+                partial(
+                    self._s3_client.put_object,
+                    Bucket=self._s3_bucket_name,
+                    Key=s3_key,
+                    Body=content,
+                    ContentType=content_type,
+                ),
+            )
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            raise S3StorageError(
+                f"Failed to upload file to S3: {error_code} - {str(e)}"
+            ) from e
+
+        return s3_key
+
+    async def _download_from_s3(self, storage_path: str) -> bytes:
+        """Download file from S3 storage.
+
+        Args:
+            storage_path: S3 key of the file.
+
+        Returns:
+            File content as bytes.
+
+        Raises:
+            FileNotFoundError: If the file does not exist in S3.
+            S3StorageError: If the download fails.
+        """
+        if self._s3_client is None:
+            raise S3StorageError("S3 client not initialized")
+
+        loop = asyncio.get_event_loop()
+        try:
+            response = await loop.run_in_executor(
+                _s3_executor,
+                partial(
+                    self._s3_client.get_object,
+                    Bucket=self._s3_bucket_name,
+                    Key=storage_path,
+                ),
+            )
+            # Read the body content
+            body = response["Body"]
+            content = await loop.run_in_executor(
+                _s3_executor,
+                body.read,
+            )
+            return content
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            if error_code in ("NoSuchKey", "404"):
+                raise FileNotFoundError(
+                    f"File not found in S3: {storage_path}"
+                ) from e
+            raise S3StorageError(
+                f"Failed to download file from S3: {error_code} - {str(e)}"
+            ) from e
+
+    async def _delete_from_s3(self, storage_path: str) -> bool:
+        """Delete file from S3 storage.
+
+        Args:
+            storage_path: S3 key of the file.
+
+        Returns:
+            True if deletion was successful.
+
+        Raises:
+            S3StorageError: If the deletion fails.
+        """
+        if self._s3_client is None:
+            raise S3StorageError("S3 client not initialized")
+
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(
+                _s3_executor,
+                partial(
+                    self._s3_client.delete_object,
+                    Bucket=self._s3_bucket_name,
+                    Key=storage_path,
+                ),
+            )
+            return True
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            raise S3StorageError(
+                f"Failed to delete file from S3: {error_code} - {str(e)}"
+            ) from e
+
+    def _get_s3_key(self, owner_id: UUID, filename: str) -> str:
+        """Generate S3 key for a file.
+
+        Args:
+            owner_id: UUID of the owner.
+            filename: Stored filename.
+
+        Returns:
+            S3 key string.
+        """
+        return f"{owner_id}/{filename}"
