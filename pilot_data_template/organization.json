@@ -1,0 +1,29 @@
+{
+  "legal_name": "ABC Daycare Center Inc.",
+  "operating_name": "Little Stars Daycare",
+  "address": {
+    "street": "123 Main Street",
+    "city": "Toronto",
+    "province": "ON",
+    "postal_code": "M5V 1A1",
+    "country": "Canada"
+  },
+  "contact": {
+    "phone": "416-555-0100",
+    "fax": "416-555-0199",
+    "email": "info@littlestars.ca",
+    "website": "https://www.littlestars.ca"
+  },
+  "license_number": "ON-DC-12345",
+  "hours": {
+    "weekday_open": "07:00",
+    "weekday_close": "18:00",
+    "weekend": "Closed"
+  },
+  "capacity": {
+    "total": 60,
+    "infants": 15,
+    "toddlers": 20,
+    "preschool": 25
+  }
+}
