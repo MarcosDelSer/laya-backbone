@@ -26,6 +26,15 @@ Usage:
         duration=30,
         setting="indoor"
     )
+
+    # Coaching guidance prompts
+    from app.llm.prompts import CoachingGuidancePrompt
+    prompt = CoachingGuidancePrompt()
+    system, user = prompt.render(
+        educator_context="New educator",
+        age_group="3-4 years",
+        situation="Managing transitions"
+    )
 """
 
 from app.llm.prompts.activity_prompts import (
@@ -40,6 +49,11 @@ from app.llm.prompts.base import (
     PromptTemplateError,
     SystemUserPromptTemplate,
 )
+from app.llm.prompts.coaching_prompts import (
+    BehaviorGuidancePrompt,
+    CoachingGuidancePrompt,
+    ParentCommunicationPrompt,
+)
 from app.llm.prompts.report_prompts import DailyReportPrompt
 
 __all__ = [
@@ -53,6 +67,10 @@ __all__ = [
     "ActivityAdaptationPrompt",
     "ActivityRecommendationPrompt",
     "DailyPlanningPrompt",
+    # Coaching prompts
+    "BehaviorGuidancePrompt",
+    "CoachingGuidancePrompt",
+    "ParentCommunicationPrompt",
     # Report prompts
     "DailyReportPrompt",
 ]
