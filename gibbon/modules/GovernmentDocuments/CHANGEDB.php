@@ -133,4 +133,17 @@ ON DUPLICATE KEY UPDATE nameDisplay=nameDisplay;end
 INSERT INTO `gibbonGovernmentDocumentType` (`name`, `nameDisplay`, `description`, `category`, `required`, `expiryRequired`, `expiryWarningDays`, `sequenceNumber`, `active`)
 VALUES ('immunization_record', 'Immunization Record', 'Official immunization/vaccination record', 'Child', 'Y', 'N', NULL, 6, 'Y')
 ON DUPLICATE KEY UPDATE nameDisplay=nameDisplay;end
+
+-- Insert notification templates for government document events
+INSERT INTO `gibbonNotificationTemplate` (`type`, `nameDisplay`, `subjectTemplate`, `bodyTemplate`, `pushTitle`, `pushBody`, `active`)
+VALUES ('documentExpiring', 'Document Expiring', 'Document expiring soon for {{childName}}', 'Hello {{parentName}},\n\nThis is a reminder that the following document for {{childName}} will expire soon:\n\nDocument Type: {{documentType}}\nExpiry Date: {{expiryDate}}\nDays Remaining: {{daysRemaining}}\n\nPlease upload an updated document before the expiry date to ensure compliance.\n\nBest regards,\n{{schoolName}}', 'Document Expiring', '{{documentType}} for {{childName}} expires {{expiryDate}}', 'Y')
+ON DUPLICATE KEY UPDATE nameDisplay=nameDisplay;end
+
+INSERT INTO `gibbonNotificationTemplate` (`type`, `nameDisplay`, `subjectTemplate`, `bodyTemplate`, `pushTitle`, `pushBody`, `active`)
+VALUES ('documentMissing', 'Document Missing', 'Required document missing for {{childName}}', 'Hello {{parentName}},\n\nWe are missing the following required document for {{childName}}:\n\nDocument Type: {{documentType}}\nCategory: {{documentCategory}}\n\nPlease upload this document as soon as possible to ensure compliance with regulations.\n\nBest regards,\n{{schoolName}}', 'Document Missing', '{{documentType}} required for {{childName}}', 'Y')
+ON DUPLICATE KEY UPDATE nameDisplay=nameDisplay;end
+
+INSERT INTO `gibbonNotificationTemplate` (`type`, `nameDisplay`, `subjectTemplate`, `bodyTemplate`, `pushTitle`, `pushBody`, `active`)
+VALUES ('documentVerified', 'Document Verified', 'Document verified for {{childName}}', 'Hello {{parentName}},\n\nThe following document for {{childName}} has been verified:\n\nDocument Type: {{documentType}}\nVerified By: {{verifiedBy}}\nVerified At: {{verifiedAt}}\n\nThank you for submitting the required documentation.\n\nBest regards,\n{{schoolName}}', 'Document Verified', '{{documentType}} for {{childName}} verified', 'Y')
+ON DUPLICATE KEY UPDATE nameDisplay=nameDisplay;end
 ";
