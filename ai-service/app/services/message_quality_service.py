@@ -13,16 +13,20 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.message_quality import MessageAnalysis
+from app.models.message_quality import MessageAnalysis, MessageTemplate
 from app.schemas.message_quality import (
     IssueSeverity,
     Language,
     MessageAnalysisRequest,
     MessageAnalysisResponse,
     MessageContext,
+    MessageTemplateListResponse,
+    MessageTemplateRequest,
+    MessageTemplateResponse,
     QualityIssue,
     QualityIssueDetail,
     RewriteSuggestion,
+    TemplateCategory,
 )
 
 
@@ -329,6 +333,18 @@ class InvalidMessageError(MessageQualityServiceError):
 
 class AnalysisError(MessageQualityServiceError):
     """Raised when an error occurs during message analysis."""
+
+    pass
+
+
+class TemplateNotFoundError(MessageQualityServiceError):
+    """Raised when a requested template is not found."""
+
+    pass
+
+
+class InvalidTemplateError(MessageQualityServiceError):
+    """Raised when template data is invalid."""
 
     pass
 
@@ -1735,3 +1751,146 @@ class MessageQualityService:
         await self.db.refresh(analysis)
 
         return analysis
+
+    async def get_templates(
+        self,
+        language: Optional[Language] = None,
+        category: Optional[TemplateCategory] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> MessageTemplateListResponse:
+        """Get message templates with optional filtering.
+
+        Retrieves message templates that educators can use as starting points
+        for positive parent communication. Templates follow Quebec 'Bonne Message'
+        standards and are available in both English and French.
+
+        Args:
+            language: Optional filter by language (en or fr)
+            category: Optional filter by template category
+            limit: Maximum number of templates to return (default: 20)
+            offset: Number of templates to skip for pagination (default: 0)
+
+        Returns:
+            MessageTemplateListResponse with paginated list of templates
+        """
+        from sqlalchemy import select, func
+
+        # Build base query
+        query = select(MessageTemplate).where(MessageTemplate.is_active == True)
+
+        # Apply language filter
+        if language:
+            query = query.where(MessageTemplate.language == language.value)
+
+        # Apply category filter
+        if category:
+            query = query.where(MessageTemplate.category == category.value)
+
+        # Get total count for pagination
+        count_query = select(func.count()).select_from(
+            query.subquery()
+        )
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Apply ordering, limit and offset
+        query = query.order_by(
+            MessageTemplate.is_system.desc(),
+            MessageTemplate.usage_count.desc(),
+            MessageTemplate.created_at.desc(),
+        ).offset(offset).limit(limit)
+
+        result = await self.db.execute(query)
+        templates = result.scalars().all()
+
+        # Convert to response models
+        items = [
+            MessageTemplateResponse(
+                id=template.id,
+                title=template.title,
+                content=template.content,
+                category=TemplateCategory(template.category),
+                language=Language(template.language),
+                description=template.description,
+                is_system=template.is_system,
+                usage_count=template.usage_count,
+                created_at=template.created_at,
+                updated_at=template.updated_at,
+            )
+            for template in templates
+        ]
+
+        return MessageTemplateListResponse(
+            items=items,
+            total=total,
+            page=offset // limit + 1 if limit > 0 else 1,
+            page_size=limit,
+            has_more=offset + len(items) < total,
+        )
+
+    async def create_template(
+        self,
+        request: MessageTemplateRequest,
+        user: dict,
+    ) -> MessageTemplateResponse:
+        """Create a new custom message template.
+
+        Creates a custom message template that educators can use as a starting
+        point for positive parent communication. The template will be validated
+        against Quebec 'Bonne Message' standards before creation.
+
+        Args:
+            request: The template creation request containing:
+                - title: Title of the template
+                - content: Template content with optional placeholders
+                - category: Category of the template
+                - language: Language of the template
+                - description: Optional description of when to use this template
+            user: Authenticated user creating the template
+
+        Returns:
+            MessageTemplateResponse with the created template
+
+        Raises:
+            InvalidTemplateError: When template data is invalid
+        """
+        # Validate template content
+        if not request.title or not request.title.strip():
+            raise InvalidTemplateError("Template title cannot be empty")
+
+        if not request.content or not request.content.strip():
+            raise InvalidTemplateError("Template content cannot be empty")
+
+        # Get user ID from JWT token
+        user_id = UUID(user.get("sub", user.get("user_id")))
+
+        # Create the template
+        template = MessageTemplate(
+            title=request.title.strip(),
+            content=request.content.strip(),
+            category=request.category.value,
+            language=request.language.value,
+            description=request.description,
+            is_system=False,
+            is_active=True,
+            usage_count=0,
+            created_by=user_id,
+        )
+
+        self.db.add(template)
+        await self.db.commit()
+        await self.db.refresh(template)
+
+        return MessageTemplateResponse(
+            id=template.id,
+            title=template.title,
+            content=template.content,
+            category=TemplateCategory(template.category),
+            language=Language(template.language),
+            description=template.description,
+            is_system=template.is_system,
+            usage_count=template.usage_count,
+            created_at=template.created_at,
+            updated_at=template.updated_at,
+        )

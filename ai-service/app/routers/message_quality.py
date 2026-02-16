@@ -6,20 +6,26 @@ communication in daycare settings. All analysis results and suggestions
 are available in English and French for Quebec bilingual compliance.
 """
 
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas.message_quality import (
+    Language,
     MessageAnalysisRequest,
     MessageAnalysisResponse,
+    MessageTemplateListResponse,
+    MessageTemplateRequest,
+    MessageTemplateResponse,
+    TemplateCategory,
 )
 from app.services.message_quality_service import (
     AnalysisError,
     InvalidMessageError,
+    InvalidTemplateError,
     MessageQualityService,
     MessageQualityServiceError,
 )
@@ -89,6 +95,134 @@ async def analyze_message(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Analysis error: {str(e)}",
+        )
+    except MessageQualityServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Message quality service error: {str(e)}",
+        )
+
+
+@router.get("/templates", response_model=MessageTemplateListResponse)
+async def get_templates(
+    language: Optional[Language] = Query(
+        default=None,
+        description="Filter templates by language (en or fr)",
+    ),
+    category: Optional[TemplateCategory] = Query(
+        default=None,
+        description="Filter templates by category",
+    ),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of templates to return",
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="Number of templates to skip for pagination",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> MessageTemplateListResponse:
+    """Get message templates for positive parent communication.
+
+    Returns a paginated list of message templates that educators can use
+    as starting points for positive parent communication. Templates follow
+    Quebec 'Bonne Message' standards and are available in both English and
+    French for Quebec bilingual compliance.
+
+    Templates can be filtered by language and category to help educators
+    find the most relevant templates for their needs.
+
+    Args:
+        language: Optional filter by language (en or fr)
+        category: Optional filter by template category
+        limit: Maximum number of templates to return (default: 20, max: 100)
+        offset: Number of templates to skip for pagination (default: 0)
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        MessageTemplateListResponse containing:
+        - items: List of message templates
+        - total: Total number of templates matching filters
+        - page: Current page number
+        - page_size: Number of items per page
+        - has_more: Whether more templates are available
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessageQualityService(db)
+
+    try:
+        return await service.get_templates(
+            language=language,
+            category=category,
+            limit=limit,
+            offset=offset,
+        )
+    except MessageQualityServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Message quality service error: {str(e)}",
+        )
+
+
+@router.post("/templates", response_model=MessageTemplateResponse, status_code=status.HTTP_201_CREATED)
+async def create_template(
+    request: MessageTemplateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> MessageTemplateResponse:
+    """Create a custom message template.
+
+    Creates a new custom message template that educators can use as a
+    starting point for positive parent communication. The template should
+    follow Quebec 'Bonne Message' standards for positive communication.
+
+    Custom templates are associated with the creating user and are marked
+    as non-system templates. They can be used by the creator and, optionally,
+    shared with other educators.
+
+    Args:
+        request: The template creation request containing:
+            - title: Title of the template
+            - content: Template content with optional placeholders
+            - category: Category of the template
+            - language: Language of the template (default: English)
+            - description: Optional description of when to use this template
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        MessageTemplateResponse containing the created template:
+        - id: Unique identifier for the template
+        - title: Title of the template
+        - content: Template content
+        - category: Category of the template
+        - language: Language of the template
+        - description: Description of when to use this template
+        - is_system: Whether this is a system template (always False for custom)
+        - usage_count: Number of times the template has been used (starts at 0)
+
+    Raises:
+        HTTPException 400: When the template data is invalid
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessageQualityService(db)
+
+    try:
+        return await service.create_template(request, current_user)
+    except InvalidTemplateError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
         )
     except MessageQualityServiceError as e:
         raise HTTPException(
