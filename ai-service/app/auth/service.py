@@ -455,7 +455,14 @@ class AuthService:
             )
 
         # Validate token hasn't expired
-        if datetime.now(timezone.utc) > reset_token.expires_at:
+        # Handle both timezone-aware (PostgreSQL) and naive (SQLite) datetimes
+        current_time = datetime.now(timezone.utc)
+        expires_at = reset_token.expires_at
+        if expires_at.tzinfo is None:
+            # If expires_at is naive (SQLite), it's still stored as UTC
+            # so we need to make current_time naive UTC for comparison
+            current_time = datetime.utcnow()
+        if current_time > expires_at:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Reset token has expired",

@@ -169,6 +169,14 @@ export interface Parent {
   childIds: string[];
 }
 
+// Authentication State Types
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: Parent | null;
+  token: string | null;
+  loading: boolean;
+}
+
 // API Response Types
 export interface ApiResponse<T> {
   success: boolean;

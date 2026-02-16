@@ -1,289 +1,187 @@
-# Authentication Module
+# Authentication Bridge Module
 
-This module provides comprehensive authentication and authorization functionality for the LAYA AI Service.
+This module provides cross-service authentication and role synchronization between Gibbon (PHP-based school management system) and the LAYA AI Service.
 
-## Features
+## Overview
 
-- JWT-based authentication with access and refresh tokens
-- Role-based access control (RBAC)
-- Password hashing with bcrypt
-- Password reset workflow
-- Token blacklisting for logout
-- FastAPI dependency injection for protected routes
+The authentication bridge enables seamless user authentication across both systems by:
 
-## User Roles
+1. **Token Exchange**: Gibbon users can exchange their PHP session for a JWT token
+2. **Role Mapping**: Gibbon roles are automatically mapped to AI service roles
+3. **Unified Authentication**: Both token types are verified using the same shared secret
 
-The system supports five user roles:
+## Role Synchronization Mapping
 
-- `ADMIN` - System administrator with full access
-- `TEACHER` - Teacher with access to classroom features
-- `PARENT` - Parent with access to their child's information
-- `ACCOUNTANT` - Accountant with access to financial features
-- `STAFF` - Staff member with limited access
+The `bridges.py` module implements bidirectional role mapping between Gibbon and AI Service:
 
-## Role-Based Access Control
+### Gibbon → AI Service
 
-### Using `@require_role` Decorator
+| Gibbon Role | Role ID | AI Service Role | Description |
+|-------------|---------|-----------------|-------------|
+| Administrator | 001 | admin | Full administrative access |
+| Teacher | 002 | teacher | Educator with AI features |
+| Student | 003 | student | Student with learning features |
+| Parent | 004 | parent | Parent with child monitoring |
+| Support Staff | 006 | staff | Support staff with limited admin |
+| Unknown/Other | * | user | Default role with basic access |
 
-The `require_role` function is a dependency factory that creates FastAPI dependencies for protecting endpoints based on user roles.
+### Role Hierarchy
 
-#### Basic Usage - Single Role
+The module implements a hierarchical access control system:
 
-Require a specific role for endpoint access:
-
-```python
-from fastapi import APIRouter, Depends
-from app.auth.dependencies import require_role
-from app.auth.models import UserRole
-
-router = APIRouter()
-
-@router.delete("/users/{user_id}")
-async def delete_user(
-    user_id: str,
-    current_user: dict = Depends(require_role(UserRole.ADMIN))
-):
-    """Only admins can delete users."""
-    return {"message": f"User {user_id} deleted"}
+```
+Level 4: admin          (full access)
+Level 3: teacher        (educator access)
+Level 2: staff          (staff access)
+Level 1: parent/student (limited access)
+Level 0: user           (basic access)
 ```
 
-#### Multiple Roles
+Higher-level roles can access resources meant for lower-level roles.
 
-Allow access to users with any of several roles:
+## Usage
+
+### Basic Role Mapping
 
 ```python
-@router.get("/reports")
-async def get_financial_reports(
-    current_user: dict = Depends(
-        require_role(UserRole.ADMIN, UserRole.ACCOUNTANT)
-    )
-):
-    """Admins and accountants can view financial reports."""
-    return {"reports": [...]}
+from app.auth.bridges import get_ai_role_from_gibbon, get_gibbon_role_from_ai
+
+# Convert Gibbon role to AI role
+ai_role = get_ai_role_from_gibbon("002")  # Returns "teacher"
+
+# Convert AI role back to Gibbon role
+gibbon_role = get_gibbon_role_from_ai("teacher")  # Returns "002"
 ```
 
-#### Protecting Entire Routers
-
-Apply role requirements to all endpoints in a router:
+### Role Validation
 
 ```python
-from fastapi import APIRouter, Depends
-from app.auth.dependencies import require_role
-from app.auth.models import UserRole
+from app.auth.bridges import validate_role_mapping, RoleMapping
 
-# All endpoints in this router require admin role
-router = APIRouter(
-    prefix="/admin",
-    tags=["admin"],
-    dependencies=[Depends(require_role(UserRole.ADMIN))]
+# Validate a role mapping is correct
+is_valid = validate_role_mapping("001", "admin")  # Returns True
+
+# Check if a Gibbon role is recognized
+is_known = RoleMapping.is_valid_gibbon_role("002")  # Returns True
+
+# Check if an AI role is valid
+is_valid = RoleMapping.is_valid_ai_role("teacher")  # Returns True
+```
+
+### Access Control Helpers
+
+```python
+from app.auth.bridges import (
+    has_admin_access,
+    has_educator_access,
+    has_staff_access,
+    can_access_role
 )
 
-@router.get("/settings")
-async def get_settings():
-    """Automatically requires admin role."""
-    return {"settings": {...}}
+# Check specific access levels
+if has_admin_access(user_role):
+    # Administrator-only functionality
+    pass
 
-@router.post("/settings")
-async def update_settings(settings: dict):
-    """Automatically requires admin role."""
-    return {"message": "Settings updated"}
+if has_educator_access(user_role):
+    # Teacher and admin functionality
+    pass
+
+# Check hierarchical access
+if can_access_role(user_role, "student"):
+    # Can access student-level resources
+    pass
 ```
 
-#### Accessing User Information
-
-The dependency returns the decoded JWT payload containing user information:
+### In FastAPI Routes
 
 ```python
-@router.get("/dashboard")
-async def get_dashboard(
-    current_user: dict = Depends(require_role(UserRole.TEACHER))
-):
-    user_id = current_user["sub"]  # User UUID
-    email = current_user["email"]  # User email
-    role = current_user["role"]    # User role
+from fastapi import Depends
+from app.middleware.auth import get_current_user_multi_source
+from app.auth.bridges import has_educator_access, get_ai_role_from_gibbon
 
-    return {
-        "user_id": user_id,
-        "email": email,
-        "role": role,
-        "dashboard_data": {...}
+@app.get("/api/v1/classroom")
+async def get_classroom(
+    current_user: dict = Depends(get_current_user_multi_source)
+):
+    user_role = current_user.get("role")
+
+    # Check if user is an educator
+    if not has_educator_access(user_role):
+        raise HTTPException(status_code=403, detail="Educator access required")
+
+    # If token came from Gibbon, you can also access the original role
+    if current_user.get("source") == "gibbon":
+        gibbon_role_id = current_user.get("gibbon_role_id")
+        # Process Gibbon-specific logic
+
+    return {"classroom_data": "..."}
+```
+
+## Token Flow
+
+1. **User logs into Gibbon** via PHP session
+2. **Frontend requests JWT token** from `/modules/System/auth_token.php`
+3. **Gibbon validates session** and generates JWT with mapped role
+4. **Frontend sends JWT** to AI Service in Authorization header
+5. **AI Service middleware** verifies token and extracts user info
+6. **Route handlers** use role for authorization
+
+## Testing
+
+Comprehensive tests are available in `tests/test_auth_bridges.py`:
+
+```bash
+# Run role mapping tests
+pytest tests/test_auth_bridges.py -v
+
+# Run all authentication tests
+pytest tests/test_middleware_auth.py tests/test_auth_bridges.py -v
+```
+
+## Configuration
+
+Role mappings are defined in `app/auth/bridges.py` and can be extended:
+
+```python
+class RoleMapping:
+    _GIBBON_TO_AI = {
+        GibbonRoleID.ADMINISTRATOR: AIServiceRole.ADMIN,
+        GibbonRoleID.TEACHER: AIServiceRole.TEACHER,
+        # Add custom role mappings here
     }
 ```
 
-#### Using `get_current_user`
+## Security Considerations
 
-For endpoints that don't require specific roles but need authentication:
+1. **Shared Secret**: Both Gibbon and AI Service must use the same `JWT_SECRET_KEY`
+   - See [JWT Shared Secret Setup Guide](../../../docs/JWT_SHARED_SECRET_SETUP.md) for detailed configuration
+   - Use `./scripts/generate-jwt-secret.sh` to generate a secure secret
+   - Store secrets in environment variables (`.env` files)
+   - Never commit secrets to version control
+   - Rotate secrets every 90 days
+2. **Token Expiration**: JWT tokens expire after 1 hour (3600 seconds)
+3. **Source Tracking**: Tokens include a `source` claim to identify origin
+4. **Role Validation**: Always validate roles before granting access
+5. **Audit Trail**: Token exchanges are logged for security auditing
 
-```python
-from app.auth.dependencies import get_current_user
+## Related Files
 
-@router.get("/profile")
-async def get_profile(
-    current_user: dict = Depends(get_current_user)
-):
-    """Any authenticated user can access their profile."""
-    return {"profile": {...}}
-```
+- `app/auth/bridges.py` - Role mapping implementation (this module)
+- `app/middleware/auth.py` - Multi-source JWT verification middleware
+- `gibbon/modules/System/auth_token.php` - Gibbon token exchange endpoint
+- `tests/test_auth_bridges.py` - Role mapping tests
+- `tests/test_middleware_auth.py` - Middleware tests
+- `docs/JWT_SHARED_SECRET_SETUP.md` - **Shared secret configuration guide**
+- `scripts/generate-jwt-secret.sh` - **Secure secret generator**
+- `.env.example` files - **Environment configuration templates**
 
-### Error Handling
+## Future Enhancements
 
-The decorator raises appropriate HTTP exceptions:
+Potential improvements for future iterations:
 
-- **401 Unauthorized** - Token is missing, invalid, or expired
-- **403 Forbidden** - User is authenticated but doesn't have required role
-
-Example 403 response:
-```json
-{
-    "detail": "Access denied. Required role(s): admin. Your role: teacher"
-}
-```
-
-## Authentication Flow
-
-### 1. Login
-
-```bash
-POST /api/v1/auth/login
-Content-Type: application/json
-
-{
-    "email": "teacher@example.com",
-    "password": "secure_password"
-}
-```
-
-Response:
-```json
-{
-    "access_token": "eyJhbGc...",
-    "refresh_token": "eyJhbGc...",
-    "expires_in": 900,
-    "token_type": "bearer"
-}
-```
-
-### 2. Access Protected Endpoints
-
-Include the access token in the Authorization header:
-
-```bash
-GET /api/v1/some-endpoint
-Authorization: Bearer <access_token>
-```
-
-### 3. Refresh Token
-
-When access token expires, use refresh token to get new tokens:
-
-```bash
-POST /api/v1/auth/refresh
-Content-Type: application/json
-
-{
-    "refresh_token": "eyJhbGc..."
-}
-```
-
-### 4. Logout
-
-Invalidate tokens:
-
-```bash
-POST /api/v1/auth/logout
-Content-Type: application/json
-
-{
-    "access_token": "eyJhbGc...",
-    "refresh_token": "eyJhbGc..."
-}
-```
-
-## Token Structure
-
-Access tokens include the following claims:
-
-```json
-{
-    "sub": "user-uuid",
-    "email": "user@example.com",
-    "role": "teacher",
-    "type": "access",
-    "iat": 1234567890,
-    "exp": 1234568790
-}
-```
-
-- `sub` - User ID (UUID)
-- `email` - User email address
-- `role` - User role (admin, teacher, parent, accountant, staff)
-- `type` - Token type (access or refresh)
-- `iat` - Issued at timestamp
-- `exp` - Expiration timestamp
-
-## Password Reset
-
-### 1. Request Reset
-
-```bash
-POST /api/v1/auth/password-reset/request
-Content-Type: application/json
-
-{
-    "email": "user@example.com"
-}
-```
-
-### 2. Confirm Reset
-
-```bash
-POST /api/v1/auth/password-reset/confirm
-Content-Type: application/json
-
-{
-    "token": "reset-token-from-email",
-    "new_password": "new_secure_password"
-}
-```
-
-## Module Structure
-
-```
-app/auth/
-├── __init__.py              # Module exports
-├── dependencies.py          # Auth dependencies (require_role, get_current_user)
-├── jwt.py                   # JWT token creation and validation
-├── models.py                # User, UserRole, TokenBlacklist, PasswordResetToken
-├── router.py                # Authentication endpoints
-├── schemas.py               # Pydantic schemas for requests/responses
-├── security.py              # Password hashing and verification
-└── service.py               # Authentication business logic
-```
-
-## Examples
-
-See the test endpoints in `router.py`:
-
-- `/api/v1/auth/me` - Get current user info (any authenticated user)
-- `/api/v1/auth/admin/test` - Admin-only endpoint
-- `/api/v1/auth/financial/test` - Admin or Accountant endpoint
-
-## Best Practices
-
-1. **Always use HTTPS in production** to protect tokens in transit
-2. **Store tokens securely** on the client (e.g., httpOnly cookies or secure storage)
-3. **Implement token refresh** before access token expires for better UX
-4. **Logout when needed** to invalidate tokens
-5. **Use specific roles** - only grant the minimum necessary access
-6. **Handle 401/403 errors** appropriately in your client application
-7. **Don't include sensitive data** in JWT tokens (they're base64-encoded, not encrypted)
-
-## Security Notes
-
-- Access tokens expire after 15 minutes
-- Refresh tokens expire after 7 days
-- Passwords are hashed using bcrypt
-- Tokens are validated on every request
-- Blacklisted tokens are rejected
-- Password reset tokens expire after 1 hour
-- Reset tokens can only be used once
+- Dynamic role mapping from configuration/database
+- Custom role permissions and capabilities
+- Role-based rate limiting
+- Integration with OAuth2/OIDC
+- Support for multiple active roles per user

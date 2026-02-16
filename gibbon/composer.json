@@ -1,0 +1,21 @@
+{
+    "name": "laya/gibbon-modules",
+    "description": "Gibbon CMS custom modules for Laya daycare management",
+    "type": "project",
+    "license": "GPL-3.0-only",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": "^8.3",
+        "mpdf/mpdf": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Gibbon\\Module\\": "modules/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

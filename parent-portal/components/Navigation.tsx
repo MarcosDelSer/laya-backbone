@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { ChildSelector } from './ChildSelector';
+import { performLogout } from '@/lib/logout';
 
 interface NavItem {
   href: string;
@@ -110,6 +112,23 @@ const navItems: NavItem[] = [
 
 export function Navigation() {
   const pathname = usePathname();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  /**
+   * Handle logout button click.
+   */
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+    try {
+      await performLogout();
+      // Note: performLogout redirects to login page, so code after this won't execute
+    } catch (error) {
+      console.error('Logout error:', error);
+      // performLogout handles redirect even on error
+    }
+  };
 
   return (
     <nav className="bg-white border-b border-gray-200">
@@ -148,9 +167,34 @@ export function Navigation() {
             })}
           </div>
 
-          {/* Right side - Child Selector */}
+          {/* Right side - Child Selector & Logout */}
           <div className="flex items-center space-x-4">
             <ChildSelector />
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="flex items-center space-x-2 rounded-md px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Logout"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
+              <span className="hidden lg:inline">
+                {isLoggingOut ? 'Logging out...' : 'Logout'}
+              </span>
+            </button>
           </div>
         </div>
       </div>
