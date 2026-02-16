@@ -4,12 +4,23 @@
  * A custom hook for managing authentication state throughout the app.
  * Handles login, logout, biometric authentication, and session management.
  *
+ * Uses React Context to share auth state across all hook consumers,
+ * ensuring consistent authentication state throughout the app.
+ *
  * Follows pattern from:
  * - parent-app/src/hooks/useAuth.ts for hook structure
  * - authService.ts for authentication operations
  */
 
-import {useState, useEffect, useCallback} from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  createContext,
+  useContext,
+  useMemo,
+  type ReactNode,
+} from 'react';
 import type {Teacher, LoginCredentials} from '../types';
 import {
   isAuthenticated as checkAuth,
@@ -72,48 +83,22 @@ interface UseAuthActions {
 export type UseAuthReturn = UseAuthState & UseAuthActions;
 
 /**
- * Hook for managing authentication throughout the app
- *
- * @returns {UseAuthReturn} Authentication state and actions
- *
- * @example
- * ```tsx
- * function LoginScreen() {
- *   const {
- *     isAuthenticated,
- *     isLoggingIn,
- *     error,
- *     biometricEnabled,
- *     login,
- *     loginWithBiometrics,
- *   } = useAuth();
- *
- *   if (isAuthenticated) {
- *     // Navigate to main app
- *   }
- *
- *   const handleLogin = async () => {
- *     const success = await login({ email, password }, rememberMe);
- *     if (!success) {
- *       // Show error message
- *     }
- *   };
- *
- *   return (
- *     <View>
- *       {biometricEnabled && (
- *         <Button title="Login with Fingerprint" onPress={loginWithBiometrics} />
- *       )}
- *       <TextInput placeholder="Email" onChangeText={setEmail} />
- *       <TextInput placeholder="Password" onChangeText={setPassword} secureTextEntry />
- *       <Button title="Login" onPress={handleLogin} disabled={isLoggingIn} />
- *       {error && <Text>{error.message}</Text>}
- *     </View>
- *   );
- * }
- * ```
+ * Auth Context for sharing state across hook consumers
  */
-export function useAuth(): UseAuthReturn {
+const AuthContext = createContext<UseAuthReturn | null>(null);
+
+/**
+ * Props for AuthProvider component
+ */
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+/**
+ * Internal hook that manages the actual auth state.
+ * This should only be used by AuthProvider.
+ */
+function useAuthState(): UseAuthReturn {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -166,11 +151,11 @@ export function useAuth(): UseAuthReturn {
       setError(null);
 
       try {
-        // Try real API first, fall back to mock for development
+        // Try real API first
         let result = await authLogin(credentials, rememberMe);
 
-        // If API fails (development mode), use mock login
-        if (!result.success && result.error?.code === 'NETWORK_ERROR') {
+        // If API fails (development mode only), use mock login
+        if (__DEV__ && !result.success && result.error?.code === 'NETWORK_ERROR') {
           result = await loginWithMockCredentials(credentials.email, credentials.password);
         }
 
@@ -226,9 +211,9 @@ export function useAuth(): UseAuthReturn {
         return true;
       }
 
-      // For development/mock: if biometric is enabled but no token,
-      // just authenticate the user
-      if (storedEmail) {
+      // For development/mock only: if biometric is enabled but no token,
+      // just authenticate the user with mock credentials
+      if (__DEV__ && storedEmail) {
         const mockResult = await loginWithMockCredentials(storedEmail, 'biometric');
         if (mockResult.success && mockResult.data) {
           setIsAuthenticated(true);
@@ -294,25 +279,135 @@ export function useAuth(): UseAuthReturn {
     setError(null);
   }, []);
 
-  return {
-    // State
-    isAuthenticated,
-    isLoading,
-    isLoggingIn,
-    user,
-    error,
-    biometricStatus,
-    biometricEnabled,
-    storedEmail,
-    // Actions
-    login,
-    loginWithBiometrics,
-    logout,
-    enableBiometricLogin,
-    disableBiometricLogin,
-    clearError,
-    refreshBiometricStatus,
-  };
+  return useMemo(
+    () => ({
+      // State
+      isAuthenticated,
+      isLoading,
+      isLoggingIn,
+      user,
+      error,
+      biometricStatus,
+      biometricEnabled,
+      storedEmail,
+      // Actions
+      login,
+      loginWithBiometrics,
+      logout,
+      enableBiometricLogin,
+      disableBiometricLogin,
+      clearError,
+      refreshBiometricStatus,
+    }),
+    [
+      isAuthenticated,
+      isLoading,
+      isLoggingIn,
+      user,
+      error,
+      biometricStatus,
+      biometricEnabled,
+      storedEmail,
+      login,
+      loginWithBiometrics,
+      logout,
+      enableBiometricLogin,
+      disableBiometricLogin,
+      clearError,
+      refreshBiometricStatus,
+    ],
+  );
+}
+
+/**
+ * Provider component for auth state.
+ * Wrap your app with this to enable shared auth state across all useAuth consumers.
+ *
+ * @example
+ * ```tsx
+ * function App() {
+ *   return (
+ *     <AuthProvider>
+ *       <NavigationContainer>
+ *         <RootNavigator />
+ *       </NavigationContainer>
+ *     </AuthProvider>
+ *   );
+ * }
+ * ```
+ */
+export function AuthProvider({children}: AuthProviderProps): JSX.Element {
+  const auth = useAuthState();
+
+  return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
+}
+
+/**
+ * Hook for managing authentication throughout the app.
+ *
+ * When used within an AuthProvider, all consumers share the same auth state.
+ * This ensures consistent authentication state across the entire app.
+ *
+ * @returns {UseAuthReturn} Authentication state and actions
+ * @throws {Error} If used outside of an AuthProvider
+ *
+ * @example
+ * ```tsx
+ * // First, wrap your app with AuthProvider
+ * function App() {
+ *   return (
+ *     <AuthProvider>
+ *       <NavigationContainer>
+ *         <RootNavigator />
+ *       </NavigationContainer>
+ *     </AuthProvider>
+ *   );
+ * }
+ *
+ * // Then use the hook in any component
+ * function LoginScreen() {
+ *   const {
+ *     isAuthenticated,
+ *     isLoggingIn,
+ *     error,
+ *     biometricEnabled,
+ *     login,
+ *     loginWithBiometrics,
+ *   } = useAuth();
+ *
+ *   if (isAuthenticated) {
+ *     // Navigate to main app
+ *   }
+ *
+ *   const handleLogin = async () => {
+ *     const success = await login({ email, password }, rememberMe);
+ *     if (!success) {
+ *       // Show error message
+ *     }
+ *   };
+ *
+ *   return (
+ *     <View>
+ *       {biometricEnabled && (
+ *         <Button title="Login with Fingerprint" onPress={loginWithBiometrics} />
+ *       )}
+ *       <TextInput placeholder="Email" onChangeText={setEmail} />
+ *       <TextInput placeholder="Password" onChangeText={setPassword} secureTextEntry />
+ *       <Button title="Login" onPress={handleLogin} disabled={isLoggingIn} />
+ *       {error && <Text>{error.message}</Text>}
+ *     </View>
+ *   );
+ * }
+ * ```
+ */
+export function useAuth(): UseAuthReturn {
+  const context = useContext(AuthContext);
+
+  if (context === null) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+
+  return context;
 }
 
 export default useAuth;
