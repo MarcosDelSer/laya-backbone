@@ -135,6 +135,10 @@ async def verify_token_from_any_source(
 
         return payload
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
+
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
