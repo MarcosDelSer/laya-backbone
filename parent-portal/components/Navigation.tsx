@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChildSelector } from './ChildSelector';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface NavItem {
   href: string;
@@ -148,9 +149,10 @@ export function Navigation() {
             })}
           </div>
 
-          {/* Right side - Child Selector */}
+          {/* Right side - Child Selector and Language Switcher */}
           <div className="flex items-center space-x-4">
             <ChildSelector />
+            <LanguageSwitcher />
           </div>
         </div>
       </div>
