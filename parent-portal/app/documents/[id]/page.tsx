@@ -85,7 +85,6 @@ export default function DocumentPreviewPage() {
       setDocument(docData);
       setSignatures(sigData);
     } catch (err) {
-      console.error('Failed to fetch document:', err);
       setError('Failed to load document. Please try again later.');
       // Fall back to mock data on error
       setDocument(mockDocument);
@@ -134,7 +133,6 @@ export default function DocumentPreviewPage() {
         await fetchDocumentData();
         handleCloseSignModal();
       } catch (err) {
-        console.error('Failed to submit signature:', err);
         setError('Failed to submit signature. Please try again.');
       }
     } else {

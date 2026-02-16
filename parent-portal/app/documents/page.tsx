@@ -119,7 +119,6 @@ export default function DocumentsPage() {
       const dashboard = await getSignatureDashboard({ limit_recent: 5 });
       setDashboardData(dashboard);
     } catch (err) {
-      console.error('Failed to fetch dashboard:', err);
       // Continue with local calculations if dashboard fails
     }
   }, [useRealAPI]);
@@ -147,7 +146,6 @@ export default function DocumentsPage() {
         setDashboardData(dashboardResponse);
       }
     } catch (err) {
-      console.error('Failed to fetch documents:', err);
       setError('Failed to load documents. Please try again later.');
       // Fall back to mock data on error
       setDocuments(mockDocuments);
@@ -214,7 +212,6 @@ export default function DocumentsPage() {
         await fetchDocuments();
         handleCloseModal();
       } catch (err) {
-        console.error('Failed to submit signature:', err);
         setError('Failed to submit signature. Please try again.');
       }
     } else {
