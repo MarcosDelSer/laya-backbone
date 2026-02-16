@@ -373,6 +373,57 @@ class InvoiceGateway extends QueryableGateway
     }
 
     /**
+     * Select outstanding balances grouped by family for a school year.
+     *
+     * @param int $gibbonSchoolYearID
+     * @param int $limit Maximum number of families to return
+     * @return Result
+     */
+    public function selectOutstandingByFamily($gibbonSchoolYearID, $limit = 10)
+    {
+        $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID];
+        $sql = "SELECT
+                gibbonFamily.gibbonFamilyID,
+                gibbonFamily.name AS familyName,
+                COUNT(gibbonEnhancedFinanceInvoice.gibbonEnhancedFinanceInvoiceID) AS invoiceCount,
+                SUM(gibbonEnhancedFinanceInvoice.totalAmount - gibbonEnhancedFinanceInvoice.paidAmount) AS totalOutstanding,
+                MIN(gibbonEnhancedFinanceInvoice.dueDate) AS oldestDueDate,
+                MAX(CASE WHEN gibbonEnhancedFinanceInvoice.dueDate < CURDATE() THEN 1 ELSE 0 END) AS hasOverdue,
+                SUM(CASE WHEN gibbonEnhancedFinanceInvoice.dueDate < CURDATE() THEN (gibbonEnhancedFinanceInvoice.totalAmount - gibbonEnhancedFinanceInvoice.paidAmount) ELSE 0 END) AS overdueAmount
+            FROM gibbonEnhancedFinanceInvoice
+            INNER JOIN gibbonFamily ON gibbonEnhancedFinanceInvoice.gibbonFamilyID = gibbonFamily.gibbonFamilyID
+            WHERE gibbonEnhancedFinanceInvoice.gibbonSchoolYearID = :gibbonSchoolYearID
+            AND gibbonEnhancedFinanceInvoice.status IN ('Issued', 'Partial')
+            GROUP BY gibbonFamily.gibbonFamilyID, gibbonFamily.name
+            HAVING totalOutstanding > 0
+            ORDER BY totalOutstanding DESC
+            LIMIT " . (int) $limit;
+
+        return $this->db()->select($sql, $data);
+    }
+
+    /**
+     * Get summary of outstanding balances by family for a school year.
+     *
+     * @param int $gibbonSchoolYearID
+     * @return array
+     */
+    public function selectOutstandingByFamilySummary($gibbonSchoolYearID)
+    {
+        $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID];
+        $sql = "SELECT
+                COUNT(DISTINCT gibbonEnhancedFinanceInvoice.gibbonFamilyID) AS familyCount,
+                COUNT(gibbonEnhancedFinanceInvoice.gibbonEnhancedFinanceInvoiceID) AS invoiceCount,
+                SUM(gibbonEnhancedFinanceInvoice.totalAmount - gibbonEnhancedFinanceInvoice.paidAmount) AS totalOutstanding
+            FROM gibbonEnhancedFinanceInvoice
+            WHERE gibbonEnhancedFinanceInvoice.gibbonSchoolYearID = :gibbonSchoolYearID
+            AND gibbonEnhancedFinanceInvoice.status IN ('Issued', 'Partial')
+            AND (gibbonEnhancedFinanceInvoice.totalAmount - gibbonEnhancedFinanceInvoice.paidAmount) > 0";
+
+        return $this->db()->selectOne($sql, $data);
+    }
+
+    /**
      * Get filter rules for invoice queries.
      *
      * @return array

@@ -30,6 +30,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
  * - Overdue invoices count and amount
  * - Quick links to invoice management
  * - RL-24 status overview (if tax season)
+ * - YTD (Year-to-Date) revenue with monthly breakdown
+ * - Outstanding balances by family
+ * - Payment method breakdown with percentages
  *
  * @package    Gibbon\Module\EnhancedFinance
  * @author     LAYA
@@ -99,6 +102,15 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
 
     // Get payment summary by month
     $paymentsByMonth = $paymentGateway->selectPaymentSummaryByMonth($gibbonSchoolYearID)->fetchAll();
+
+    // Get YTD (Year-to-Date) revenue for current calendar year
+    $currentCalendarYear = (int) date('Y');
+    $ytdRevenue = $paymentGateway->selectYTDRevenue($currentCalendarYear);
+    $ytdRevenueByMonth = $paymentGateway->selectYTDRevenueByMonth($currentCalendarYear)->fetchAll();
+
+    // Get outstanding balances by family
+    $outstandingByFamily = $invoiceGateway->selectOutstandingByFamily($gibbonSchoolYearID, 10)->fetchAll();
+    $outstandingFamilySummary = $invoiceGateway->selectOutstandingByFamilySummary($gibbonSchoolYearID);
 
     // Check if it's tax season (January-February for previous year's RL-24)
     $currentMonth = (int) date('m');
@@ -195,6 +207,83 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
     echo '</div>';
 
     echo '</div>'; // End KPI grid
+
+    // YTD (Year-to-Date) Revenue Section
+    $ytdAmount = (float) ($ytdRevenue['totalAmount'] ?? 0);
+    $ytdPaymentCount = (int) ($ytdRevenue['paymentCount'] ?? 0);
+    $ytdFamilyCount = (int) ($ytdRevenue['familyCount'] ?? 0);
+    $currentMonthNum = (int) date('m');
+
+    echo '<div class="bg-white rounded-lg shadow mb-6">';
+    echo '<div class="px-5 py-4 border-b flex justify-between items-center">';
+    echo '<h3 class="text-lg font-semibold">';
+    echo '<span class="text-indigo-600 mr-2">📈</span>';
+    echo sprintf(__('Year-to-Date Revenue (%d)'), $currentCalendarYear);
+    echo '</h3>';
+    echo '<span class="bg-indigo-100 text-indigo-800 text-sm px-3 py-1 rounded-full">' . __('Calendar Year') . '</span>';
+    echo '</div>';
+    echo '<div class="p-5">';
+
+    // YTD Summary Stats
+    echo '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">';
+
+    // Total YTD Revenue
+    echo '<div class="text-center p-4 bg-indigo-50 rounded-lg">';
+    echo '<div class="text-2xl font-bold text-indigo-700">' . Format::currency($ytdAmount) . '</div>';
+    echo '<div class="text-sm text-indigo-500">' . __('Total Revenue') . '</div>';
+    echo '</div>';
+
+    // Payment Count
+    echo '<div class="text-center p-4 bg-green-50 rounded-lg">';
+    echo '<div class="text-2xl font-bold text-green-700">' . $ytdPaymentCount . '</div>';
+    echo '<div class="text-sm text-green-500">' . __('Payments Received') . '</div>';
+    echo '</div>';
+
+    // Families Served
+    echo '<div class="text-center p-4 bg-blue-50 rounded-lg">';
+    echo '<div class="text-2xl font-bold text-blue-700">' . $ytdFamilyCount . '</div>';
+    echo '<div class="text-sm text-blue-500">' . __('Families Served') . '</div>';
+    echo '</div>';
+
+    // Monthly Average
+    $monthlyAverage = $currentMonthNum > 0 ? $ytdAmount / $currentMonthNum : 0;
+    echo '<div class="text-center p-4 bg-purple-50 rounded-lg">';
+    echo '<div class="text-2xl font-bold text-purple-700">' . Format::currency($monthlyAverage) . '</div>';
+    echo '<div class="text-sm text-purple-500">' . __('Monthly Average') . '</div>';
+    echo '</div>';
+
+    echo '</div>';
+
+    // YTD Monthly Breakdown (mini chart)
+    if (count($ytdRevenueByMonth) > 0) {
+        $maxYtdMonth = max(array_column($ytdRevenueByMonth, 'totalAmount'));
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        echo '<div class="mt-4 pt-4 border-t">';
+        echo '<div class="text-sm text-gray-600 mb-2">' . __('Monthly Revenue Breakdown') . '</div>';
+        echo '<div class="flex items-end justify-between space-x-1" style="height: 80px;">';
+
+        // Create array for all months up to current
+        for ($m = 1; $m <= $currentMonthNum; $m++) {
+            $monthData = array_filter($ytdRevenueByMonth, function ($r) use ($m) {
+                return (int) $r['paymentMonth'] == $m;
+            });
+            $monthData = reset($monthData);
+            $amount = $monthData ? (float) $monthData['totalAmount'] : 0;
+            $height = $maxYtdMonth > 0 ? round(($amount / $maxYtdMonth) * 100) : 0;
+
+            echo '<div class="flex-1 flex flex-col items-center">';
+            echo '<div class="w-full bg-indigo-500 hover:bg-indigo-600 transition rounded-t cursor-pointer" style="height: ' . max($height, 2) . '%" title="' . $monthNames[$m] . ': ' . Format::currency($amount) . '"></div>';
+            echo '<div class="text-xs text-gray-400 mt-1">' . $monthNames[$m] . '</div>';
+            echo '</div>';
+        }
+
+        echo '</div>';
+        echo '</div>';
+    }
+
+    echo '</div>';
+    echo '</div>';
 
     // Overdue Alert (if any)
     if ($overdueCount > 0) {
@@ -295,6 +384,112 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
     echo '</div>';
 
     echo '</div>'; // End main grid
+
+    // Outstanding by Family Section
+    if (count($outstandingByFamily) > 0) {
+        $outstandingFamilyTotal = (float) ($outstandingFamilySummary['totalOutstanding'] ?? 0);
+        $outstandingFamilyCount = (int) ($outstandingFamilySummary['familyCount'] ?? 0);
+        $outstandingInvoiceCount = (int) ($outstandingFamilySummary['invoiceCount'] ?? 0);
+
+        echo '<div class="bg-white rounded-lg shadow mb-6">';
+        echo '<div class="px-5 py-4 border-b flex justify-between items-center">';
+        echo '<h3 class="text-lg font-semibold">';
+        echo '<span class="text-orange-600 mr-2">👨‍👩‍👧‍👦</span>';
+        echo __('Outstanding by Family');
+        echo '</h3>';
+        echo '<div class="flex items-center space-x-4">';
+        echo '<span class="text-sm text-gray-500">' . sprintf(__('%d families'), $outstandingFamilyCount) . '</span>';
+        echo '<span class="bg-orange-100 text-orange-800 text-sm px-3 py-1 rounded-full font-semibold">' . Format::currency($outstandingFamilyTotal) . '</span>';
+        echo '</div>';
+        echo '</div>';
+        echo '<div class="p-5">';
+
+        // Family Outstanding Table
+        echo '<div class="overflow-x-auto">';
+        echo '<table class="w-full">';
+        echo '<thead>';
+        echo '<tr class="text-left text-sm text-gray-500 border-b">';
+        echo '<th class="pb-3 font-medium">' . __('Family') . '</th>';
+        echo '<th class="pb-3 font-medium text-center">' . __('Invoices') . '</th>';
+        echo '<th class="pb-3 font-medium text-right">' . __('Outstanding') . '</th>';
+        echo '<th class="pb-3 font-medium text-right">' . __('Overdue') . '</th>';
+        echo '<th class="pb-3 font-medium text-center">' . __('Status') . '</th>';
+        echo '<th class="pb-3 font-medium text-center">' . __('Action') . '</th>';
+        echo '</tr>';
+        echo '</thead>';
+        echo '<tbody>';
+
+        foreach ($outstandingByFamily as $family) {
+            $familyOutstanding = (float) $family['totalOutstanding'];
+            $familyOverdue = (float) $family['overdueAmount'];
+            $hasOverdue = (int) $family['hasOverdue'];
+            $invoiceCount = (int) $family['invoiceCount'];
+
+            // Row styling based on overdue status
+            $rowClass = $hasOverdue ? 'bg-red-50' : '';
+
+            echo '<tr class="border-b hover:bg-gray-50 ' . $rowClass . '">';
+
+            // Family Name
+            echo '<td class="py-3">';
+            echo '<div class="font-medium">' . htmlspecialchars($family['familyName']) . '</div>';
+            if (!empty($family['oldestDueDate'])) {
+                echo '<div class="text-xs text-gray-400">' . __('Oldest due') . ': ' . Format::date($family['oldestDueDate']) . '</div>';
+            }
+            echo '</td>';
+
+            // Invoice Count
+            echo '<td class="py-3 text-center">';
+            echo '<span class="bg-gray-100 text-gray-700 px-2 py-1 rounded text-sm">' . $invoiceCount . '</span>';
+            echo '</td>';
+
+            // Outstanding Amount
+            echo '<td class="py-3 text-right font-semibold text-orange-600">' . Format::currency($familyOutstanding) . '</td>';
+
+            // Overdue Amount
+            echo '<td class="py-3 text-right">';
+            if ($familyOverdue > 0) {
+                echo '<span class="font-semibold text-red-600">' . Format::currency($familyOverdue) . '</span>';
+            } else {
+                echo '<span class="text-gray-400">-</span>';
+            }
+            echo '</td>';
+
+            // Status Badge
+            echo '<td class="py-3 text-center">';
+            if ($hasOverdue) {
+                echo '<span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">' . __('Overdue') . '</span>';
+            } else {
+                echo '<span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">' . __('Pending') . '</span>';
+            }
+            echo '</td>';
+
+            // Action Link
+            echo '<td class="py-3 text-center">';
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&family=' . $family['gibbonFamilyID'] . '" class="text-blue-600 hover:text-blue-800 text-sm">';
+            echo __('View');
+            echo '</a>';
+            echo '</td>';
+
+            echo '</tr>';
+        }
+
+        echo '</tbody>';
+        echo '</table>';
+        echo '</div>';
+
+        // Link to view all
+        if ($outstandingFamilyCount > 10) {
+            echo '<div class="mt-4 text-center">';
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Outstanding" class="text-blue-600 hover:underline text-sm">';
+            echo sprintf(__('View all %d families with outstanding balances'), $outstandingFamilyCount) . ' &rarr;';
+            echo '</a>';
+            echo '</div>';
+        }
+
+        echo '</div>';
+        echo '</div>';
+    }
 
     // Overdue Invoices Table (if any)
     if (count($overdueInvoices) > 0) {
