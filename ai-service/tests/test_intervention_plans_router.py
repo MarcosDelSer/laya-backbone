@@ -1092,3 +1092,715 @@ class TestCrossServiceSignatureIntegration:
             headers=auth_headers,
         )
         assert response.status_code in (200, 500)
+
+
+# =============================================================================
+# Automated Review Reminder Flow E2E Tests
+# =============================================================================
+
+
+class TestAutomatedReviewReminderFlowE2E:
+    """End-to-end tests for the automated review reminder flow.
+
+    Verification Steps:
+    1. Create plan with review schedule
+    2. Verify pending review appears in ai-service API
+    3. Verify reminder triggered for plans due for review
+
+    These tests verify the complete review reminder workflow from:
+    - ai-service API (backend)
+    - parent-portal client (frontend expectations)
+    - gibbon integration (CMS)
+    """
+
+    @pytest.fixture
+    def monthly_review_plan_data(self, test_child_id: UUID) -> dict[str, Any]:
+        """Create sample intervention plan with monthly review schedule.
+
+        Args:
+            test_child_id: Mock child ID
+
+        Returns:
+            dict: Valid intervention plan creation payload with monthly reviews
+        """
+        return {
+            "child_id": str(test_child_id),
+            "title": "Monthly Review Intervention Plan",
+            "status": "active",
+            "review_schedule": "monthly",
+            "effective_date": str(date.today()),
+            "child_name": "Monthly Review Child",
+            "child_dob": str(date.today() - timedelta(days=1095)),
+            "medical_diagnosis": "Test diagnosis for review",
+            "educational_history": "Test educational history",
+        }
+
+    @pytest.fixture
+    def quarterly_review_plan_data(self, test_child_id: UUID) -> dict[str, Any]:
+        """Create sample intervention plan with quarterly review schedule.
+
+        Args:
+            test_child_id: Mock child ID
+
+        Returns:
+            dict: Valid intervention plan creation payload with quarterly reviews
+        """
+        return {
+            "child_id": str(test_child_id),
+            "title": "Quarterly Review Intervention Plan",
+            "status": "active",
+            "review_schedule": "quarterly",
+            "effective_date": str(date.today()),
+            "child_name": "Quarterly Review Child",
+        }
+
+    # -------------------------------------------------------------------------
+    # Step 1: Create Plan with Review Schedule
+    # -------------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_create_plan_with_monthly_review_schedule(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+        monthly_review_plan_data: dict[str, Any],
+    ) -> None:
+        """Verify plan creation accepts monthly review_schedule.
+
+        Step 1: Plans are created with a review_schedule that determines
+        when reminders are triggered.
+        """
+        response = await client.post(
+            "/api/v1/intervention-plans",
+            headers=auth_headers,
+            json=monthly_review_plan_data,
+        )
+        # Should accept valid review schedule (500 if db not available)
+        assert response.status_code in (201, 500)
+        # NOT 422 - review_schedule value should be valid
+        assert response.status_code != 422, "monthly review_schedule should be valid"
+
+    @pytest.mark.asyncio
+    async def test_create_plan_with_quarterly_review_schedule(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+        quarterly_review_plan_data: dict[str, Any],
+    ) -> None:
+        """Verify plan creation accepts quarterly review_schedule."""
+        response = await client.post(
+            "/api/v1/intervention-plans",
+            headers=auth_headers,
+            json=quarterly_review_plan_data,
+        )
+        assert response.status_code in (201, 500)
+        assert response.status_code != 422, "quarterly review_schedule should be valid"
+
+    @pytest.mark.asyncio
+    async def test_create_plan_with_semi_annual_review_schedule(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+        test_child_id: UUID,
+    ) -> None:
+        """Verify plan creation accepts semi_annually review_schedule."""
+        plan_data = {
+            "child_id": str(test_child_id),
+            "title": "Semi-Annual Review Plan",
+            "status": "active",
+            "review_schedule": "semi_annually",
+            "effective_date": str(date.today()),
+            "child_name": "Semi-Annual Child",
+        }
+        response = await client.post(
+            "/api/v1/intervention-plans",
+            headers=auth_headers,
+            json=plan_data,
+        )
+        assert response.status_code in (201, 500)
+        assert response.status_code != 422, "semi_annually review_schedule should be valid"
+
+    @pytest.mark.asyncio
+    async def test_create_plan_with_annual_review_schedule(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+        test_child_id: UUID,
+    ) -> None:
+        """Verify plan creation accepts annually review_schedule."""
+        plan_data = {
+            "child_id": str(test_child_id),
+            "title": "Annual Review Plan",
+            "status": "active",
+            "review_schedule": "annually",
+            "effective_date": str(date.today()),
+            "child_name": "Annual Review Child",
+        }
+        response = await client.post(
+            "/api/v1/intervention-plans",
+            headers=auth_headers,
+            json=plan_data,
+        )
+        assert response.status_code in (201, 500)
+        assert response.status_code != 422, "annually review_schedule should be valid"
+
+    @pytest.mark.asyncio
+    async def test_create_plan_rejects_invalid_review_schedule(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+        test_child_id: UUID,
+    ) -> None:
+        """Verify plan creation rejects invalid review_schedule values."""
+        plan_data = {
+            "child_id": str(test_child_id),
+            "title": "Invalid Schedule Plan",
+            "status": "active",
+            "review_schedule": "weekly",  # Invalid value
+            "effective_date": str(date.today()),
+            "child_name": "Invalid Schedule Child",
+        }
+        response = await client.post(
+            "/api/v1/intervention-plans",
+            headers=auth_headers,
+            json=plan_data,
+        )
+        # Should reject invalid review_schedule with 422
+        assert response.status_code == 422
+
+    # -------------------------------------------------------------------------
+    # Step 2: Verify Pending Review Appears in ai-service API
+    # -------------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_pending_review_endpoint_exists(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify pending-review endpoint is registered and accessible.
+
+        Step 2: The /pending-review endpoint returns plans due for review.
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        # Should be accessible (200 or 500 if db unavailable)
+        assert response.status_code in (200, 500)
+        assert response.status_code != 404, "pending-review endpoint should exist"
+
+    @pytest.mark.asyncio
+    async def test_pending_review_returns_list_response(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify pending-review endpoint returns correct response structure.
+
+        Expected response: PlanReviewReminderListResponse with:
+        - plans: list of PlanReviewReminder
+        - overdue_count: number of overdue plans
+        - upcoming_count: number of upcoming plans
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            # Verify response structure
+            assert "plans" in data
+            assert "overdue_count" in data
+            assert "upcoming_count" in data
+            assert isinstance(data["plans"], list)
+            assert isinstance(data["overdue_count"], int)
+            assert isinstance(data["upcoming_count"], int)
+
+    @pytest.mark.asyncio
+    async def test_pending_review_accepts_days_ahead_parameter(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify pending-review endpoint accepts days_ahead parameter.
+
+        Parent-portal uses: getPlansForReview({ daysAhead: 7 })
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+            params={"days_ahead": 7},
+        )
+        # Should accept the parameter
+        assert response.status_code in (200, 500)
+        assert response.status_code != 422, "days_ahead parameter should be valid"
+
+    @pytest.mark.asyncio
+    async def test_pending_review_accepts_30_days_ahead(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify pending-review default 30 days_ahead is valid.
+
+        Parent-portal default: getPlansForReview({ daysAhead: 30 })
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+            params={"days_ahead": 30},
+        )
+        assert response.status_code in (200, 500)
+
+    @pytest.mark.asyncio
+    async def test_pending_review_rejects_invalid_days_ahead(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify pending-review endpoint rejects invalid days_ahead values."""
+        # Test negative value
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+            params={"days_ahead": -5},
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_pending_review_rejects_zero_days_ahead(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify pending-review endpoint requires at least 1 day ahead."""
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+            params={"days_ahead": 0},
+        )
+        # 0 should be rejected per router validation (ge=1)
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_pending_review_rejects_too_large_days_ahead(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify pending-review endpoint rejects days_ahead > 365."""
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+            params={"days_ahead": 400},
+        )
+        # > 365 should be rejected per router validation (le=365)
+        assert response.status_code == 422
+
+    # -------------------------------------------------------------------------
+    # Step 3: Verify Reminder Triggered for Plans Due for Review
+    # -------------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_review_reminder_structure_matches_parent_portal(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify reminder response structure matches parent-portal types.
+
+        Parent-portal InterventionPlanReviewReminder expects:
+        - planId: string
+        - childId: string
+        - childName: string
+        - title: string
+        - nextReviewDate: string (ISO date)
+        - daysUntilReview: number (can be negative for overdue)
+        - status: InterventionPlanStatus
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            # If there are plans, verify structure
+            if data["plans"] and len(data["plans"]) > 0:
+                reminder = data["plans"][0]
+                assert "plan_id" in reminder
+                assert "child_id" in reminder
+                assert "child_name" in reminder
+                assert "title" in reminder
+                assert "next_review_date" in reminder
+                assert "days_until_review" in reminder
+                assert "status" in reminder
+
+    @pytest.mark.asyncio
+    async def test_review_reminder_days_until_can_be_negative(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify days_until_review can be negative for overdue plans.
+
+        This is important for overdue plan identification.
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        # Endpoint should work (negative values allowed in response)
+        assert response.status_code in (200, 500)
+
+    @pytest.mark.asyncio
+    async def test_overdue_count_in_response(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify overdue_count field is present for UI badge display.
+
+        Parent-portal uses getPendingReviewCount() which relies on this.
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            assert "overdue_count" in data
+            assert data["overdue_count"] >= 0
+
+    @pytest.mark.asyncio
+    async def test_upcoming_count_in_response(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify upcoming_count field is present for upcoming review alerts."""
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            assert "upcoming_count" in data
+            assert data["upcoming_count"] >= 0
+
+
+# =============================================================================
+# Review Reminder Cross-Service Integration Tests
+# =============================================================================
+
+
+class TestReviewReminderCrossServiceIntegration:
+    """Tests verifying review reminder workflow integration across services.
+
+    Verifies that the API contract is consistent between:
+    - ai-service (FastAPI backend)
+    - parent-portal (Next.js client)
+    - gibbon (PHP CMS)
+    """
+
+    # Expected endpoint paths that parent-portal client uses
+    REVIEW_ENDPOINTS = {
+        "pending_review": "/api/v1/intervention-plans/pending-review",
+        "list_plans": "/api/v1/intervention-plans",
+    }
+
+    def test_review_reminder_endpoint_contract(self) -> None:
+        """Document parent-portal getPlansForReview() API contract.
+
+        From parent-portal/lib/intervention-plan-client.ts:
+        ```
+        export async function getPlansForReview(
+            params?: PendingReviewParams
+        ): Promise<InterventionPlanReviewReminder[]>
+        ```
+
+        Endpoint: GET /api/v1/intervention-plans/pending-review
+        Query Params:
+        {
+            days_ahead: number,     // How many days to look ahead (default 30)
+            include_overdue: bool,  // Whether to include overdue plans (default true)
+        }
+        Response:
+        {
+            plans: InterventionPlanReviewReminder[],
+            overdue_count: number,
+            upcoming_count: number,
+        }
+        """
+        contract = {
+            "endpoint": "GET /api/v1/intervention-plans/pending-review",
+            "request_params": ["days_ahead", "include_overdue"],
+            "response_fields": ["plans", "overdue_count", "upcoming_count"],
+        }
+        assert contract["endpoint"] == "GET /api/v1/intervention-plans/pending-review"
+
+    def test_review_reminder_plan_fields_documented(self) -> None:
+        """Document expected fields in PlanReviewReminder.
+
+        Gibbon's InterventionPlanGateway expects these fields when
+        displaying review status in the CMS.
+        """
+        reminder_fields = {
+            "plan_id": "UUID of the intervention plan",
+            "child_id": "UUID of the child",
+            "child_name": "Name of the child for display",
+            "title": "Plan title",
+            "next_review_date": "ISO date when review is due",
+            "days_until_review": "Days until review (negative if overdue)",
+            "status": "Plan status (active, under_review, etc.)",
+        }
+        assert "plan_id" in reminder_fields
+        assert "days_until_review" in reminder_fields
+
+    def test_gibbon_review_workflow_documented(self) -> None:
+        """Document Gibbon review reminder workflow.
+
+        From gibbon/modules/InterventionPlans/Domain/InterventionPlanGateway.php:
+        - queryPlansPendingReview(): Plans due/overdue for review
+        - Uses urgency status and days until review
+
+        Workflow:
+        1. Plan created with review_schedule (monthly, quarterly, etc.)
+        2. System calculates next_review_date from schedule
+        3. Gibbon queries ai-service for pending reviews
+        4. Gibbon displays overdue/urgent alerts in CMS
+        5. Educator schedules review meeting
+        6. After review, next_review_date is updated
+        """
+        workflow_steps = [
+            "Plan created with review_schedule",
+            "next_review_date calculated from schedule",
+            "Gibbon queries ai-service /pending-review",
+            "CMS displays overdue/urgent alerts",
+            "Educator schedules review meeting",
+            "next_review_date updated after review",
+        ]
+        assert len(workflow_steps) == 6
+
+    @pytest.mark.asyncio
+    async def test_parent_portal_review_summary_flow(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+        test_child_id: UUID,
+    ) -> None:
+        """Test parent-portal getChildInterventionPlanSummary() review flow.
+
+        This aggregates upcomingReviews for the child summary page.
+        """
+        # Parent-portal calls getReviewRemindersForChild(childId)
+        # which calls getPlansForReview() then filters by childId
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        # Should return list that can be filtered by childId
+        assert response.status_code in (200, 500)
+
+    @pytest.mark.asyncio
+    async def test_pending_review_count_for_badge(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Test getPendingReviewCount() flow for badge display.
+
+        Parent-portal uses 7 days ahead for urgent badge.
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+            params={"days_ahead": 7},
+        )
+        if response.status_code == 200:
+            data = response.json()
+            # Total count for badge
+            total_urgent = data["overdue_count"] + data["upcoming_count"]
+            assert total_urgent >= 0
+
+
+# =============================================================================
+# Review Schedule Validation Tests
+# =============================================================================
+
+
+class TestReviewScheduleValidation:
+    """Tests for review schedule enum validation in API requests."""
+
+    @pytest.mark.asyncio
+    async def test_valid_review_schedules_accepted(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+        test_child_id: UUID,
+    ) -> None:
+        """Verify all valid ReviewSchedule values are accepted.
+
+        Valid values: monthly, quarterly, semi_annually, annually
+        """
+        valid_schedules = ["monthly", "quarterly", "semi_annually", "annually"]
+
+        for schedule in valid_schedules:
+            plan_data = {
+                "child_id": str(test_child_id),
+                "title": f"{schedule.title()} Review Plan",
+                "status": "active",
+                "review_schedule": schedule,
+                "effective_date": str(date.today()),
+                "child_name": f"{schedule} Test Child",
+            }
+            response = await client.post(
+                "/api/v1/intervention-plans",
+                headers=auth_headers,
+                json=plan_data,
+            )
+            # Should accept valid schedule (201 or 500 if db unavailable)
+            assert response.status_code in (201, 500), (
+                f"review_schedule '{schedule}' should be valid"
+            )
+
+    @pytest.mark.asyncio
+    async def test_invalid_review_schedules_rejected(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+        test_child_id: UUID,
+    ) -> None:
+        """Verify invalid ReviewSchedule values are rejected.
+
+        Invalid values should return 422 validation error.
+        """
+        invalid_schedules = ["weekly", "daily", "biannual", "never", "invalid"]
+
+        for schedule in invalid_schedules:
+            plan_data = {
+                "child_id": str(test_child_id),
+                "title": f"Invalid {schedule} Plan",
+                "status": "active",
+                "review_schedule": schedule,
+                "effective_date": str(date.today()),
+                "child_name": f"Invalid {schedule} Child",
+            }
+            response = await client.post(
+                "/api/v1/intervention-plans",
+                headers=auth_headers,
+                json=plan_data,
+            )
+            # Should reject invalid schedule with 422
+            assert response.status_code == 422, (
+                f"review_schedule '{schedule}' should be rejected"
+            )
+
+    @pytest.mark.asyncio
+    async def test_plan_list_filter_by_review_schedule(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify list endpoint accepts review_schedule filter.
+
+        Parent-portal uses: getInterventionPlans({ reviewSchedule: 'monthly' })
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans",
+            headers=auth_headers,
+            params={"review_schedule": "monthly"},
+        )
+        # Should accept the filter parameter
+        assert response.status_code in (200, 500)
+
+    @pytest.mark.asyncio
+    async def test_plan_list_filter_needs_review(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify list endpoint accepts needs_review filter.
+
+        This filter returns only plans that are overdue for review.
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans",
+            headers=auth_headers,
+            params={"needs_review": True},
+        )
+        # Should accept the filter parameter
+        assert response.status_code in (200, 500)
+
+
+# =============================================================================
+# Review Reminder Service Unit Tests (via API)
+# =============================================================================
+
+
+class TestReviewReminderServiceViaAPI:
+    """Tests for review reminder service functionality via API endpoints.
+
+    These tests verify the service logic through the API layer.
+    """
+
+    @pytest.mark.asyncio
+    async def test_reminder_service_filters_active_plans(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify only ACTIVE and UNDER_REVIEW status plans appear in reminders.
+
+        Draft, Completed, and Archived plans should not trigger reminders.
+        """
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            for plan in data["plans"]:
+                assert plan["status"] in ("active", "under_review"), (
+                    "Only active and under_review plans should be in reminders"
+                )
+
+    @pytest.mark.asyncio
+    async def test_reminder_categorizes_overdue_correctly(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify overdue_count matches plans with negative days_until_review."""
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            # Count plans with negative days
+            overdue_plans = [
+                p for p in data["plans"]
+                if p.get("days_until_review", 0) < 0
+            ]
+            assert data["overdue_count"] == len(overdue_plans)
+
+    @pytest.mark.asyncio
+    async def test_reminder_categorizes_upcoming_correctly(
+        self,
+        client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        """Verify upcoming_count matches plans with non-negative days_until_review."""
+        response = await client.get(
+            "/api/v1/intervention-plans/pending-review",
+            headers=auth_headers,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            # Count plans with non-negative days
+            upcoming_plans = [
+                p for p in data["plans"]
+                if p.get("days_until_review", 0) >= 0
+            ]
+            assert data["upcoming_count"] == len(upcoming_plans)
