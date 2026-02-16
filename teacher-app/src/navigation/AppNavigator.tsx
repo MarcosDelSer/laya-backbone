@@ -8,10 +8,10 @@
 
 import React from 'react';
 import {View, Text, StyleSheet, ActivityIndicator} from 'react-native';
-import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
 import TabNavigator from './TabNavigator';
+import LoginScreen from '../screens/LoginScreen';
 import {useAuth} from '../hooks/useAuth';
 import type {RootStackParamList} from './types';
 
@@ -22,23 +22,10 @@ const COLORS = {
   primary: '#4A90D9',
   background: '#FFFFFF',
   text: '#1F2937',
-  loadingBackground: '#F5F5F5',
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-/**
- * Placeholder Login Screen
- * TODO: Replace with actual LoginScreen component in phase-5
- */
-function LoginScreenPlaceholder(): React.JSX.Element {
-  return (
-    <View style={styles.placeholderContainer}>
-      <Text style={styles.placeholderText}>Login Screen</Text>
-      <Text style={styles.placeholderSubtext}>Coming in phase-5</Text>
-    </View>
-  );
-}
 
 /**
  * Splash/Loading Screen
@@ -71,73 +58,69 @@ function AppNavigator(): React.JSX.Element {
   // Show splash screen while checking auth state
   if (isLoading) {
     return (
-      <NavigationContainer>
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-            contentStyle: {
-              backgroundColor: COLORS.background,
-            },
-          }}>
-          <Stack.Screen name="Splash" component={SplashScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    );
-  }
-
-  return (
-    <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
-          headerStyle: {
-            backgroundColor: COLORS.primary,
-          },
-          headerTintColor: COLORS.background,
-          headerTitleStyle: {
-            fontWeight: '600',
-          },
-          headerBackTitle: 'Back',
+          headerShown: false,
           contentStyle: {
             backgroundColor: COLORS.background,
           },
         }}>
-        {isAuthenticated ? (
-          // Authenticated screens
-          <Stack.Group>
-            <Stack.Screen
-              name="Main"
-              component={TabNavigator}
-              options={{
-                headerShown: false,
-              }}
-            />
-            {/*
-             * Future detail screens will be added here:
-             * - ChildDetail
-             * - ActivityDetail
-             * - PhotoGallery
-             * - Settings
-             * - NotificationSettings
-             */}
-          </Stack.Group>
-        ) : (
-          // Authentication screens
-          <Stack.Group
-            screenOptions={{
-              headerShown: false,
-              animation: 'fade',
-            }}>
-            <Stack.Screen
-              name="Login"
-              component={LoginScreenPlaceholder}
-              options={{
-                title: 'Login',
-              }}
-            />
-          </Stack.Group>
-        )}
+        <Stack.Screen name="Splash" component={SplashScreen} />
       </Stack.Navigator>
-    </NavigationContainer>
+    );
+  }
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: COLORS.primary,
+        },
+        headerTintColor: COLORS.background,
+        headerTitleStyle: {
+          fontWeight: '600',
+        },
+        headerBackTitle: 'Back',
+        contentStyle: {
+          backgroundColor: COLORS.background,
+        },
+      }}>
+      {isAuthenticated ? (
+        // Authenticated screens
+        <Stack.Group>
+          <Stack.Screen
+            name="Main"
+            component={TabNavigator}
+            options={{
+              headerShown: false,
+            }}
+          />
+          {/*
+           * Future detail screens will be added here:
+           * - ChildDetail
+           * - ActivityDetail
+           * - PhotoGallery
+           * - Settings
+           * - NotificationSettings
+           */}
+        </Stack.Group>
+      ) : (
+        // Authentication screens
+        <Stack.Group
+          screenOptions={{
+            headerShown: false,
+            animation: 'fade',
+          }}>
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{
+              title: 'Login',
+            }}
+          />
+        </Stack.Group>
+      )}
+    </Stack.Navigator>
   );
 }
 
@@ -159,23 +142,6 @@ const styles = StyleSheet.create({
   },
   splashSubtext: {
     fontSize: 16,
-    color: COLORS.text,
-    opacity: 0.6,
-  },
-  placeholderContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.loadingBackground,
-  },
-  placeholderText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 8,
-  },
-  placeholderSubtext: {
-    fontSize: 14,
     color: COLORS.text,
     opacity: 0.6,
   },
