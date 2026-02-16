@@ -5,15 +5,19 @@ Implements local filesystem and S3 backend support with thumbnail generation.
 """
 
 import asyncio
+import base64
 import hashlib
+import hmac
 import io
 import os
+import secrets
 import shutil
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
 import boto3
@@ -640,6 +644,211 @@ class StorageService:
             True if the content type supports thumbnail generation.
         """
         return content_type in IMAGE_MIME_TYPES
+
+    async def generate_secure_url(
+        self,
+        file_id: UUID,
+        owner_id: Optional[UUID] = None,
+        expires_in_seconds: int = 3600,
+        base_url: Optional[str] = None,
+    ) -> tuple[str, datetime]:
+        """Generate a secure, time-limited URL for file access.
+
+        Creates a signed URL that allows temporary access to a file.
+        For S3 backend, uses AWS presigned URLs. For local backend,
+        generates HMAC-signed tokens.
+
+        Args:
+            file_id: UUID of the file to generate URL for.
+            owner_id: Optional owner ID for access control.
+            expires_in_seconds: URL expiration time in seconds (default 3600).
+                Must be between 60 and 86400 seconds (1 min to 24 hours).
+            base_url: Base URL for local storage URLs (e.g., 'https://api.example.com').
+                Required for local backend.
+
+        Returns:
+            Tuple of (secure_url, expires_at_datetime).
+
+        Raises:
+            FileNotFoundError: If the file does not exist or is not accessible.
+            ValueError: If expires_in_seconds is out of valid range.
+            StorageServiceError: If URL generation fails.
+        """
+        # Validate expiration time
+        if expires_in_seconds < 60 or expires_in_seconds > 86400:
+            raise ValueError(
+                "expires_in_seconds must be between 60 and 86400 "
+                "(1 minute to 24 hours)"
+            )
+
+        # Get the file record
+        file_record = await self.get_file_by_id(file_id)
+
+        if file_record is None:
+            raise FileNotFoundError(f"File with ID {file_id} not found")
+
+        # Check access permissions - only owner can generate URLs for private files
+        if not file_record.is_public:
+            if owner_id is None:
+                raise FileNotFoundError(f"File with ID {file_id} not found")
+            if file_record.owner_id != owner_id:
+                raise FileNotFoundError(f"File with ID {file_id} not found")
+
+        # Calculate expiration time
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)
+
+        # Generate URL based on backend
+        if file_record.storage_backend == StorageBackend.S3:
+            url = await self._generate_s3_presigned_url(
+                file_record.storage_path,
+                expires_in_seconds,
+            )
+        else:
+            if base_url is None:
+                # Use a default local URL pattern
+                base_url = "http://localhost:8000"
+            url = self._generate_local_signed_url(
+                file_id,
+                file_record.storage_path,
+                expires_at,
+                base_url,
+            )
+
+        return url, expires_at
+
+    async def _generate_s3_presigned_url(
+        self,
+        storage_path: str,
+        expires_in_seconds: int,
+    ) -> str:
+        """Generate an S3 presigned URL for file download.
+
+        Args:
+            storage_path: S3 key of the file.
+            expires_in_seconds: URL expiration time in seconds.
+
+        Returns:
+            Presigned URL string.
+
+        Raises:
+            S3StorageError: If URL generation fails.
+        """
+        if self._s3_client is None:
+            raise S3StorageError("S3 client not initialized")
+
+        loop = asyncio.get_event_loop()
+        try:
+            url = await loop.run_in_executor(
+                _s3_executor,
+                partial(
+                    self._s3_client.generate_presigned_url,
+                    "get_object",
+                    Params={
+                        "Bucket": self._s3_bucket_name,
+                        "Key": storage_path,
+                    },
+                    ExpiresIn=expires_in_seconds,
+                ),
+            )
+            return url
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            raise S3StorageError(
+                f"Failed to generate presigned URL: {error_code} - {str(e)}"
+            ) from e
+
+    def _generate_local_signed_url(
+        self,
+        file_id: UUID,
+        storage_path: str,
+        expires_at: datetime,
+        base_url: str,
+    ) -> str:
+        """Generate a signed URL for local file access.
+
+        Creates an HMAC-signed URL with embedded expiration timestamp.
+        The signature can be verified using verify_local_signed_url().
+
+        Args:
+            file_id: UUID of the file.
+            storage_path: Local storage path of the file.
+            expires_at: Expiration timestamp.
+            base_url: Base URL for the download endpoint.
+
+        Returns:
+            Signed URL string.
+        """
+        # Convert expiration to Unix timestamp
+        expires_timestamp = int(expires_at.timestamp())
+
+        # Create the message to sign
+        message = f"{file_id}:{expires_timestamp}"
+
+        # Generate HMAC signature using JWT secret key
+        signature = hmac.new(
+            settings.jwt_secret_key.encode("utf-8"),
+            message.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+
+        # URL-safe base64 encode the signature
+        signature_b64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
+
+        # Build the signed URL
+        params = {
+            "expires": str(expires_timestamp),
+            "signature": signature_b64,
+        }
+        query_string = urlencode(params)
+
+        # Construct full URL - endpoint will be /api/v1/storage/files/{file_id}/download
+        url = f"{base_url.rstrip('/')}/api/v1/storage/files/{file_id}/download?{query_string}"
+
+        return url
+
+    def verify_local_signed_url(
+        self,
+        file_id: UUID,
+        expires_timestamp: int,
+        signature: str,
+    ) -> bool:
+        """Verify a local signed URL signature.
+
+        Checks that the signature is valid and the URL has not expired.
+
+        Args:
+            file_id: UUID of the file from the URL.
+            expires_timestamp: Unix timestamp from the URL.
+            signature: Base64-encoded signature from the URL.
+
+        Returns:
+            True if the signature is valid and not expired, False otherwise.
+        """
+        # Check expiration
+        now = datetime.now(timezone.utc)
+        expires_at = datetime.fromtimestamp(expires_timestamp, tz=timezone.utc)
+        if now >= expires_at:
+            return False
+
+        # Recreate the expected signature
+        message = f"{file_id}:{expires_timestamp}"
+        expected_signature = hmac.new(
+            settings.jwt_secret_key.encode("utf-8"),
+            message.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+
+        # Decode the provided signature (add padding if needed)
+        padding = 4 - (len(signature) % 4)
+        if padding != 4:
+            signature += "=" * padding
+        try:
+            provided_signature = base64.urlsafe_b64decode(signature)
+        except Exception:
+            return False
+
+        # Constant-time comparison to prevent timing attacks
+        return hmac.compare_digest(expected_signature, provided_signature)
 
     def _create_thumbnail_sync(
         self,
