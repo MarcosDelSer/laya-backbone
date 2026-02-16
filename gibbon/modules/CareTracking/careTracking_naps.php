@@ -24,6 +24,8 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\NapGateway;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -48,6 +50,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateways via DI container
     $napGateway = $container->get(NapGateway::class);
     $attendanceGateway = $container->get(AttendanceGateway::class);
+
+    // Get AI Sync service for webhook notifications
+    try {
+        $settingGateway = $container->get(SettingGateway::class);
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
 
     // Sleep quality options
     $qualityOptions = [
@@ -80,6 +90,23 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
 
             if ($result !== false) {
                 $page->addSuccess(__('Nap has been started successfully.'));
+
+                // Trigger webhook for AI sync
+                if ($aiSyncService !== null) {
+                    try {
+                        $napData = [
+                            'gibbonCareNapID' => $result,
+                            'gibbonPersonID' => $childID,
+                            'date' => $date,
+                            'startTime' => $startTime,
+                            'notes' => $notes,
+                            'recordedByID' => $gibbonPersonID,
+                        ];
+                        $aiSyncService->syncNapEvent($result, $napData);
+                    } catch (Exception $e) {
+                        // Silently fail - don't break UX if webhook fails
+                    }
+                }
             } else {
                 $page->addError(__('Failed to start nap.'));
             }
@@ -102,6 +129,24 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
 
             if ($result !== false) {
                 $page->addSuccess(__('Nap has been ended successfully.'));
+
+                // Trigger webhook for AI sync (nap completed)
+                if ($aiSyncService !== null) {
+                    try {
+                        $napData = [
+                            'gibbonCareNapID' => $gibbonCareNapID,
+                            'gibbonPersonID' => $childID,
+                            'date' => $date,
+                            'endTime' => $endTime,
+                            'quality' => $quality,
+                            'notes' => $notes,
+                            'recordedByID' => $gibbonPersonID,
+                        ];
+                        $aiSyncService->syncNapEvent($gibbonCareNapID, $napData);
+                    } catch (Exception $e) {
+                        // Silently fail - don't break UX if webhook fails
+                    }
+                }
             } else {
                 $page->addError(__('Failed to end nap.'));
             }
@@ -129,6 +174,23 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                 );
                 if ($result !== false) {
                     $successCount++;
+
+                    // Trigger webhook for AI sync
+                    if ($aiSyncService !== null) {
+                        try {
+                            $napData = [
+                                'gibbonCareNapID' => $result,
+                                'gibbonPersonID' => $childID,
+                                'date' => $date,
+                                'startTime' => $startTime,
+                                'notes' => $notes,
+                                'recordedByID' => $gibbonPersonID,
+                            ];
+                            $aiSyncService->syncNapEvent($result, $napData);
+                        } catch (Exception $e) {
+                            // Silently fail - don't break UX if webhook fails
+                        }
+                    }
                 }
             }
             if ($successCount > 0) {
