@@ -1650,3 +1650,1099 @@ class TestNotificationPreferenceEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert "updated_count" in data
+
+
+# =============================================================================
+# API Endpoint Integration Tests - Thread CRUD Operations
+# =============================================================================
+
+
+class TestThreadEndpointIntegration:
+    """Integration tests for thread API endpoint CRUD operations."""
+
+    @pytest.mark.asyncio
+    async def test_endpoint_create_thread_with_initial_message(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test creating a thread with an initial message via API."""
+        response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Daily Update for Child",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+                "initial_message": "Today was a great day!",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["subject"] == "Daily Update for Child"
+        assert data["thread_type"] == "daily_log"
+        assert data["child_id"] == str(test_child_id)
+        assert data["is_active"] is True
+        assert "id" in data
+        assert "created_at" in data
+
+    @pytest.mark.asyncio
+    async def test_endpoint_create_question_thread_type(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test creating a question thread type via API."""
+        response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Question about lunch menu",
+                "thread_type": "question",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["thread_type"] == "question"
+
+    @pytest.mark.asyncio
+    async def test_endpoint_create_urgent_thread_type(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test creating an urgent thread type via API."""
+        response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Urgent: Child feeling unwell",
+                "thread_type": "urgent",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["thread_type"] == "urgent"
+
+    @pytest.mark.asyncio
+    async def test_endpoint_get_thread_with_messages(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test getting a thread with messages included via API."""
+        # First create a thread
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Test Thread with Messages",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+                "initial_message": "First message in thread",
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Get the thread with messages
+        response = await client.get(
+            f"/api/v1/messaging/threads/{thread_id}",
+            params={"include_messages": "true"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == thread_id
+        assert "messages" in data
+
+    @pytest.mark.asyncio
+    async def test_endpoint_update_thread_subject(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test updating a thread subject via API."""
+        # Create a thread first
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Original Subject",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Update the thread
+        response = await client.patch(
+            f"/api/v1/messaging/threads/{thread_id}",
+            json={"subject": "Updated Subject"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["subject"] == "Updated Subject"
+
+    @pytest.mark.asyncio
+    async def test_endpoint_archive_thread(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test archiving a thread via API."""
+        # Create a thread first
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread to Archive",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Archive the thread
+        response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/archive",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_active"] is False
+
+    @pytest.mark.asyncio
+    async def test_endpoint_list_threads_pagination(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test listing threads with pagination via API."""
+        # Create multiple threads
+        for i in range(3):
+            await client.post(
+                "/api/v1/messaging/threads",
+                json={
+                    "subject": f"Thread {i}",
+                    "thread_type": "daily_log",
+                    "child_id": str(test_child_id),
+                    "participants": [],
+                },
+                headers=auth_headers,
+            )
+
+        # List with pagination
+        response = await client.get(
+            "/api/v1/messaging/threads",
+            params={"limit": 2, "offset": 0},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "threads" in data
+        assert len(data["threads"]) <= 2
+
+    @pytest.mark.asyncio
+    async def test_endpoint_list_threads_filter_by_type(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test listing threads filtered by thread type via API."""
+        # Create threads of different types
+        await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Daily Log Thread",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Question Thread",
+                "thread_type": "question",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+
+        # Filter by type
+        response = await client.get(
+            "/api/v1/messaging/threads",
+            params={"thread_type": "question"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        for thread in data["threads"]:
+            assert thread["thread_type"] == "question"
+
+    @pytest.mark.asyncio
+    async def test_endpoint_create_thread_invalid_thread_type(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test creating a thread with invalid thread type returns 422."""
+        response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Test Thread",
+                "thread_type": "invalid_type",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+
+# =============================================================================
+# API Endpoint Integration Tests - Message CRUD Operations
+# =============================================================================
+
+
+class TestMessageEndpointIntegration:
+    """Integration tests for message API endpoint CRUD operations."""
+
+    @pytest.mark.asyncio
+    async def test_endpoint_send_message_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test sending a message to a thread via API."""
+        # Create a thread first
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread for Messages",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Send a message
+        response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            json={
+                "content": "Hello, this is a test message!",
+                "content_type": "text",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == "Hello, this is a test message!"
+        assert data["content_type"] == "text"
+        assert data["thread_id"] == thread_id
+        assert data["is_read"] is False
+
+    @pytest.mark.asyncio
+    async def test_endpoint_send_message_with_mentions(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test sending a message with @mentions via API."""
+        # Create a thread
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread with Mentions",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Send message with mention
+        response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            json={
+                "content": "Hey @[Parent User], please check this!",
+                "content_type": "text",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "@[Parent User]" in data["content"]
+
+    @pytest.mark.asyncio
+    async def test_endpoint_list_messages_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test listing messages in a thread via API."""
+        # Create thread and add messages
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread for Listing",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Add multiple messages
+        for i in range(3):
+            await client.post(
+                f"/api/v1/messaging/threads/{thread_id}/messages",
+                json={"content": f"Message {i}", "content_type": "text"},
+                headers=auth_headers,
+            )
+
+        # List messages
+        response = await client.get(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "messages" in data
+        assert len(data["messages"]) >= 3
+
+    @pytest.mark.asyncio
+    async def test_endpoint_list_messages_pagination(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test listing messages with pagination via API."""
+        # Create thread and add messages
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread for Pagination",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Add messages
+        for i in range(5):
+            await client.post(
+                f"/api/v1/messaging/threads/{thread_id}/messages",
+                json={"content": f"Message {i}", "content_type": "text"},
+                headers=auth_headers,
+            )
+
+        # List with limit
+        response = await client.get(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            params={"limit": 2},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["messages"]) <= 2
+
+    @pytest.mark.asyncio
+    async def test_endpoint_get_message_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test getting a specific message via API."""
+        # Create thread
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread for Get",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Send a message
+        msg_response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            json={"content": "Specific message", "content_type": "text"},
+            headers=auth_headers,
+        )
+        message_id = msg_response.json()["id"]
+
+        # Get the message
+        response = await client.get(
+            f"/api/v1/messaging/messages/{message_id}",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == message_id
+        assert data["content"] == "Specific message"
+
+    @pytest.mark.asyncio
+    async def test_endpoint_mark_messages_as_read_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test marking messages as read via API."""
+        # Create thread and message
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread for Read",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        msg_response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            json={"content": "Unread message", "content_type": "text"},
+            headers=auth_headers,
+        )
+        message_id = msg_response.json()["id"]
+
+        # Mark as read
+        response = await client.patch(
+            "/api/v1/messaging/messages/read",
+            json={"message_ids": [message_id]},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "marked_count" in data
+
+    @pytest.mark.asyncio
+    async def test_endpoint_mark_thread_as_read_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test marking entire thread as read via API."""
+        # Create thread and messages
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread for Mark All Read",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        for i in range(3):
+            await client.post(
+                f"/api/v1/messaging/threads/{thread_id}/messages",
+                json={"content": f"Message {i}", "content_type": "text"},
+                headers=auth_headers,
+            )
+
+        # Mark thread as read
+        response = await client.patch(
+            f"/api/v1/messaging/threads/{thread_id}/read",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "marked_count" in data
+
+    @pytest.mark.asyncio
+    async def test_endpoint_delete_message_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test deleting a message via API."""
+        # Create thread and message
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread for Delete",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        msg_response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            json={"content": "Message to delete", "content_type": "text"},
+            headers=auth_headers,
+        )
+        message_id = msg_response.json()["id"]
+
+        # Delete the message
+        response = await client.delete(
+            f"/api/v1/messaging/messages/{message_id}",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+
+        # Verify message is deleted
+        get_response = await client.get(
+            f"/api/v1/messaging/messages/{message_id}",
+            headers=auth_headers,
+        )
+        assert get_response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_endpoint_get_unread_count_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test getting unread message count via API."""
+        response = await client.get(
+            "/api/v1/messaging/messages/unread-count",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "total_unread" in data
+        assert "threads_with_unread" in data
+
+    @pytest.mark.asyncio
+    async def test_endpoint_send_message_empty_content(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test sending a message with empty content returns 422."""
+        # Create thread
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread for Empty",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Send empty message
+        response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            json={"content": "", "content_type": "text"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+
+# =============================================================================
+# API Endpoint Integration Tests - Notification Preferences Full Flow
+# =============================================================================
+
+
+class TestNotificationEndpointIntegration:
+    """Integration tests for notification preference API endpoint operations."""
+
+    @pytest.mark.asyncio
+    async def test_endpoint_create_preference_with_quiet_hours(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test creating a preference with quiet hours via API."""
+        parent_id = uuid4()
+        response = await client.post(
+            "/api/v1/messaging/notifications/preferences",
+            json={
+                "parent_id": str(parent_id),
+                "notification_type": "message",
+                "channel": "push",
+                "is_enabled": True,
+                "frequency": "immediate",
+                "quiet_hours_start": "21:00",
+                "quiet_hours_end": "08:00",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["quiet_hours_start"] == "21:00"
+        assert data["quiet_hours_end"] == "08:00"
+
+    @pytest.mark.asyncio
+    async def test_endpoint_update_preference_toggle_enabled(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test toggling preference enabled status via API."""
+        parent_id = uuid4()
+
+        # Create preference (enabled)
+        await client.post(
+            "/api/v1/messaging/notifications/preferences",
+            json={
+                "parent_id": str(parent_id),
+                "notification_type": "urgent",
+                "channel": "email",
+                "is_enabled": True,
+                "frequency": "immediate",
+            },
+            headers=auth_headers,
+        )
+
+        # Update to disabled
+        response = await client.post(
+            "/api/v1/messaging/notifications/preferences",
+            json={
+                "parent_id": str(parent_id),
+                "notification_type": "urgent",
+                "channel": "email",
+                "is_enabled": False,
+                "frequency": "immediate",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_endpoint_get_specific_preference_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test getting a specific preference by type and channel via API."""
+        parent_id = uuid4()
+
+        # Create preference first
+        await client.post(
+            "/api/v1/messaging/notifications/preferences",
+            json={
+                "parent_id": str(parent_id),
+                "notification_type": "daily_log",
+                "channel": "push",
+                "is_enabled": True,
+                "frequency": "daily_digest",
+            },
+            headers=auth_headers,
+        )
+
+        # Get specific preference
+        response = await client.get(
+            f"/api/v1/messaging/notifications/preferences/{parent_id}/daily_log/push",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["notification_type"] == "daily_log"
+        assert data["channel"] == "push"
+
+    @pytest.mark.asyncio
+    async def test_endpoint_delete_preference_success(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test deleting a preference via API."""
+        parent_id = uuid4()
+
+        # Create preference
+        await client.post(
+            "/api/v1/messaging/notifications/preferences",
+            json={
+                "parent_id": str(parent_id),
+                "notification_type": "message",
+                "channel": "sms",
+                "is_enabled": True,
+                "frequency": "immediate",
+            },
+            headers=auth_headers,
+        )
+
+        # Delete preference
+        response = await client.delete(
+            f"/api/v1/messaging/notifications/preferences/{parent_id}/message/sms",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+
+        # Verify deleted
+        get_response = await client.get(
+            f"/api/v1/messaging/notifications/preferences/{parent_id}/message/sms",
+            headers=auth_headers,
+        )
+        assert get_response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_endpoint_notification_preferences_requires_auth(
+        self,
+        client: AsyncClient,
+    ):
+        """Test that notification preferences endpoints require authentication."""
+        parent_id = uuid4()
+
+        # Create without auth
+        response = await client.post(
+            "/api/v1/messaging/notifications/preferences",
+            json={
+                "parent_id": str(parent_id),
+                "notification_type": "message",
+                "channel": "email",
+                "is_enabled": True,
+                "frequency": "immediate",
+            },
+        )
+        assert response.status_code == 401
+
+        # Get without auth
+        response = await client.get(
+            f"/api/v1/messaging/notifications/preferences/{parent_id}",
+        )
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_endpoint_batch_update_preferences(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test updating multiple preferences in sequence via API."""
+        parent_id = uuid4()
+
+        # Create multiple preferences
+        channels = ["email", "push", "sms"]
+        for channel in channels:
+            await client.post(
+                "/api/v1/messaging/notifications/preferences",
+                json={
+                    "parent_id": str(parent_id),
+                    "notification_type": "message",
+                    "channel": channel,
+                    "is_enabled": True,
+                    "frequency": "immediate",
+                },
+                headers=auth_headers,
+            )
+
+        # Get all preferences
+        response = await client.get(
+            f"/api/v1/messaging/notifications/preferences/{parent_id}",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["preferences"]) >= 3
+
+
+# =============================================================================
+# API Endpoint Tests - Error Handling and Edge Cases
+# =============================================================================
+
+
+class TestEndpointErrorHandling:
+    """Tests for API endpoint error handling and edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_endpoint_invalid_uuid_thread(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test API handles invalid UUID format for thread ID."""
+        response = await client.get(
+            "/api/v1/messaging/threads/not-a-valid-uuid",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_endpoint_invalid_uuid_message(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test API handles invalid UUID format for message ID."""
+        response = await client.get(
+            "/api/v1/messaging/messages/invalid-uuid",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_endpoint_invalid_uuid_child(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test API handles invalid UUID format for child ID in thread creation."""
+        response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Test Thread",
+                "thread_type": "daily_log",
+                "child_id": "invalid-uuid",
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_endpoint_missing_required_subject(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test API validates required subject field in thread creation."""
+        response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_endpoint_missing_required_content(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test API validates required content field in message creation."""
+        # Create a thread first
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Test Thread",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        # Try to send message without content
+        response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            json={"content_type": "text"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_endpoint_notification_invalid_type(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test API handles invalid notification type."""
+        parent_id = uuid4()
+        response = await client.post(
+            "/api/v1/messaging/notifications/preferences",
+            json={
+                "parent_id": str(parent_id),
+                "notification_type": "invalid_type",
+                "channel": "email",
+                "is_enabled": True,
+                "frequency": "immediate",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_endpoint_notification_invalid_channel(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+    ):
+        """Test API handles invalid notification channel."""
+        parent_id = uuid4()
+        response = await client.post(
+            "/api/v1/messaging/notifications/preferences",
+            json={
+                "parent_id": str(parent_id),
+                "notification_type": "message",
+                "channel": "invalid_channel",
+                "is_enabled": True,
+                "frequency": "immediate",
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_endpoint_send_message_to_archived_thread(
+        self,
+        client: AsyncClient,
+        auth_headers: Dict[str, str],
+        test_child_id: UUID,
+    ):
+        """Test sending message to archived thread returns error."""
+        # Create and archive thread
+        create_response = await client.post(
+            "/api/v1/messaging/threads",
+            json={
+                "subject": "Thread to Archive",
+                "thread_type": "daily_log",
+                "child_id": str(test_child_id),
+                "participants": [],
+            },
+            headers=auth_headers,
+        )
+        thread_id = create_response.json()["id"]
+
+        await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/archive",
+            headers=auth_headers,
+        )
+
+        # Try to send message to archived thread
+        response = await client.post(
+            f"/api/v1/messaging/threads/{thread_id}/messages",
+            json={"content": "Test message", "content_type": "text"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "archived" in response.json()["detail"].lower()
+
+
+# =============================================================================
+# API Endpoint Tests - Enum and Schema Validation
+# =============================================================================
+
+
+class TestEndpointSchemaValidation:
+    """Tests for API endpoint schema and enum validation."""
+
+    @pytest.mark.asyncio
+    async def test_endpoint_thread_type_enum_values(self):
+        """Test that ThreadType enum has all expected values."""
+        expected_types = {"daily_log", "question", "urgent", "private_note", "general"}
+        actual_types = {t.value for t in ThreadType}
+
+        assert actual_types == expected_types
+
+    @pytest.mark.asyncio
+    async def test_endpoint_sender_type_enum_values(self):
+        """Test that SenderType enum has all expected values."""
+        expected_types = {"parent", "educator", "director", "admin", "system"}
+        actual_types = {t.value for t in SenderType}
+
+        assert actual_types == expected_types
+
+    @pytest.mark.asyncio
+    async def test_endpoint_content_type_enum_values(self):
+        """Test that MessageContentType enum has all expected values."""
+        expected_types = {"text", "image", "file", "voice_note"}
+        actual_types = {t.value for t in MessageContentType}
+
+        assert actual_types == expected_types
+
+    @pytest.mark.asyncio
+    async def test_endpoint_notification_type_enum_values(self):
+        """Test that NotificationType enum has all expected values."""
+        expected_types = {"message", "daily_log", "urgent", "system"}
+        actual_types = {t.value for t in NotificationType}
+
+        assert actual_types == expected_types
+
+    @pytest.mark.asyncio
+    async def test_endpoint_notification_channel_enum_values(self):
+        """Test that NotificationChannelType enum has all expected values."""
+        expected_types = {"email", "push", "sms"}
+        actual_types = {t.value for t in NotificationChannelType}
+
+        assert actual_types == expected_types
+
+    @pytest.mark.asyncio
+    async def test_endpoint_notification_frequency_enum_values(self):
+        """Test that NotificationFrequency enum has all expected values."""
+        expected_values = {"immediate", "daily_digest"}
+        actual_values = {f.value for f in NotificationFrequency}
+
+        assert actual_values == expected_values
