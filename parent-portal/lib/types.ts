@@ -391,6 +391,134 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
+// Director Dashboard Types
+// ============================================================================
+
+/**
+ * Age group classifications for Quebec childcare.
+ * Based on Quebec Ministère de la Famille regulations.
+ */
+export type AgeGroupType =
+  | 'poupon'
+  | 'bambin'
+  | 'prescolaire'
+  | 'scolaire'
+  | 'mixed';
+
+/**
+ * Status levels for occupancy monitoring.
+ */
+export type OccupancyStatus =
+  | 'normal'
+  | 'near_capacity'
+  | 'at_capacity'
+  | 'over_capacity'
+  | 'empty';
+
+/**
+ * Priority levels for dashboard alerts.
+ */
+export type AlertPriority = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * Types of alerts on the director dashboard.
+ */
+export type AlertType =
+  | 'occupancy'
+  | 'staffing'
+  | 'compliance'
+  | 'attendance'
+  | 'general';
+
+/**
+ * Occupancy data for a single group/classroom.
+ * Represents real-time occupancy status for an individual group
+ * including current count, capacity, and compliance status.
+ */
+export interface GroupOccupancy {
+  groupId: string;
+  groupName: string;
+  ageGroup: AgeGroupType;
+  currentCount: number;
+  capacity: number;
+  occupancyPercentage: number;
+  status: OccupancyStatus;
+  staffCount?: number;
+  staffRatio?: string;
+  roomNumber?: string;
+  lastUpdated: string;
+}
+
+/**
+ * High-level summary of facility-wide occupancy.
+ * Provides aggregate occupancy metrics across all groups
+ * for quick director overview.
+ */
+export interface OccupancySummary {
+  facilityId?: string;
+  totalChildren: number;
+  totalCapacity: number;
+  overallOccupancyPercentage: number;
+  groupsAtCapacity: number;
+  groupsNearCapacity: number;
+  totalGroups: number;
+  averageStaffRatio?: string;
+  snapshotTime: string;
+}
+
+/**
+ * An alert item for the director dashboard.
+ * Represents an actionable notification requiring director attention.
+ */
+export interface AlertItem {
+  alertId: string;
+  alertType: AlertType;
+  priority: AlertPriority;
+  title: string;
+  message: string;
+  groupId?: string;
+  groupName?: string;
+  createdAt: string;
+  isAcknowledged: boolean;
+}
+
+/**
+ * A single point in occupancy history time series.
+ * Represents historical occupancy data for trend analysis.
+ */
+export interface OccupancyHistoryPoint {
+  timestamp: string;
+  totalCount: number;
+  capacity: number;
+  occupancyPercentage: number;
+}
+
+/**
+ * Response for occupancy history data.
+ * Contains time series data for occupancy trend visualization.
+ */
+export interface OccupancyHistoryResponse {
+  facilityId?: string;
+  dataPoints: OccupancyHistoryPoint[];
+  periodStart: string;
+  periodEnd: string;
+  generatedAt: string;
+}
+
+/**
+ * Complete director dashboard response with all metrics.
+ * Aggregates occupancy summary, group details, alerts, and
+ * real-time statistics for the director's operational overview.
+ */
+export interface DirectorDashboard {
+  summary: OccupancySummary;
+  groups: GroupOccupancy[];
+  alerts: AlertItem[];
+  alertCountByPriority: Record<string, number>;
+  generatedAt: string;
+}
+
+// ============================================================================
 // API Response Types
 // ============================================================================
 
