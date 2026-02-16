@@ -432,3 +432,22 @@ $actionRows[8]['categoryPermissionStaff']  = 'Y';
 $actionRows[8]['categoryPermissionStudent']= 'N';
 $actionRows[8]['categoryPermissionParent'] = 'N';
 $actionRows[8]['categoryPermissionOther']  = 'N';
+
+// Row 9 - Accounting Export
+$actionRows[9]['name']                      = 'Accounting Export';
+$actionRows[9]['precedence']                = '0';
+$actionRows[9]['category']                  = 'Export';
+$actionRows[9]['description']               = 'Export financial data to accounting software formats including Sage 50 (CSV) and QuickBooks (IIF). View export history and download previous exports.';
+$actionRows[9]['URLList']                   = 'finance_export.php,finance_exportProcess.php,finance_export_download.php';
+$actionRows[9]['entryURL']                  = 'finance_export.php';
+$actionRows[9]['entrySidebar']              = 'Y';
+$actionRows[9]['menuShow']                  = 'Y';
+$actionRows[9]['defaultPermissionAdmin']   = 'Y';
+$actionRows[9]['defaultPermissionTeacher'] = 'N';
+$actionRows[9]['defaultPermissionStudent'] = 'N';
+$actionRows[9]['defaultPermissionParent']  = 'N';
+$actionRows[9]['defaultPermissionSupport'] = 'Y';
+$actionRows[9]['categoryPermissionStaff']  = 'Y';
+$actionRows[9]['categoryPermissionStudent']= 'N';
+$actionRows[9]['categoryPermissionParent'] = 'N';
+$actionRows[9]['categoryPermissionOther']  = 'N';
