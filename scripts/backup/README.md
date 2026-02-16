@@ -1012,6 +1012,265 @@ ssh backup_user@backup.example.com "rsync --version"
 rsync -avz -e "ssh -i ~/.ssh/id_rsa" /var/backups/mysql/ backup_user@backup.example.com:/backups/laya/mysql/
 ```
 
+## Photo and Upload Backup
+
+### Photo Backup Script (`photo_backup.sh`)
+
+**Features:**
+- ✅ Rsync with --delete for exact mirroring
+- ✅ Incremental transfers (only changed files)
+- ✅ Bandwidth limiting option
+- ✅ Dry-run mode for testing
+- ✅ Comprehensive error handling and logging
+- ✅ Pre-flight checks (connectivity, disk space, directory existence)
+- ✅ Support for local and remote backup destinations
+- ✅ Progress reporting with transfer statistics
+- ✅ Secure file permissions (700)
+- ✅ Verification mode to check backup integrity
+
+**Scheduled Time:** Daily at 3:30 AM
+
+**What Gets Backed Up:**
+- Photos directory (`/var/www/laya/uploads/photos` by default)
+- Uploaded files directory (`/var/www/laya/uploads/files` by default)
+
+**Important Note on --delete Flag:**
+The `--delete` flag ensures the backup directory is an exact mirror of the source directory. This means:
+- Files deleted from the source will be deleted from the backup
+- This prevents the backup from growing larger than the source
+- Ensures consistency between source and backup
+- Critical for maintaining an accurate snapshot of current files
+
+### Setup
+
+#### Prerequisites
+- `rsync` installed (usually pre-installed on Linux/macOS)
+- Sufficient disk space for photo/upload backups
+- Write permissions for backup directories
+
+#### Environment Variables
+
+```bash
+export PHOTOS_SOURCE_DIR=/var/www/laya/uploads/photos
+export UPLOADS_SOURCE_DIR=/var/www/laya/uploads/files
+export PHOTOS_BACKUP_DIR=/var/backups/photos
+export UPLOADS_BACKUP_DIR=/var/backups/uploads
+export RSYNC_BANDWIDTH=5000  # Optional: limit to 5 MB/s
+export MIN_DISK_SPACE_GB=5   # Minimum free disk space required
+```
+
+#### Manual Backup
+
+Run the backup script manually:
+
+```bash
+cd /path/to/laya-backbone
+./scripts/backup/photo_backup.sh
+```
+
+#### Test Before Running
+
+Always test with dry-run first:
+
+```bash
+# Test what would be backed up without actually transferring
+./scripts/backup/photo_backup.sh --dry-run
+```
+
+#### Verify Existing Backups
+
+Check if backups are in sync with source:
+
+```bash
+./scripts/backup/photo_backup.sh --verify
+```
+
+#### Automated Backup (Cron)
+
+1. Create backup directories:
+```bash
+sudo mkdir -p /var/backups/photos
+sudo mkdir -p /var/backups/uploads
+sudo chmod 700 /var/backups/photos
+sudo chmod 700 /var/backups/uploads
+```
+
+2. Edit crontab:
+```bash
+crontab -e
+```
+
+3. Add the following line (adjust paths as needed):
+```
+30 3 * * * PHOTOS_SOURCE_DIR=/var/www/laya/uploads/photos UPLOADS_SOURCE_DIR=/var/www/laya/uploads/files PHOTOS_BACKUP_DIR=/var/backups/photos UPLOADS_BACKUP_DIR=/var/backups/uploads /path/to/laya-backbone/scripts/backup/photo_backup.sh >> /var/log/photo_backup.log 2>&1
+```
+
+Or use an environment file:
+```
+30 3 * * * /bin/bash -c 'source /path/to/.env && /path/to/laya-backbone/scripts/backup/photo_backup.sh' >> /var/log/photo_backup.log 2>&1
+```
+
+### Usage
+
+**Basic Usage:**
+
+```bash
+# Run photo and upload backup
+./scripts/backup/photo_backup.sh
+
+# Test backup without transferring (dry-run)
+./scripts/backup/photo_backup.sh --dry-run
+
+# Verify existing backups
+./scripts/backup/photo_backup.sh --verify
+
+# Show help
+./scripts/backup/photo_backup.sh --help
+```
+
+**With Bandwidth Limiting:**
+
+```bash
+# Limit to 1 MB/s (1000 KB/s) to avoid network saturation
+RSYNC_BANDWIDTH=1000 ./scripts/backup/photo_backup.sh
+```
+
+### Monitoring
+
+Check photo backup logs:
+```bash
+tail -f /var/log/photo_backup.log
+```
+
+View backup results:
+```bash
+grep "SUCCESS\|ERROR" /var/log/photo_backup.log
+```
+
+Check backup size:
+```bash
+du -sh /var/backups/photos
+du -sh /var/backups/uploads
+```
+
+### Understanding --delete Flag
+
+The `--delete` flag is crucial for maintaining an accurate backup:
+
+**With --delete (Recommended):**
+- Source has 100 photos → Backup has 100 photos ✅
+- Delete 10 photos from source → Backup now has 90 photos ✅
+- Backup is always an exact mirror of source ✅
+
+**Without --delete (Not Recommended):**
+- Source has 100 photos → Backup has 100 photos
+- Delete 10 photos from source → Backup still has 100 photos ❌
+- Backup grows indefinitely and becomes inconsistent ❌
+
+### Backup Schedule Integration
+
+The photo backup runs at 3:30 AM, between the retention policy (3:00 AM) and backup verification (4:00 AM):
+
+```
+2:00 AM  → MySQL backup
+2:15 AM  → PostgreSQL backup
+3:00 AM  → Retention policy cleanup
+3:30 AM  → Photo/upload backup ← This script
+4:00 AM  → Backup verification
+5:00 AM  → Remote storage sync
+```
+
+### Security Best Practices
+
+1. **Access Control**
+   - Set restrictive permissions on backup directories (700)
+   - Use dedicated backup user with minimal privileges
+   - Protect backup directories from unauthorized access
+
+2. **Storage Security**
+   - Store backups on separate physical drives when possible
+   - Consider encrypting sensitive photo/upload backups
+   - Implement access logging for backup directories
+
+3. **Monitoring**
+   - Monitor backup logs regularly
+   - Set up alerts for backup failures
+   - Check disk space to prevent backup failures
+   - Verify backups periodically using --verify flag
+
+4. **Disaster Recovery**
+   - Keep copies of backups off-site (use remote_backup.sh)
+   - Test restore procedures regularly
+   - Document restore process
+   - Maintain backup retention policies
+
+### Troubleshooting
+
+#### Rsync Fails
+
+1. **Check rsync installation:**
+```bash
+rsync --version
+```
+
+2. **Check source directory permissions:**
+```bash
+ls -ld /var/www/laya/uploads/photos
+ls -ld /var/www/laya/uploads/files
+```
+
+3. **Check destination directory permissions:**
+```bash
+ls -ld /var/backups/photos
+ls -ld /var/backups/uploads
+```
+
+4. **Check disk space:**
+```bash
+df -h /var/backups
+```
+
+5. **Test manual rsync:**
+```bash
+rsync -avz --dry-run /var/www/laya/uploads/photos/ /var/backups/photos/
+```
+
+#### Backup Size Issues
+
+If backups are too large:
+
+1. **Use bandwidth limiting:**
+```bash
+export RSYNC_BANDWIDTH=1000  # 1 MB/s
+./scripts/backup/photo_backup.sh
+```
+
+2. **Check for large files:**
+```bash
+find /var/www/laya/uploads/photos -type f -size +100M
+```
+
+3. **Review what's being backed up:**
+```bash
+./scripts/backup/photo_backup.sh --dry-run
+```
+
+#### Permission Denied
+
+```bash
+# Fix source directory permissions (read access)
+sudo chmod -R 755 /var/www/laya/uploads
+
+# Fix backup directory permissions (write access)
+sudo chown -R $(whoami) /var/backups/photos
+sudo chown -R $(whoami) /var/backups/uploads
+sudo chmod 700 /var/backups/photos
+sudo chmod 700 /var/backups/uploads
+
+# Fix script permissions
+chmod +x /path/to/scripts/backup/photo_backup.sh
+```
+
 ## Future Enhancements
 
 - [x] PostgreSQL backup script (scheduled at 2:15 AM)
@@ -1019,7 +1278,7 @@ rsync -avz -e "ssh -i ~/.ssh/id_rsa" /var/backups/mysql/ backup_user@backup.exam
 - [x] MySQL and PostgreSQL restore scripts with safety checks
 - [x] Backup verification script (restore to temp DB)
 - [x] Remote backup to S3 or rsync to remote server
-- [ ] Photo and upload file backups
+- [x] Photo and upload file backups
 - [ ] Docker volume backups
 - [ ] Email/Slack notifications on failure
 - [ ] Backup encryption

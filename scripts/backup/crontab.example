@@ -49,6 +49,13 @@
 0 3 * * * /path/to/laya-backbone/scripts/backup/retention_policy.sh >> /var/log/retention_policy.log 2>&1
 
 # =============================================================================
+# Photo and Upload Backup - Daily at 3:30 AM
+# =============================================================================
+# Backs up photos and uploaded files using rsync with --delete flag
+# Ensures backup is an exact mirror of source (removes deleted files)
+30 3 * * * /path/to/laya-backbone/scripts/backup/photo_backup.sh >> /var/log/photo_backup.log 2>&1
+
+# =============================================================================
 # Backup Verification - Daily at 4:00 AM
 # =============================================================================
 # Verifies latest backup by restoring to temp DB and running integrity checks
