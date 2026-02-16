@@ -4,11 +4,7 @@
 // Configures plugin management and project structure.
 
 pluginManagement {
-    // Include build scripts from React Native (if available)
-    def reactNativeGradlePlugin = new File(settingsDir, "../node_modules/@react-native/gradle-plugin")
-    if (reactNativeGradlePlugin.exists()) {
-        includeBuild("../node_modules/@react-native/gradle-plugin")
-    }
+    includeBuild("../node_modules/@react-native/gradle-plugin")
 
     repositories {
         google()
@@ -17,18 +13,14 @@ pluginManagement {
     }
 }
 
-// Only apply React Native plugin if node_modules exists
-def reactNativeGradlePluginPath = new File(settings.settingsDir, "../node_modules/@react-native/gradle-plugin")
-if (reactNativeGradlePluginPath.exists()) {
-    plugins {
-        // Apply React Native Gradle Plugin for autolinking and Codegen
-        id("com.facebook.react.settings")
-    }
+plugins {
+    // Apply React Native Gradle Plugin for autolinking and Codegen
+    id("com.facebook.react.settings")
+}
 
-    // Configure React Native autolinking
-    extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
-        ex.autolinkLibrariesFromCommand()
-    }
+// Configure React Native autolinking
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+    ex.autolinkLibrariesFromCommand()
 }
 
 rootProject.name = 'TeacherApp'
@@ -36,9 +28,12 @@ rootProject.name = 'TeacherApp'
 // Include the main app module
 include ':app'
 
+// This includeBuild exposes com.facebook.react plugin for app/build.gradle
+includeBuild("../node_modules/@react-native/gradle-plugin")
+
 // Apply dependency resolution management
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         google()
         mavenCentral()
