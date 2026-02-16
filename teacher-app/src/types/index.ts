@@ -5,14 +5,21 @@
  * data models, and API types.
  */
 
-// Navigation Types
-export type RootStackParamList = {
-  Attendance: undefined;
-  MealLogging: {childId?: string};
-  NapTracking: {childId?: string};
-  DiaperTracking: {childId?: string};
-  PhotoCapture: undefined;
-};
+// Re-export Navigation Types from dedicated navigation types module
+// These types include auth-aware navigation (Splash, Login, Main)
+export type {
+  RootStackParamList,
+  MainTabParamList,
+  RootStackNavigationProp,
+  MainTabNavigationProp,
+  SplashScreenProps,
+  LoginScreenProps,
+  AttendanceScreenProps,
+  MealLoggingScreenProps,
+  NapTrackingScreenProps,
+  DiaperTrackingScreenProps,
+  PhotoCaptureScreenProps,
+} from '../navigation/types';
 
 // Child Types
 export interface Child {
