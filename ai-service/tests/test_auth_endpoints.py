@@ -124,3 +124,75 @@ async def test_login_success(client: AsyncClient, test_user: User) -> None:
     assert isinstance(data["expires_in"], int)
     assert data["expires_in"] > 0
     assert data["token_type"] == "bearer"
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_email(client: AsyncClient, test_user: User) -> None:
+    """Test login with non-existent email address.
+
+    Verifies that attempting to log in with an email that doesn't exist
+    in the database returns:
+    - HTTP 401 Unauthorized status code
+    - Error message indicating incorrect credentials
+    """
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "nonexistent@example.com",
+            "password": "SomePassword123!",
+        },
+    )
+
+    assert response.status_code == 401
+    data = response.json()
+    assert "detail" in data
+    assert data["detail"] == "Incorrect email or password"
+
+
+@pytest.mark.asyncio
+async def test_login_invalid_password(client: AsyncClient, test_user: User) -> None:
+    """Test login with incorrect password.
+
+    Verifies that attempting to log in with a valid email but incorrect
+    password returns:
+    - HTTP 401 Unauthorized status code
+    - Error message indicating incorrect credentials
+    """
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "teacher@example.com",
+            "password": "WrongPassword123!",
+        },
+    )
+
+    assert response.status_code == 401
+    data = response.json()
+    assert "detail" in data
+    assert data["detail"] == "Incorrect email or password"
+
+
+@pytest.mark.asyncio
+async def test_login_inactive_user(client: AsyncClient, inactive_user: User) -> None:
+    """Test login with inactive user account.
+
+    Verifies that attempting to log in with valid credentials for an
+    inactive user account returns:
+    - HTTP 401 Unauthorized status code
+    - Error message indicating incorrect credentials
+
+    Note: The error message is intentionally generic to avoid revealing
+    that the account exists but is inactive (security best practice).
+    """
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "inactive@example.com",
+            "password": "InactivePassword123!",
+        },
+    )
+
+    assert response.status_code == 401
+    data = response.json()
+    assert "detail" in data
+    assert data["detail"] == "Incorrect email or password"
