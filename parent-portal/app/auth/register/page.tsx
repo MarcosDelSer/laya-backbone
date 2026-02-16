@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuthRedirect } from '@/hooks/useAuthRedirect';
 
 /**
  * Registration page component for parent portal signup.
@@ -14,8 +15,12 @@ import { useRouter } from 'next/navigation';
  * - Loading states during registration
  * - Password strength validation
  * - Terms and conditions acceptance
+ * - Auto-redirect if already authenticated
  */
 export default function RegisterPage() {
+  // Redirect away if already authenticated
+  useAuthRedirect();
+
   const router = useRouter();
   const [formData, setFormData] = useState({
     firstName: '',

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuthRedirect } from '@/hooks/useAuthRedirect';
 
 /**
  * Login page component for parent portal authentication.
@@ -13,13 +14,33 @@ import { useRouter } from 'next/navigation';
  * - Error handling and display
  * - Loading states during authentication
  * - Links to password reset and registration
+ * - Auto-redirect if already authenticated
+ * - Handles redirect parameter for post-login navigation
  */
 export default function LoginPage() {
+  // Redirect away if already authenticated
+  useAuthRedirect();
+
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [redirectPath, setRedirectPath] = useState<string>('/');
+
+  /**
+   * Extract redirect path from URL params on mount.
+   */
+  useEffect(() => {
+    const redirect = searchParams.get('redirect');
+    if (redirect) {
+      // Validate it's a safe relative path
+      if (redirect.startsWith('/') && !redirect.startsWith('//')) {
+        setRedirectPath(redirect);
+      }
+    }
+  }, [searchParams]);
 
   /**
    * Handle form submission and authenticate user.
@@ -60,8 +81,8 @@ export default function LoginPage() {
         throw new Error(data.error || 'Authentication failed');
       }
 
-      // Successful login - redirect to dashboard
-      router.push('/');
+      // Successful login - redirect to intended destination or dashboard
+      router.push(redirectPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during login');
     } finally {
