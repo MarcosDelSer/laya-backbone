@@ -465,3 +465,250 @@ async def test_logout_blacklisted_token_rejected(
     # or the token should be recognized as invalid
     # For now, we just verify that both tokens are in the blacklist database
     # Future enhancement: verify_token() should check blacklist and reject tokens
+
+
+# ============================================================================
+# Password reset endpoint tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_password_reset_request(client: AsyncClient, test_user: User) -> None:
+    """Test password reset request endpoint.
+
+    Verifies that requesting a password reset always returns:
+    - HTTP 200 status code
+    - Success message
+    - Masked email address
+
+    Note: For security reasons, this endpoint always returns success
+    even if the email doesn't exist (prevents email enumeration attacks).
+    """
+    response = await client.post(
+        "/api/v1/auth/password-reset/request",
+        json={
+            "email": "teacher@example.com",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify response structure
+    assert "message" in data
+    assert "email" in data
+
+    # Verify response values
+    assert isinstance(data["message"], str)
+    assert len(data["message"]) > 0
+    assert isinstance(data["email"], str)
+    # Email should be masked (e.g., "t***@example.com")
+    assert "***" in data["email"]
+
+
+@pytest.mark.asyncio
+async def test_password_reset_request_nonexistent_email(client: AsyncClient) -> None:
+    """Test password reset request with non-existent email.
+
+    Verifies that requesting a password reset for a non-existent email
+    still returns success (HTTP 200) to prevent email enumeration attacks.
+    """
+    response = await client.post(
+        "/api/v1/auth/password-reset/request",
+        json={
+            "email": "nonexistent@example.com",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Should still return success message
+    assert "message" in data
+    assert "email" in data
+
+
+@pytest.mark.asyncio
+async def test_password_reset_confirm_valid(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+) -> None:
+    """Test password reset confirmation with valid token.
+
+    Verifies that confirming a password reset with a valid token returns:
+    - HTTP 200 status code
+    - Success message
+
+    Also verifies that:
+    - The user's password is actually changed
+    - The user can log in with the new password
+    - The reset token is marked as used
+    """
+    # First, request a password reset
+    reset_response = await client.post(
+        "/api/v1/auth/password-reset/request",
+        json={
+            "email": "teacher@example.com",
+        },
+    )
+    assert reset_response.status_code == 200
+
+    # Get the reset token from the database
+    from app.auth.models import PasswordResetToken
+
+    stmt = select(PasswordResetToken).where(
+        PasswordResetToken.user_id == test_user.id,
+        PasswordResetToken.is_used == False,
+    )
+    result = await db_session.execute(stmt)
+    reset_token_record = result.scalar_one_or_none()
+
+    assert reset_token_record is not None, "Reset token should be created"
+    reset_token = reset_token_record.token
+
+    # Confirm password reset with new password
+    new_password = "NewSecurePassword123!"
+    confirm_response = await client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": reset_token,
+            "new_password": new_password,
+        },
+    )
+
+    assert confirm_response.status_code == 200
+    data = confirm_response.json()
+
+    # Verify response structure and values
+    assert "message" in data
+    assert data["message"] == "Password has been successfully reset"
+
+    # Verify token is marked as used
+    await db_session.refresh(reset_token_record)
+    assert reset_token_record.is_used is True
+
+    # Verify user can login with new password
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "teacher@example.com",
+            "password": new_password,
+        },
+    )
+    assert login_response.status_code == 200
+    assert "access_token" in login_response.json()
+
+
+@pytest.mark.asyncio
+async def test_password_reset_confirm_invalid_token(client: AsyncClient) -> None:
+    """Test password reset confirmation with invalid token.
+
+    Verifies that attempting to confirm a password reset with an invalid
+    or non-existent token returns:
+    - HTTP 400 Bad Request status code
+    - Error message indicating invalid token
+    """
+    response = await client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": "invalid_token_that_does_not_exist",
+            "new_password": "NewPassword123!",
+        },
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+
+    # Verify error message
+    assert "detail" in data
+    assert "Invalid or expired reset token" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_password_reset_confirm_expired_token(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+) -> None:
+    """Test password reset confirmation with expired token.
+
+    Verifies that attempting to confirm a password reset with an expired
+    token returns:
+    - HTTP 400 Bad Request status code
+    - Error message indicating token expiration
+    """
+    from datetime import timedelta
+    from app.auth.models import PasswordResetToken
+    import secrets
+
+    # Create an expired reset token (expired 1 hour ago)
+    # Note: Using naive datetime for SQLite compatibility
+    expired_token = PasswordResetToken(
+        token=secrets.token_urlsafe(32),
+        user_id=test_user.id,
+        email=test_user.email,
+        is_used=False,
+        expires_at=datetime.now() - timedelta(hours=1),
+    )
+    db_session.add(expired_token)
+    await db_session.commit()
+
+    # Attempt to confirm password reset with expired token
+    response = await client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": expired_token.token,
+            "new_password": "NewPassword123!",
+        },
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+
+    # Verify error message
+    assert "detail" in data
+    assert "Reset token has expired" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_password_reset_confirm_used_token(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+) -> None:
+    """Test password reset confirmation with already used token.
+
+    Verifies that attempting to confirm a password reset with a token
+    that has already been used returns:
+    - HTTP 400 Bad Request status code
+    - Error message indicating token was already used
+
+    This prevents token reuse attacks where an attacker could intercept
+    a reset token and use it multiple times.
+    """
+    from datetime import timedelta
+    from app.auth.models import PasswordResetToken
+    import secrets
+
+    # Create a reset token that's already been used
+    # Note: Using naive datetime for SQLite compatibility
+    used_token = PasswordResetToken(
+        token=secrets.token_urlsafe(32),
+        user_id=test_user.id,
+        email=test_user.email,
+        is_used=True,  # Already used
+        expires_at=datetime.now() + timedelta(hours=1),
+    )
+    db_session.add(used_token)
+    await db_session.commit()
+
+    # Attempt to confirm password reset with used token
+    response = await client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={
+            "token": used_token.token,
+            "new_password": "NewPassword123!",
+        },
+    )
+
+    assert response.status_code == 400
+    data = response.json()
+
+    # Verify error message
+    assert "detail" in data
+    assert "Reset token has already been used" in data["detail"]
