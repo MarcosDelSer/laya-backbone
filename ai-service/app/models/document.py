@@ -132,6 +132,88 @@ class Document(Base):
         return f"<Document(id={self.id}, title='{self.title}', status={self.status.value})>"
 
 
+class DocumentTemplate(Base):
+    """SQLAlchemy model for document templates.
+
+    Represents a reusable template for creating documents that require signatures.
+    Templates define standard forms like enrollment, permission slips, medical forms, etc.
+
+    Attributes:
+        id: Unique identifier for the template
+        name: Human-readable name of the template
+        type: Type/category of documents created from this template
+        description: Detailed description of the template purpose
+        template_content: JSON structure or HTML content of the template
+        required_fields: JSON array of field names that must be filled
+        is_active: Whether the template is currently available for use
+        version: Version number for tracking template updates
+        created_by: User ID of the person who created the template
+        created_at: Timestamp when the record was created
+        updated_at: Timestamp when the record was last updated
+    """
+
+    __tablename__ = "document_templates"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+    type: Mapped[DocumentType] = mapped_column(
+        Enum(DocumentType, name="document_type_enum", create_constraint=True),
+        nullable=False,
+        index=True,
+    )
+    description: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    template_content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="JSON structure or HTML content of the template",
+    )
+    required_fields: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="JSON array of required field names",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=True,
+        index=True,
+    )
+    version: Mapped[int] = mapped_column(
+        nullable=False,
+        default=1,
+    )
+    created_by: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation of the DocumentTemplate."""
+        return f"<DocumentTemplate(id={self.id}, name='{self.name}', type={self.type.value}, version={self.version})>"
+
+
 class Signature(Base):
     """SQLAlchemy model for document signatures.
 

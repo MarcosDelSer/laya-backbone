@@ -9,6 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
+    document: Document e-signature and template schemas
 """
 
 from app.schemas.activity import (
@@ -72,6 +73,21 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
+from app.schemas.document import (
+    DocumentBase,
+    DocumentCreate,
+    DocumentListResponse,
+    DocumentResponse,
+    DocumentUpdate,
+    DocumentTemplateBase,
+    DocumentTemplateCreate,
+    DocumentTemplateListResponse,
+    DocumentTemplateResponse,
+    DocumentTemplateUpdate,
+    SignatureBase,
+    SignatureCreate,
+    SignatureResponse,
+)
 
 __all__ = [
     # Base schemas
@@ -130,4 +146,18 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
+    # Document schemas
+    "DocumentBase",
+    "DocumentCreate",
+    "DocumentUpdate",
+    "DocumentResponse",
+    "DocumentListResponse",
+    "DocumentTemplateBase",
+    "DocumentTemplateCreate",
+    "DocumentTemplateUpdate",
+    "DocumentTemplateResponse",
+    "DocumentTemplateListResponse",
+    "SignatureBase",
+    "SignatureCreate",
+    "SignatureResponse",
 ]

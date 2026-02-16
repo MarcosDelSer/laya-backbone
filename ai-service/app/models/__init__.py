@@ -41,6 +41,7 @@ from app.models.communication import (
 from app.models.document import (
     Document,
     DocumentStatus,
+    DocumentTemplate,
     DocumentType,
     Signature,
 )
@@ -71,6 +72,7 @@ __all__ = [
     # Document models
     "Document",
     "DocumentStatus",
+    "DocumentTemplate",
     "DocumentType",
     "Signature",
 ]
