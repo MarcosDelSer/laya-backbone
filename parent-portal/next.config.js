@@ -57,6 +57,56 @@ const nextConfig = {
     optimizeCss: true,
     optimizePackageImports: ['@heroicons/react', 'date-fns'],
   },
+
+  // Webpack configuration for optimized code splitting
+  webpack: (config, { isServer }) => {
+    // Optimize chunk splitting for better caching and loading
+    if (!isServer) {
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          chunks: 'all',
+          cacheGroups: {
+            // Separate vendor code into its own chunk
+            default: false,
+            vendors: false,
+            // Framework chunk (React, Next.js core)
+            framework: {
+              name: 'framework',
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler|next)[\\/]/,
+              priority: 40,
+              enforce: true,
+              reuseExistingChunk: true,
+            },
+            // Common libraries used across multiple pages
+            lib: {
+              test: /[\\/]node_modules[\\/]/,
+              name(module) {
+                const packageName = module.context.match(
+                  /[\\/]node_modules[\\/](.*?)([\\/]|$)/
+                )?.[1];
+                return `npm.${packageName?.replace('@', '')}`;
+              },
+              priority: 30,
+              minChunks: 1,
+              reuseExistingChunk: true,
+            },
+            // Shared components used across multiple pages
+            commons: {
+              name: 'commons',
+              minChunks: 2,
+              priority: 20,
+              reuseExistingChunk: true,
+            },
+          },
+          maxInitialRequests: 25,
+          minSize: 20000,
+        },
+      };
+    }
+
+    return config;
+  },
 };
 
 module.exports = withBundleAnalyzer(nextConfig);
