@@ -850,4 +850,168 @@ class GovernmentDocumentGateway extends QueryableGateway
 
         return round(($stats['verifiedCount'] / $total) * 100, 2);
     }
+
+    // =========================================================================
+    // SERVICE AGREEMENT INTEGRATION
+    // =========================================================================
+
+    /**
+     * Check if a family has all critical documents required for service agreement.
+     *
+     * Critical documents for Quebec childcare compliance:
+     * - Each child: birth certificate OR citizenship proof (verified, not expired)
+     * - At least one parent: government ID (verified, not expired)
+     * - Each child: health insurance card (verified, not expired)
+     *
+     * @param int $gibbonFamilyID
+     * @param int $gibbonSchoolYearID
+     * @return array{hasAll: bool, missingDocuments: array, childrenChecked: int, parentsChecked: int}
+     */
+    public function hasCriticalDocuments($gibbonFamilyID, $gibbonSchoolYearID)
+    {
+        $missingDocuments = [];
+        $childrenChecked = 0;
+        $parentsChecked = 0;
+
+        // Get all family members (children enrolled in this school year and adults)
+        $data = [
+            'gibbonFamilyID' => $gibbonFamilyID,
+            'gibbonSchoolYearID' => $gibbonSchoolYearID,
+        ];
+
+        // Get enrolled children in this family
+        $sqlChildren = "SELECT p.gibbonPersonID, p.preferredName, p.surname
+                        FROM gibbonPerson p
+                        INNER JOIN gibbonFamilyChild fc ON p.gibbonPersonID = fc.gibbonPersonID
+                        INNER JOIN gibbonStudentEnrolment se ON p.gibbonPersonID = se.gibbonPersonID
+                            AND se.gibbonSchoolYearID = :gibbonSchoolYearID
+                        WHERE fc.gibbonFamilyID = :gibbonFamilyID
+                        AND p.status = 'Full'";
+
+        $children = $this->db()->select($sqlChildren, $data)->fetchAll();
+        $childrenChecked = count($children);
+
+        // Get adults in this family
+        $sqlAdults = "SELECT p.gibbonPersonID, p.preferredName, p.surname
+                      FROM gibbonPerson p
+                      INNER JOIN gibbonFamilyAdult fa ON p.gibbonPersonID = fa.gibbonPersonID
+                      WHERE fa.gibbonFamilyID = :gibbonFamilyID
+                      AND p.status = 'Full'";
+
+        $adults = $this->db()->select($sqlAdults, ['gibbonFamilyID' => $gibbonFamilyID])->fetchAll();
+        $parentsChecked = count($adults);
+
+        // Define critical document types by name
+        $childIdentityDocs = ['child_birth_certificate', 'child_citizenship_proof'];
+        $parentIdDoc = 'parent_id';
+        $healthCardDoc = 'health_card';
+
+        // Check each child for required documents
+        foreach ($children as $child) {
+            $childName = $child['preferredName'] . ' ' . $child['surname'];
+            $personID = $child['gibbonPersonID'];
+
+            // Check for child identity document (birth certificate OR citizenship proof)
+            $hasIdentity = $this->hasVerifiedDocument($personID, $childIdentityDocs, $gibbonSchoolYearID);
+            if (!$hasIdentity) {
+                $missingDocuments[] = [
+                    'personID' => $personID,
+                    'personName' => $childName,
+                    'documentType' => 'child_identity',
+                    'documentTypeDisplay' => 'Birth Certificate or Citizenship Proof',
+                    'category' => 'Child',
+                ];
+            }
+
+            // Check for health card
+            $hasHealthCard = $this->hasVerifiedDocument($personID, [$healthCardDoc], $gibbonSchoolYearID);
+            if (!$hasHealthCard) {
+                $missingDocuments[] = [
+                    'personID' => $personID,
+                    'personName' => $childName,
+                    'documentType' => 'health_card',
+                    'documentTypeDisplay' => 'Health Insurance Card',
+                    'category' => 'Child',
+                ];
+            }
+        }
+
+        // Check if at least one parent has a verified government ID
+        $hasParentID = false;
+        foreach ($adults as $adult) {
+            if ($this->hasVerifiedDocument($adult['gibbonPersonID'], [$parentIdDoc], $gibbonSchoolYearID)) {
+                $hasParentID = true;
+                break;
+            }
+        }
+
+        if (!$hasParentID && count($adults) > 0) {
+            $missingDocuments[] = [
+                'personID' => null,
+                'personName' => 'Family',
+                'documentType' => 'parent_id',
+                'documentTypeDisplay' => 'Parent Government ID (at least one parent)',
+                'category' => 'Parent',
+            ];
+        }
+
+        return [
+            'hasAll' => empty($missingDocuments),
+            'missingDocuments' => $missingDocuments,
+            'childrenChecked' => $childrenChecked,
+            'parentsChecked' => $parentsChecked,
+        ];
+    }
+
+    /**
+     * Check if a person has a verified and non-expired document of specified types.
+     *
+     * @param int $gibbonPersonID
+     * @param array $documentTypeNames Array of document type names to check (OR condition)
+     * @param int $gibbonSchoolYearID
+     * @return bool
+     */
+    private function hasVerifiedDocument($gibbonPersonID, array $documentTypeNames, $gibbonSchoolYearID)
+    {
+        if (empty($documentTypeNames)) {
+            return false;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($documentTypeNames), '?'));
+        $params = array_merge(
+            [$gibbonPersonID, $gibbonSchoolYearID],
+            $documentTypeNames
+        );
+
+        $sql = "SELECT COUNT(*) as count
+                FROM gibbonGovernmentDocument d
+                INNER JOIN gibbonGovernmentDocumentType dt ON d.gibbonGovernmentDocumentTypeID = dt.gibbonGovernmentDocumentTypeID
+                WHERE d.gibbonPersonID = ?
+                AND d.gibbonSchoolYearID = ?
+                AND dt.name IN ($placeholders)
+                AND d.status = 'verified'
+                AND (d.expiryDate IS NULL OR d.expiryDate >= CURDATE())";
+
+        $result = $this->db()->selectOne($sql, $params);
+
+        return $result && (int) $result['count'] > 0;
+    }
+
+    /**
+     * Get list of critical document types for service agreement validation.
+     *
+     * @return array
+     */
+    public function getCriticalDocumentTypes()
+    {
+        return [
+            'child' => [
+                'identity' => ['child_birth_certificate', 'child_citizenship_proof'],
+                'health' => ['health_card'],
+            ],
+            'parent' => [
+                'id' => ['parent_id'],
+            ],
+        ];
+    }
 }
