@@ -391,6 +391,303 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
+// Enrollment Form Types
+// ============================================================================
+
+/**
+ * Enrollment form status.
+ */
+export type EnrollmentFormStatus =
+  | 'Draft'
+  | 'Submitted'
+  | 'Approved'
+  | 'Rejected'
+  | 'Expired';
+
+/**
+ * Parent/Guardian number identifier.
+ */
+export type ParentNumber = '1' | '2';
+
+/**
+ * E-signature type identifier.
+ */
+export type SignatureType = 'Parent1' | 'Parent2' | 'Director';
+
+/**
+ * Parent/Guardian information for enrollment form.
+ */
+export interface EnrollmentParent {
+  id?: string;
+  formId: string;
+  parentNumber: ParentNumber;
+  name: string;
+  relationship: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  homePhone?: string;
+  cellPhone?: string;
+  workPhone?: string;
+  email?: string;
+  employer?: string;
+  workAddress?: string;
+  workHours?: string;
+  isPrimaryContact: boolean;
+}
+
+/**
+ * Authorized pickup person for enrollment form.
+ */
+export interface AuthorizedPickup {
+  id?: string;
+  formId: string;
+  name: string;
+  relationship: string;
+  phone: string;
+  photoPath?: string;
+  photoUrl?: string;
+  priority: number;
+  notes?: string;
+}
+
+/**
+ * Emergency contact for enrollment form.
+ */
+export interface EmergencyContact {
+  id?: string;
+  formId: string;
+  name: string;
+  relationship: string;
+  phone: string;
+  alternatePhone?: string;
+  priority: number;
+  notes?: string;
+}
+
+/**
+ * Allergy information with details.
+ */
+export interface AllergyInfo {
+  allergen: string;
+  severity?: 'mild' | 'moderate' | 'severe';
+  reaction?: string;
+  treatment?: string;
+}
+
+/**
+ * Medication information with dosage and schedule.
+ */
+export interface MedicationInfo {
+  name: string;
+  dosage: string;
+  schedule: string;
+  instructions?: string;
+}
+
+/**
+ * Health information for enrollment form.
+ */
+export interface HealthInfo {
+  id?: string;
+  formId: string;
+  allergies?: AllergyInfo[];
+  medicalConditions?: string;
+  hasEpiPen: boolean;
+  epiPenInstructions?: string;
+  medications?: MedicationInfo[];
+  doctorName?: string;
+  doctorPhone?: string;
+  doctorAddress?: string;
+  healthInsuranceNumber?: string;
+  healthInsuranceExpiry?: string;
+  specialNeeds?: string;
+  developmentalNotes?: string;
+}
+
+/**
+ * Nutrition and dietary information for enrollment form.
+ */
+export interface NutritionInfo {
+  id?: string;
+  formId: string;
+  dietaryRestrictions?: string;
+  foodAllergies?: string;
+  feedingInstructions?: string;
+  isBottleFeeding: boolean;
+  bottleFeedingInfo?: string;
+  foodPreferences?: string;
+  foodDislikes?: string;
+  mealPlanNotes?: string;
+}
+
+/**
+ * Weekly attendance pattern for enrollment form.
+ */
+export interface AttendancePattern {
+  id?: string;
+  formId: string;
+  mondayAm: boolean;
+  mondayPm: boolean;
+  tuesdayAm: boolean;
+  tuesdayPm: boolean;
+  wednesdayAm: boolean;
+  wednesdayPm: boolean;
+  thursdayAm: boolean;
+  thursdayPm: boolean;
+  fridayAm: boolean;
+  fridayPm: boolean;
+  saturdayAm: boolean;
+  saturdayPm: boolean;
+  sundayAm: boolean;
+  sundayPm: boolean;
+  expectedHoursPerWeek?: number;
+  expectedArrivalTime?: string;
+  expectedDepartureTime?: string;
+  notes?: string;
+}
+
+/**
+ * E-signature for enrollment form.
+ */
+export interface EnrollmentSignature {
+  id?: string;
+  formId: string;
+  signatureType: SignatureType;
+  signatureData: string;
+  signerName: string;
+  signedAt: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+/**
+ * Complete enrollment form with all related data.
+ */
+export interface EnrollmentForm {
+  id: string;
+  personId: string;
+  familyId: string;
+  schoolYearId: string;
+  formNumber: string;
+  status: EnrollmentFormStatus;
+  version: number;
+  admissionDate?: string;
+  childFirstName: string;
+  childLastName: string;
+  childDateOfBirth: string;
+  childAddress?: string;
+  childCity?: string;
+  childPostalCode?: string;
+  languagesSpoken?: string;
+  notes?: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  approvedById?: string;
+  rejectedAt?: string;
+  rejectedById?: string;
+  rejectionReason?: string;
+  createdById: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Related data (populated when fetched with relations)
+  parents?: EnrollmentParent[];
+  authorizedPickups?: AuthorizedPickup[];
+  emergencyContacts?: EmergencyContact[];
+  healthInfo?: HealthInfo;
+  nutritionInfo?: NutritionInfo;
+  attendancePattern?: AttendancePattern;
+  signatures?: EnrollmentSignature[];
+}
+
+/**
+ * Enrollment form summary for list display.
+ */
+export interface EnrollmentFormSummary {
+  id: string;
+  formNumber: string;
+  status: EnrollmentFormStatus;
+  version: number;
+  admissionDate?: string;
+  childFirstName: string;
+  childLastName: string;
+  childDateOfBirth: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdByName?: string;
+}
+
+/**
+ * Request payload for creating an enrollment form.
+ */
+export interface CreateEnrollmentFormRequest {
+  personId: string;
+  familyId: string;
+  admissionDate?: string;
+  childFirstName: string;
+  childLastName: string;
+  childDateOfBirth: string;
+  childAddress?: string;
+  childCity?: string;
+  childPostalCode?: string;
+  languagesSpoken?: string;
+  notes?: string;
+  parents: Omit<EnrollmentParent, 'id' | 'formId'>[];
+  authorizedPickups?: Omit<AuthorizedPickup, 'id' | 'formId'>[];
+  emergencyContacts: Omit<EmergencyContact, 'id' | 'formId'>[];
+  healthInfo?: Omit<HealthInfo, 'id' | 'formId'>;
+  nutritionInfo?: Omit<NutritionInfo, 'id' | 'formId'>;
+  attendancePattern?: Omit<AttendancePattern, 'id' | 'formId'>;
+}
+
+/**
+ * Request payload for updating an enrollment form.
+ */
+export interface UpdateEnrollmentFormRequest {
+  admissionDate?: string;
+  childFirstName?: string;
+  childLastName?: string;
+  childDateOfBirth?: string;
+  childAddress?: string;
+  childCity?: string;
+  childPostalCode?: string;
+  languagesSpoken?: string;
+  notes?: string;
+  parents?: Omit<EnrollmentParent, 'formId'>[];
+  authorizedPickups?: Omit<AuthorizedPickup, 'formId'>[];
+  emergencyContacts?: Omit<EmergencyContact, 'formId'>[];
+  healthInfo?: Omit<HealthInfo, 'formId'>;
+  nutritionInfo?: Omit<NutritionInfo, 'formId'>;
+  attendancePattern?: Omit<AttendancePattern, 'formId'>;
+}
+
+/**
+ * Request payload for signing an enrollment form.
+ */
+export interface SignEnrollmentFormRequest {
+  formId: string;
+  signatureType: SignatureType;
+  signatureData: string;
+  signerName: string;
+}
+
+/**
+ * Request payload for submitting an enrollment form for approval.
+ */
+export interface SubmitEnrollmentFormRequest {
+  formId: string;
+}
+
+/**
+ * Request payload for approving or rejecting an enrollment form.
+ */
+export interface ReviewEnrollmentFormRequest {
+  formId: string;
+  action: 'approve' | 'reject';
+  reason?: string;
+}
+
+// ============================================================================
 // API Response Types
 // ============================================================================
 
