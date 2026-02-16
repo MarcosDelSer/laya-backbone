@@ -16,9 +16,17 @@ import type {
   CoachingGuidanceRequest,
   CoachingGuidanceResponse,
   HealthCheckResponse,
+  MessageAnalysisRequest,
+  MessageAnalysisResponse,
+  MessageLanguage,
+  MessageTemplateRequest,
+  MessageTemplateResponse,
   PaginatedResponse,
   PaginationParams,
+  QualityIssue,
   SpecialNeedType,
+  TemplateCategory,
+  TrainingExampleResponse,
 } from './types';
 
 // ============================================================================
@@ -42,6 +50,12 @@ const ENDPOINTS = {
   // Analytics
   CHILD_ANALYTICS: (childId: string) => `/api/v1/analytics/children/${childId}`,
   PROGRESS_REPORT: (childId: string) => `/api/v1/analytics/children/${childId}/progress`,
+
+  // Message Quality
+  MESSAGE_QUALITY_ANALYZE: '/api/v1/message-quality/analyze',
+  MESSAGE_QUALITY_TEMPLATES: '/api/v1/message-quality/templates',
+  MESSAGE_QUALITY_TEMPLATE: (id: string) => `/api/v1/message-quality/templates/${id}`,
+  MESSAGE_QUALITY_TRAINING_EXAMPLES: '/api/v1/message-quality/training-examples',
 } as const;
 
 // ============================================================================
@@ -332,6 +346,152 @@ export async function getChildInsights(
     analytics:
       analytics.status === 'fulfilled' ? analytics.value : null,
   };
+}
+
+// ============================================================================
+// Message Quality API
+// ============================================================================
+
+/**
+ * Parameters for fetching message templates.
+ */
+export interface MessageTemplateParams extends PaginationParams {
+  category?: TemplateCategory;
+  language?: MessageLanguage;
+  isSystem?: boolean;
+}
+
+/**
+ * Parameters for fetching training examples.
+ */
+export interface TrainingExampleParams extends PaginationParams {
+  language?: MessageLanguage;
+  issueType?: QualityIssue;
+  difficultyLevel?: string;
+}
+
+/**
+ * Analyze a message for quality issues based on Quebec 'Bonne Message' standards.
+ * Returns quality score, detected issues, and optional rewrite suggestions.
+ */
+export async function analyzeMessage(
+  request: MessageAnalysisRequest
+): Promise<MessageAnalysisResponse> {
+  return aiServiceClient.post<MessageAnalysisResponse>(
+    ENDPOINTS.MESSAGE_QUALITY_ANALYZE,
+    {
+      message_text: request.messageText,
+      language: request.language ?? 'en',
+      context: request.context,
+      child_id: request.childId,
+      include_rewrites: request.includeRewrites ?? true,
+    }
+  );
+}
+
+/**
+ * Analyze message with debounce-friendly interface.
+ * Convenience wrapper for real-time analysis during message composition.
+ */
+export async function analyzeMessageForComposer(
+  messageText: string,
+  language: MessageLanguage = 'en'
+): Promise<MessageAnalysisResponse> {
+  return analyzeMessage({
+    messageText,
+    language,
+    includeRewrites: true,
+  });
+}
+
+/**
+ * Fetch message templates with optional filters.
+ */
+export async function getMessageTemplates(
+  params?: MessageTemplateParams
+): Promise<PaginatedResponse<MessageTemplateResponse>> {
+  return aiServiceClient.get<PaginatedResponse<MessageTemplateResponse>>(
+    ENDPOINTS.MESSAGE_QUALITY_TEMPLATES,
+    {
+      params: {
+        skip: params?.skip,
+        limit: params?.limit,
+        category: params?.category,
+        language: params?.language,
+        is_system: params?.isSystem,
+      },
+    }
+  );
+}
+
+/**
+ * Create a new message template.
+ */
+export async function createMessageTemplate(
+  template: MessageTemplateRequest
+): Promise<MessageTemplateResponse> {
+  return aiServiceClient.post<MessageTemplateResponse>(
+    ENDPOINTS.MESSAGE_QUALITY_TEMPLATES,
+    {
+      title: template.title,
+      content: template.content,
+      category: template.category,
+      language: template.language ?? 'en',
+      description: template.description,
+    }
+  );
+}
+
+/**
+ * Fetch training examples for educator learning.
+ */
+export async function getTrainingExamples(
+  params?: TrainingExampleParams
+): Promise<PaginatedResponse<TrainingExampleResponse>> {
+  return aiServiceClient.get<PaginatedResponse<TrainingExampleResponse>>(
+    ENDPOINTS.MESSAGE_QUALITY_TRAINING_EXAMPLES,
+    {
+      params: {
+        skip: params?.skip,
+        limit: params?.limit,
+        language: params?.language,
+        issue_type: params?.issueType,
+        difficulty_level: params?.difficultyLevel,
+      },
+    }
+  );
+}
+
+/**
+ * Get templates by category.
+ * Convenience method for common template filtering.
+ */
+export async function getTemplatesByCategory(
+  category: TemplateCategory,
+  language: MessageLanguage = 'en'
+): Promise<MessageTemplateResponse[]> {
+  const response = await getMessageTemplates({
+    category,
+    language,
+    limit: 100,
+  });
+  return response.items;
+}
+
+/**
+ * Get training examples for a specific quality issue.
+ * Convenience method for focused learning.
+ */
+export async function getTrainingExamplesForIssue(
+  issueType: QualityIssue,
+  language: MessageLanguage = 'en'
+): Promise<TrainingExampleResponse[]> {
+  const response = await getTrainingExamples({
+    issueType,
+    language,
+    limit: 50,
+  });
+  return response.items;
 }
 
 // ============================================================================
