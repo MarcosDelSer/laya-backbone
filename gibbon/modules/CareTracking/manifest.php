@@ -266,6 +266,66 @@ $actionRows[] = [
 ];
 
 $actionRows[] = [
+    'name'                      => 'Add Incident',
+    'precedence'                => 0,
+    'category'                  => 'Care',
+    'description'               => 'Add a new incident report.',
+    'URLList'                   => 'careTracking_incidents_add.php',
+    'entryURL'                  => 'careTracking_incidents_add.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'N',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'Y',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[] = [
+    'name'                      => 'View Incident',
+    'precedence'                => 0,
+    'category'                  => 'Care',
+    'description'               => 'View incident report details.',
+    'URLList'                   => 'careTracking_incidents_view.php',
+    'entryURL'                  => 'careTracking_incidents_view.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'N',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'Y',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[] = [
+    'name'                      => 'Edit Incident',
+    'precedence'                => 0,
+    'category'                  => 'Care',
+    'description'               => 'Edit an existing incident report.',
+    'URLList'                   => 'careTracking_incidents_edit.php',
+    'entryURL'                  => 'careTracking_incidents_edit.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'N',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'Y',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[] = [
     'name'                      => 'Activity Logging',
     'precedence'                => 0,
     'category'                  => 'Care',
