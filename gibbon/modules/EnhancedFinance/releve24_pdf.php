@@ -20,6 +20,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 use Gibbon\Module\EnhancedFinance\Domain\Releve24PDFGenerator;
+use Gibbon\Module\EnhancedFinance\Service\EmailService;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -43,6 +44,61 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/releve24_p
     if (!preg_match($uuidPattern, $releve24Id)) {
         $page->addError(__('Invalid RL-24 document ID format.'));
         return;
+    }
+
+    // Handle email sending mode
+    if ($displayMode === 'email') {
+        try {
+            // Initialize EmailService
+            $emailService = $container->get(EmailService::class);
+
+            // Optional: get custom recipient email from POST/GET
+            $customEmail = $_REQUEST['email'] ?? null;
+
+            // Send RL-24 via email
+            $result = $emailService->sendRL24Email($releve24Id, $customEmail);
+
+            // Return JSON response for AJAX requests
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => $result['success'],
+                'message' => $result['success']
+                    ? __('RL-24 has been sent successfully to the parent.')
+                    : ($result['error']['message'] ?? __('Failed to send email.')),
+                'recipient' => $result['recipient'] ?? null,
+                'error' => $result['error'] ?? null,
+            ]);
+            exit;
+
+        } catch (\InvalidArgumentException $e) {
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'message' => __('Invalid RL-24 document ID.'),
+                'error' => ['code' => 'INVALID_ID', 'message' => $e->getMessage()],
+            ]);
+            exit;
+
+        } catch (\RuntimeException $e) {
+            header('Content-Type: application/json');
+            error_log('RL-24 Email Error: ' . $e->getMessage());
+            echo json_encode([
+                'success' => false,
+                'message' => __('Failed to generate or send RL-24 email.'),
+                'error' => ['code' => 'RUNTIME_ERROR', 'message' => $e->getMessage()],
+            ]);
+            exit;
+
+        } catch (\Exception $e) {
+            header('Content-Type: application/json');
+            error_log('RL-24 Email Unexpected Error: ' . $e->getMessage());
+            echo json_encode([
+                'success' => false,
+                'message' => __('An unexpected error occurred.'),
+                'error' => ['code' => 'UNKNOWN', 'message' => $e->getMessage()],
+            ]);
+            exit;
+        }
     }
 
     try {
