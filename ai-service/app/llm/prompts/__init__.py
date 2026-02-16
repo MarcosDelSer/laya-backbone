@@ -40,6 +40,7 @@ from app.llm.prompts.base import (
     PromptTemplateError,
     SystemUserPromptTemplate,
 )
+from app.llm.prompts.report_prompts import DailyReportPrompt
 
 __all__ = [
     # Base classes
@@ -52,4 +53,6 @@ __all__ = [
     "ActivityAdaptationPrompt",
     "ActivityRecommendationPrompt",
     "DailyPlanningPrompt",
+    # Report prompts
+    "DailyReportPrompt",
 ]
