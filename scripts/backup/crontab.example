@@ -42,6 +42,13 @@
 15 2 * * * /path/to/laya-backbone/scripts/backup/postgres_backup.sh >> /var/log/postgres_backup.log 2>&1
 
 # =============================================================================
+# Docker Volume Backup - Daily at 2:30 AM
+# =============================================================================
+# Backs up all Docker volumes using docker run with tar compression
+# Automatically detects and backs up all persistent Docker volumes
+30 2 * * * /path/to/laya-backbone/scripts/backup/docker_volume_backup.sh >> /var/log/docker_volume_backup.log 2>&1
+
+# =============================================================================
 # Backup Retention Policy - Daily at 3:00 AM
 # =============================================================================
 # Implements retention policy: 7 daily, 4 weekly, 12 monthly
@@ -82,6 +89,11 @@
 # - Create backup directories:
 #   sudo mkdir -p /var/backups/mysql && sudo chmod 700 /var/backups/mysql
 #   sudo mkdir -p /var/backups/postgres && sudo chmod 700 /var/backups/postgres
+#   sudo mkdir -p /var/backups/docker-volumes && sudo chmod 700 /var/backups/docker-volumes
+#   sudo mkdir -p /var/backups/photos && sudo chmod 700 /var/backups/photos
+#   sudo mkdir -p /var/backups/uploads && sudo chmod 700 /var/backups/uploads
+# - Ensure Docker is installed and running for docker_volume_backup.sh
+# - Add your user to the docker group: sudo usermod -aG docker $USER
 # - Consider using a dedicated backup user with minimal privileges
 # - Monitor log files regularly for backup failures
 # - Test backup restoration periodically

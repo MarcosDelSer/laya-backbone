@@ -1271,6 +1271,327 @@ sudo chmod 700 /var/backups/uploads
 chmod +x /path/to/scripts/backup/photo_backup.sh
 ```
 
+## Docker Volume Backup
+
+### Docker Volume Backup Script (`docker_volume_backup.sh`)
+
+**Features:**
+- ✅ Automatic detection of all Docker volumes
+- ✅ Tar+gzip compression for space efficiency
+- ✅ Timestamped backup files (`YYYYMMDD_HHMMSS`)
+- ✅ Comprehensive error handling and logging
+- ✅ Pre-flight checks (Docker availability, disk space)
+- ✅ Selective volume backup support
+- ✅ Backup integrity verification
+- ✅ Secure file permissions (600)
+- ✅ Cross-platform compatibility (macOS/Linux)
+- ✅ Uses docker run for consistent backups
+
+**Scheduled Time:** Daily at 2:30 AM
+
+**What Gets Backed Up:**
+- All Docker volumes defined in your Docker environment
+- Persistent data from Docker containers
+- Named volumes and their complete contents
+
+### How It Works
+
+The script uses a Docker container with the Alpine Linux image to create backups:
+
+1. **Volume Discovery**: Lists all Docker volumes in the system
+2. **Container Method**: Runs a temporary Alpine container that:
+   - Mounts the target volume as read-only
+   - Creates a tar.gz archive of the volume contents
+   - Saves the archive to the backup directory
+   - Automatically removes itself after completion
+3. **Verification**: Tests tar.gz integrity after creation
+4. **Security**: Sets restrictive permissions (600) on backup files
+
+**Why This Method:**
+- Works with any volume driver (local, nfs, etc.)
+- Doesn't require direct filesystem access to volume mountpoints
+- Handles permission issues gracefully
+- Platform-independent (works on any Docker host)
+- No need for volume-specific backup tools
+
+### Setup
+
+#### Prerequisites
+- Docker installed and running
+- User has permission to run Docker commands (or use sudo)
+- Sufficient disk space for volume backups
+- Alpine Docker image (automatically pulled if needed)
+
+#### Environment Variables
+
+```bash
+export DOCKER_BACKUP_DIR=/var/backups/docker-volumes
+export DOCKER_IMAGE=alpine:latest
+export MIN_DISK_SPACE_GB=5
+```
+
+#### Grant Docker Permissions
+
+If you get permission errors, add your user to the docker group:
+
+```bash
+sudo usermod -aG docker $USER
+# Log out and back in for changes to take effect
+```
+
+#### Manual Backup
+
+Run the backup script manually:
+
+```bash
+cd /path/to/laya-backbone
+
+# Backup all Docker volumes
+./scripts/backup/docker_volume_backup.sh
+
+# Backup a specific volume
+./scripts/backup/docker_volume_backup.sh my_volume_name
+
+# List all Docker volumes
+./scripts/backup/docker_volume_backup.sh --list
+```
+
+#### Automated Backup (Cron)
+
+1. Create backup directory:
+```bash
+sudo mkdir -p /var/backups/docker-volumes
+sudo chmod 700 /var/backups/docker-volumes
+```
+
+2. Edit crontab:
+```bash
+crontab -e
+```
+
+3. Add the following line (adjust paths as needed):
+```
+30 2 * * * /path/to/laya-backbone/scripts/backup/docker_volume_backup.sh >> /var/log/docker_volume_backup.log 2>&1
+```
+
+Or use an environment file:
+```
+30 2 * * * /bin/bash -c 'source /path/to/.env && /path/to/laya-backbone/scripts/backup/docker_volume_backup.sh' >> /var/log/docker_volume_backup.log 2>&1
+```
+
+### Usage
+
+**Basic Usage:**
+
+```bash
+# Backup all Docker volumes
+./scripts/backup/docker_volume_backup.sh
+
+# Backup specific volume
+./scripts/backup/docker_volume_backup.sh laya_mysql_data
+
+# List available volumes
+./scripts/backup/docker_volume_backup.sh --list
+
+# Show help
+./scripts/backup/docker_volume_backup.sh --help
+```
+
+### Restore Docker Volumes
+
+To restore a Docker volume from backup:
+
+```bash
+# Create the volume if it doesn't exist
+docker volume create my_volume_name
+
+# Restore from backup using a temporary container
+docker run --rm \
+  -v my_volume_name:/volume \
+  -v /var/backups/docker-volumes:/backup \
+  alpine:latest \
+  tar xzf /backup/my_volume_name_20260216_023000.tar.gz -C /volume
+
+# Verify restored data
+docker run --rm \
+  -v my_volume_name:/volume \
+  alpine:latest \
+  ls -la /volume
+```
+
+**Important Restore Notes:**
+- Always stop containers using the volume before restoring
+- Existing data in the volume will be overwritten
+- Test restores in a non-production environment first
+- Verify data integrity after restore
+
+### Backup Schedule Integration
+
+The Docker volume backup runs at 2:30 AM, between database backups and retention policy:
+
+```
+2:00 AM  → MySQL backup
+2:15 AM  → PostgreSQL backup
+2:30 AM  → Docker volume backup ← This script
+3:00 AM  → Retention policy cleanup
+3:30 AM  → Photo/upload backup
+4:00 AM  → Backup verification
+5:00 AM  → Remote storage sync
+```
+
+### Monitoring
+
+Check Docker volume backup logs:
+```bash
+tail -f /var/log/docker_volume_backup.log
+```
+
+View backup results:
+```bash
+grep "SUCCESS\|ERROR" /var/log/docker_volume_backup.log
+```
+
+Check backup files:
+```bash
+ls -lh /var/backups/docker-volumes/
+```
+
+View backup summary:
+```bash
+grep "Backup Summary" -A 5 /var/log/docker_volume_backup.log
+```
+
+### Security Best Practices
+
+1. **Access Control**
+   - Set restrictive permissions on backup directory (700)
+   - Use dedicated backup user with minimal Docker privileges
+   - Protect backup files from unauthorized access (600)
+
+2. **Docker Security**
+   - Keep Docker daemon updated
+   - Use official Alpine image for backups
+   - Verify image signatures before use
+   - Audit Docker access logs
+
+3. **Storage Security**
+   - Store backups on separate physical drives when possible
+   - Consider encrypting sensitive volume backups
+   - Implement access logging for backup directories
+   - Use remote backup for off-site copies
+
+4. **Monitoring**
+   - Monitor backup logs regularly
+   - Set up alerts for backup failures
+   - Check disk space to prevent backup failures
+   - Verify backups periodically
+
+### Troubleshooting
+
+#### Docker Not Running
+
+```bash
+# Check Docker status
+docker info
+
+# Start Docker (Linux systemd)
+sudo systemctl start docker
+
+# Start Docker (macOS)
+open -a Docker
+```
+
+#### Permission Denied
+
+```bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+
+# Or run with sudo (not recommended for cron)
+sudo ./scripts/backup/docker_volume_backup.sh
+```
+
+#### No Volumes Found
+
+```bash
+# List all Docker volumes
+docker volume ls
+
+# Create a test volume
+docker volume create test_volume
+
+# Backup the test volume
+./scripts/backup/docker_volume_backup.sh test_volume
+```
+
+#### Backup File Corrupted
+
+```bash
+# Test tar.gz integrity
+tar -tzf /var/backups/docker-volumes/my_volume_20260216_023000.tar.gz
+
+# If corrupted, check disk health and re-run backup
+df -h /var/backups/docker-volumes
+```
+
+#### Low Disk Space
+
+```bash
+# Check available space
+df -h /var/backups/docker-volumes
+
+# Clean up old backups manually
+find /var/backups/docker-volumes -name "*.tar.gz" -mtime +30 -delete
+
+# Or run retention policy
+./scripts/backup/retention_policy.sh
+```
+
+#### Alpine Image Pull Fails
+
+```bash
+# Manually pull Alpine image
+docker pull alpine:latest
+
+# Use a different image if needed
+export DOCKER_IMAGE=busybox:latest
+./scripts/backup/docker_volume_backup.sh
+```
+
+### Common Volume Backup Examples
+
+**Database Volumes:**
+```bash
+# Backup MySQL data volume
+./scripts/backup/docker_volume_backup.sh mysql_data
+
+# Backup PostgreSQL data volume
+./scripts/backup/docker_volume_backup.sh postgres_data
+```
+
+**Application Volumes:**
+```bash
+# Backup application uploads
+./scripts/backup/docker_volume_backup.sh app_uploads
+
+# Backup configuration
+./scripts/backup/docker_volume_backup.sh app_config
+```
+
+**Multiple Volumes:**
+```bash
+# Backup all volumes at once
+./scripts/backup/docker_volume_backup.sh
+```
+
+### Integration with Retention Policy
+
+Docker volume backups are automatically included in the retention policy:
+
+- The retention_policy.sh script can be extended to handle Docker volume backups
+- Backups follow the same naming convention: `{volume_name}_{timestamp}.tar.gz`
+- Subject to the same retention rules: 7 daily, 4 weekly, 12 monthly
+
 ## Future Enhancements
 
 - [x] PostgreSQL backup script (scheduled at 2:15 AM)
@@ -1279,7 +1600,7 @@ chmod +x /path/to/scripts/backup/photo_backup.sh
 - [x] Backup verification script (restore to temp DB)
 - [x] Remote backup to S3 or rsync to remote server
 - [x] Photo and upload file backups
-- [ ] Docker volume backups
+- [x] Docker volume backups
 - [ ] Email/Slack notifications on failure
 - [ ] Backup encryption
 - [ ] Incremental backups
