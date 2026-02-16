@@ -714,13 +714,311 @@ View verification results:
 grep "SUCCESS\|FAILED" /var/log/backup_verification.log
 ```
 
+## Remote Storage Backup
+
+### Remote Backup Script (`remote_backup.sh`)
+
+**Features:**
+- ✅ Support for AWS S3 and rsync remote storage
+- ✅ Selective sync (MySQL, PostgreSQL, or both)
+- ✅ Bandwidth limiting for rsync transfers
+- ✅ Incremental transfers (only changed files)
+- ✅ Dry-run mode for testing before actual sync
+- ✅ Comprehensive error handling and logging
+- ✅ SSH key-based authentication for rsync
+- ✅ Automatic remote directory creation
+- ✅ Pre-flight connectivity checks
+
+**Supported Methods:**
+
+1. **AWS S3**: Uses AWS CLI to sync backups to S3 bucket
+2. **Rsync**: Uses rsync over SSH to sync to remote server
+
+**Usage:**
+
+```bash
+# Sync all backups to remote storage (using configured method)
+./scripts/backup/remote_backup.sh
+
+# Test sync without transferring (dry-run)
+./scripts/backup/remote_backup.sh --dry-run
+
+# Sync only MySQL backups
+./scripts/backup/remote_backup.sh --mysql-only
+
+# Sync only PostgreSQL backups
+./scripts/backup/remote_backup.sh --postgres-only
+
+# Show help
+./scripts/backup/remote_backup.sh --help
+```
+
+### Setup for AWS S3
+
+#### Prerequisites
+- AWS CLI installed and configured
+- AWS account with S3 bucket created
+- IAM user with S3 write permissions
+
+#### Environment Variables
+
+```bash
+export REMOTE_BACKUP_METHOD=s3
+export AWS_S3_BUCKET=s3://my-laya-backups
+export AWS_PROFILE=default  # Optional
+export AWS_REGION=us-east-1  # Optional
+export MYSQL_BACKUP_DIR=/var/backups/mysql
+export POSTGRES_BACKUP_DIR=/var/backups/postgres
+```
+
+#### Install AWS CLI
+
+macOS:
+```bash
+brew install awscli
+```
+
+Linux:
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+```
+
+#### Configure AWS CLI
+
+```bash
+aws configure
+# Enter your AWS Access Key ID
+# Enter your AWS Secret Access Key
+# Enter default region (e.g., us-east-1)
+# Enter default output format (json)
+```
+
+#### Create S3 Bucket
+
+```bash
+aws s3 mb s3://my-laya-backups --region us-east-1
+```
+
+#### Test S3 Sync
+
+```bash
+# Dry-run to see what would be synced
+./scripts/backup/remote_backup.sh --dry-run
+
+# Actual sync
+./scripts/backup/remote_backup.sh
+```
+
+### Setup for Rsync
+
+#### Prerequisites
+- Remote server with SSH access
+- rsync installed on both local and remote systems
+- SSH key-based authentication configured
+
+#### Environment Variables
+
+```bash
+export REMOTE_BACKUP_METHOD=rsync
+export REMOTE_USER=backup_user
+export REMOTE_HOST=backup.example.com
+export REMOTE_PATH=/backups/laya
+export SSH_KEY=$HOME/.ssh/id_rsa
+export SSH_PORT=22
+export RSYNC_BANDWIDTH=5000  # Optional: limit to 5 MB/s
+export MYSQL_BACKUP_DIR=/var/backups/mysql
+export POSTGRES_BACKUP_DIR=/var/backups/postgres
+```
+
+#### Generate SSH Key (if not exists)
+
+```bash
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
+```
+
+#### Copy SSH Key to Remote Server
+
+```bash
+ssh-copy-id -i ~/.ssh/id_rsa.pub backup_user@backup.example.com
+```
+
+#### Test SSH Connection
+
+```bash
+ssh -i ~/.ssh/id_rsa backup_user@backup.example.com "echo 'SSH connection successful'"
+```
+
+#### Test Rsync Sync
+
+```bash
+# Dry-run to see what would be synced
+./scripts/backup/remote_backup.sh --dry-run
+
+# Actual sync
+./scripts/backup/remote_backup.sh
+```
+
+### Automated Remote Backup (Cron)
+
+Add to crontab to run daily at 5:00 AM (after local backups and retention policy):
+
+```bash
+crontab -e
+```
+
+Add this line:
+
+**For S3:**
+```
+0 5 * * * REMOTE_BACKUP_METHOD=s3 AWS_S3_BUCKET=s3://my-laya-backups /path/to/laya-backbone/scripts/backup/remote_backup.sh >> /var/log/remote_backup.log 2>&1
+```
+
+**For Rsync:**
+```
+0 5 * * * REMOTE_BACKUP_METHOD=rsync REMOTE_USER=backup_user REMOTE_HOST=backup.example.com REMOTE_PATH=/backups/laya SSH_KEY=/home/user/.ssh/id_rsa /path/to/laya-backbone/scripts/backup/remote_backup.sh >> /var/log/remote_backup.log 2>&1
+```
+
+Or use an environment file:
+```
+0 5 * * * /bin/bash -c 'source /path/to/.env && /path/to/laya-backbone/scripts/backup/remote_backup.sh' >> /var/log/remote_backup.log 2>&1
+```
+
+### Monitoring Remote Backups
+
+Check remote backup logs:
+```bash
+tail -f /var/log/remote_backup.log
+```
+
+View sync results:
+```bash
+grep "SUCCESS\|ERROR" /var/log/remote_backup.log
+```
+
+For S3, verify uploaded files:
+```bash
+aws s3 ls s3://my-laya-backups/mysql/ --recursive
+aws s3 ls s3://my-laya-backups/postgres/ --recursive
+```
+
+For rsync, verify remote files:
+```bash
+ssh backup_user@backup.example.com "ls -lh /backups/laya/mysql/"
+ssh backup_user@backup.example.com "ls -lh /backups/laya/postgres/"
+```
+
+### Bandwidth Considerations
+
+For rsync, you can limit bandwidth to avoid saturating your network:
+
+```bash
+# Limit to 1 MB/s (1000 KB/s)
+export RSYNC_BANDWIDTH=1000
+./scripts/backup/remote_backup.sh
+```
+
+This is especially useful for:
+- Limited bandwidth connections
+- Syncing during business hours
+- Avoiding network congestion
+
+### Security Best Practices
+
+1. **S3 Security**
+   - Use IAM roles with minimal required permissions
+   - Enable S3 bucket versioning for backup history
+   - Enable S3 bucket encryption at rest
+   - Use S3 lifecycle policies for cost optimization
+   - Enable S3 access logging
+
+2. **Rsync Security**
+   - Use SSH key-based authentication (no passwords)
+   - Restrict SSH key permissions (chmod 600)
+   - Use dedicated backup user with minimal privileges
+   - Consider using SSH jump hosts for additional security
+   - Enable SSH key passphrase protection
+
+3. **Network Security**
+   - Use VPN or private networks for rsync transfers
+   - Enable firewall rules to restrict SSH access
+   - Monitor remote access logs
+   - Use fail2ban to prevent brute-force attacks
+
+4. **Monitoring**
+   - Set up alerts for sync failures
+   - Monitor remote storage capacity
+   - Regularly test restore from remote backups
+   - Audit remote backup access logs
+
+### Troubleshooting
+
+#### S3 Sync Fails
+
+1. **Check AWS credentials:**
+```bash
+aws s3 ls
+```
+
+2. **Verify S3 bucket exists:**
+```bash
+aws s3 ls s3://my-laya-backups/
+```
+
+3. **Check IAM permissions:**
+Ensure your IAM user has these permissions:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::my-laya-backups",
+        "arn:aws:s3:::my-laya-backups/*"
+      ]
+    }
+  ]
+}
+```
+
+#### Rsync Fails
+
+1. **Check SSH connectivity:**
+```bash
+ssh -i ~/.ssh/id_rsa -v backup_user@backup.example.com
+```
+
+2. **Verify remote directory permissions:**
+```bash
+ssh backup_user@backup.example.com "ls -ld /backups/laya"
+```
+
+3. **Check rsync installation:**
+```bash
+rsync --version
+ssh backup_user@backup.example.com "rsync --version"
+```
+
+4. **Test manual rsync:**
+```bash
+rsync -avz -e "ssh -i ~/.ssh/id_rsa" /var/backups/mysql/ backup_user@backup.example.com:/backups/laya/mysql/
+```
+
 ## Future Enhancements
 
 - [x] PostgreSQL backup script (scheduled at 2:15 AM)
 - [x] Automated backup retention/cleanup (7 daily, 4 weekly, 12 monthly)
 - [x] MySQL and PostgreSQL restore scripts with safety checks
 - [x] Backup verification script (restore to temp DB)
-- [ ] Remote backup to S3 or rsync to remote server
+- [x] Remote backup to S3 or rsync to remote server
 - [ ] Photo and upload file backups
 - [ ] Docker volume backups
 - [ ] Email/Slack notifications on failure
@@ -734,6 +1032,10 @@ grep "SUCCESS\|FAILED" /var/log/backup_verification.log
 - [MySQL Backup and Recovery](https://dev.mysql.com/doc/refman/8.0/en/backup-and-recovery.html)
 - [pg_dump Documentation](https://www.postgresql.org/docs/current/app-pgdump.html)
 - [PostgreSQL Backup and Restore](https://www.postgresql.org/docs/current/backup.html)
+- [AWS CLI S3 Sync Documentation](https://docs.aws.amazon.com/cli/latest/reference/s3/sync.html)
+- [AWS CLI Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
+- [Rsync Documentation](https://rsync.samba.org/documentation.html)
+- [SSH Key-Based Authentication](https://www.ssh.com/academy/ssh/keygen)
 - [Cron Configuration Guide](https://crontab.guru/)
 
 ## Support

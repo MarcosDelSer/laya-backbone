@@ -56,6 +56,18 @@
 0 4 * * * /path/to/laya-backbone/scripts/backup/verify_backup.sh --latest >> /var/log/backup_verification.log 2>&1
 
 # =============================================================================
+# Remote Storage Backup - Daily at 5:00 AM
+# =============================================================================
+# Syncs local backups to remote storage (S3 or rsync to remote server)
+# Runs after all local backups, retention, and verification are complete
+#
+# For AWS S3 (uncomment and configure):
+# 0 5 * * * REMOTE_BACKUP_METHOD=s3 AWS_S3_BUCKET=s3://my-laya-backups /path/to/laya-backbone/scripts/backup/remote_backup.sh >> /var/log/remote_backup.log 2>&1
+#
+# For Rsync to remote server (uncomment and configure):
+# 0 5 * * * REMOTE_BACKUP_METHOD=rsync REMOTE_USER=backup_user REMOTE_HOST=backup.example.com REMOTE_PATH=/backups/laya SSH_KEY=/home/user/.ssh/id_rsa /path/to/laya-backbone/scripts/backup/remote_backup.sh >> /var/log/remote_backup.log 2>&1
+
+# =============================================================================
 # Notes:
 # =============================================================================
 # - Ensure the script paths are absolute paths
