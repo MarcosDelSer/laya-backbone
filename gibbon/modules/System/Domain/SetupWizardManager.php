@@ -269,48 +269,74 @@ class SetupWizardManager
     /**
      * Get list of completed step IDs.
      *
+     * Checks both the individual step completion flags (settings) AND
+     * the stepData from wizard progress. A step is considered complete
+     * if either source indicates completion, ensuring consistency with
+     * WizardCompletionStep::isStepCompleted().
+     *
      * @return array Array of completed step IDs
      */
     public function getCompletedSteps()
     {
         $completed = [];
 
+        // Get stepData from wizard progress for fallback checks
+        $progress = $this->installationDetector->getWizardProgress();
+        $stepData = ($progress && isset($progress['stepData']) && is_array($progress['stepData']))
+            ? $progress['stepData']
+            : [];
+
         // Check organization_info
-        if ($this->isOrganizationInfoCompleted()) {
+        if ($this->isOrganizationInfoCompleted() || $this->hasStepData($stepData, 'organization_info')) {
             $completed[] = 'organization_info';
         }
 
         // Check admin_account
-        if ($this->isAdminAccountCompleted()) {
+        if ($this->isAdminAccountCompleted() || $this->hasStepData($stepData, 'admin_account')) {
             $completed[] = 'admin_account';
         }
 
         // Check operating_hours
-        if ($this->isOperatingHoursCompleted()) {
+        if ($this->isOperatingHoursCompleted() || $this->hasStepData($stepData, 'operating_hours')) {
             $completed[] = 'operating_hours';
         }
 
         // Check groups_rooms
-        if ($this->isGroupsRoomsCompleted()) {
+        if ($this->isGroupsRoomsCompleted() || $this->hasStepData($stepData, 'groups_rooms')) {
             $completed[] = 'groups_rooms';
         }
 
         // Check finance_settings
-        if ($this->isFinanceSettingsCompleted()) {
+        if ($this->isFinanceSettingsCompleted() || $this->hasStepData($stepData, 'finance_settings')) {
             $completed[] = 'finance_settings';
         }
 
         // Check service_connectivity
-        if ($this->isServiceConnectivityCompleted()) {
+        if ($this->isServiceConnectivityCompleted() || $this->hasStepData($stepData, 'service_connectivity')) {
             $completed[] = 'service_connectivity';
         }
 
         // Check sample_data (optional)
-        if ($this->isSampleDataCompleted()) {
+        if ($this->isSampleDataCompleted() || $this->hasStepData($stepData, 'sample_data')) {
             $completed[] = 'sample_data';
         }
 
         return $completed;
+    }
+
+    /**
+     * Check if stepData contains non-empty data for a given step.
+     *
+     * This provides consistency with WizardCompletionStep::isStepCompleted()
+     * which uses stepData as the source of truth for step completion.
+     *
+     * @param array $stepData The stepData array from wizard progress
+     * @param string $stepId The step identifier to check
+     * @return bool True if step has data indicating completion
+     */
+    protected function hasStepData(array $stepData, $stepId)
+    {
+        return isset($stepData[$stepId]) && !empty($stepData[$stepId]);
     }
 
     /**
@@ -345,6 +371,10 @@ class SetupWizardManager
     /**
      * Save data for a specific step.
      *
+     * Saves the step data to wizard progress AND sets the step completion flag
+     * in settings. This ensures consistency between the two sources of truth
+     * for step completion status.
+     *
      * @param string $stepId Step identifier
      * @param array $data Step data
      * @return bool True if successful
@@ -359,9 +389,65 @@ class SetupWizardManager
             // Update step data
             $stepData[$stepId] = $data;
 
-            // Save updated progress
-            return $this->installationDetector->saveWizardProgress($stepId, $stepData);
+            // Save updated progress to wizard table
+            $saved = $this->installationDetector->saveWizardProgress($stepId, $stepData);
+
+            // Also set the completion flag in settings for consistency
+            if ($saved && !empty($data)) {
+                $this->markStepCompleted($stepId);
+            }
+
+            return $saved;
         } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Mark a specific step as completed in settings.
+     *
+     * This sets the {step_id}_completed setting to 'Y', keeping
+     * the settings-based completion flags in sync with stepData.
+     *
+     * @param string $stepId Step identifier
+     * @return bool True if successful
+     */
+    protected function markStepCompleted($stepId)
+    {
+        try {
+            // Validate step ID
+            if (!isset($this->steps[$stepId])) {
+                return false;
+            }
+
+            $settingName = $stepId . '_completed';
+
+            // Check if setting exists
+            $existing = $this->settingGateway->getSettingByScope('SetupWizard', $settingName);
+
+            if ($existing !== null) {
+                // Update existing setting via direct PDO since SettingGateway may not have update method
+                $stmt = $this->pdo->prepare("
+                    UPDATE gibbonSetting
+                    SET value = 'Y'
+                    WHERE scope = 'SetupWizard' AND name = :name
+                ");
+                $stmt->execute([':name' => $settingName]);
+            } else {
+                // Insert new setting
+                $stmt = $this->pdo->prepare("
+                    INSERT INTO gibbonSetting (scope, name, value, nameDisplay, description)
+                    VALUES ('SetupWizard', :name, 'Y', :display, 'Step completion flag')
+                ");
+                $stmt->execute([
+                    ':name' => $settingName,
+                    ':display' => ucwords(str_replace('_', ' ', $stepId)) . ' Completed',
+                ]);
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            // Non-critical - stepData is the primary source of truth
             return false;
         }
     }
