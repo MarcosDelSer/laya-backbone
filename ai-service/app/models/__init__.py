@@ -9,6 +9,7 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
+    document: Models for document e-signature domain
 """
 
 from app.models.base import Base
@@ -37,6 +38,17 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
+from app.models.document import (
+    Document,
+    DocumentAuditEventType,
+    DocumentAuditLog,
+    DocumentStatus,
+    DocumentTemplate,
+    DocumentType,
+    Signature,
+    SignatureRequest,
+    SignatureRequestStatus,
+)
 
 __all__ = [
     "Base",
@@ -61,4 +73,14 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
+    # Document models
+    "Document",
+    "DocumentAuditEventType",
+    "DocumentAuditLog",
+    "DocumentStatus",
+    "DocumentTemplate",
+    "DocumentType",
+    "Signature",
+    "SignatureRequest",
+    "SignatureRequestStatus",
 ]

@@ -219,6 +219,140 @@ export interface SignDocumentRequest {
 }
 
 // ============================================================================
+// Government Document Types
+// ============================================================================
+
+/**
+ * Categories of government documents.
+ */
+export type GovernmentDocumentCategory =
+  | 'child_identity'
+  | 'parent_identity'
+  | 'health'
+  | 'immigration';
+
+/**
+ * Types of government documents for Quebec childcare compliance.
+ */
+export type GovernmentDocumentType =
+  | 'birth_certificate'
+  | 'citizenship_proof'
+  | 'health_card'
+  | 'immunization_record'
+  | 'parent_id'
+  | 'custody_agreement'
+  | 'immigration_document'
+  | 'work_permit'
+  | 'study_permit';
+
+/**
+ * Verification status of a government document.
+ */
+export type GovernmentDocumentStatus =
+  | 'missing'
+  | 'pending_verification'
+  | 'verified'
+  | 'rejected'
+  | 'expired';
+
+/**
+ * Government document type definition.
+ */
+export interface GovernmentDocumentTypeDefinition {
+  id: string;
+  name: string;
+  description: string;
+  category: GovernmentDocumentCategory;
+  isRequired: boolean;
+  appliesToChild: boolean;
+  appliesToParent: boolean;
+  hasExpiration: boolean;
+}
+
+/**
+ * Government document record.
+ */
+export interface GovernmentDocument {
+  id: string;
+  familyId: string;
+  personId: string;
+  personName: string;
+  documentTypeId: string;
+  documentTypeName: string;
+  category: GovernmentDocumentCategory;
+  status: GovernmentDocumentStatus;
+  documentNumber?: string;
+  issueDate?: string;
+  expirationDate?: string;
+  fileUrl?: string;
+  fileName?: string;
+  uploadedAt?: string;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  rejectionReason?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request payload for uploading a government document.
+ */
+export interface GovernmentDocumentUploadRequest {
+  personId: string;
+  documentTypeId: string;
+  documentNumber?: string;
+  issueDate?: string;
+  expirationDate?: string;
+  notes?: string;
+  file: File;
+}
+
+/**
+ * Family document checklist item.
+ */
+export interface GovernmentDocumentChecklistItem {
+  documentType: GovernmentDocumentTypeDefinition;
+  personId: string;
+  personName: string;
+  status: GovernmentDocumentStatus;
+  document?: GovernmentDocument;
+  daysUntilExpiration?: number;
+}
+
+/**
+ * Family document checklist grouped by member.
+ */
+export interface GovernmentDocumentChecklist {
+  familyId: string;
+  children: {
+    personId: string;
+    personName: string;
+    items: GovernmentDocumentChecklistItem[];
+  }[];
+  parents: {
+    personId: string;
+    personName: string;
+    items: GovernmentDocumentChecklistItem[];
+  }[];
+  complianceRate: number;
+  criticalDocumentsMissing: boolean;
+  missingCriticalDocuments: string[];
+}
+
+/**
+ * Summary statistics for government documents.
+ */
+export interface GovernmentDocumentStats {
+  total: number;
+  verified: number;
+  pendingVerification: number;
+  missing: number;
+  expired: number;
+  expiringWithin30Days: number;
+}
+
+// ============================================================================
 // Child Types
 // ============================================================================
 
