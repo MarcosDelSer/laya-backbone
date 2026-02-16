@@ -394,3 +394,22 @@ $actionRows[6]['categoryPermissionStaff']  = 'Y';
 $actionRows[6]['categoryPermissionStudent']= 'N';
 $actionRows[6]['categoryPermissionParent'] = 'N';
 $actionRows[6]['categoryPermissionOther']  = 'N';
+
+// Row 7 - Manage Expenses
+$actionRows[7]['name']                      = 'Manage Expenses';
+$actionRows[7]['precedence']                = '0';
+$actionRows[7]['category']                  = 'Expenses';
+$actionRows[7]['description']               = 'View, create, and manage facility expenses with filtering by status, category, vendor, and date range';
+$actionRows[7]['URLList']                   = 'finance_expenses.php,finance_expense_add.php,finance_expense_addProcess.php,finance_expense_view.php,finance_expense_edit.php,finance_expense_editProcess.php,finance_expense_approve.php';
+$actionRows[7]['entryURL']                  = 'finance_expenses.php';
+$actionRows[7]['entrySidebar']              = 'Y';
+$actionRows[7]['menuShow']                  = 'Y';
+$actionRows[7]['defaultPermissionAdmin']   = 'Y';
+$actionRows[7]['defaultPermissionTeacher'] = 'N';
+$actionRows[7]['defaultPermissionStudent'] = 'N';
+$actionRows[7]['defaultPermissionParent']  = 'N';
+$actionRows[7]['defaultPermissionSupport'] = 'Y';
+$actionRows[7]['categoryPermissionStaff']  = 'Y';
+$actionRows[7]['categoryPermissionStudent']= 'N';
+$actionRows[7]['categoryPermissionParent'] = 'N';
+$actionRows[7]['categoryPermissionOther']  = 'N';
