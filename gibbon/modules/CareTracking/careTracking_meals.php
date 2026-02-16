@@ -24,6 +24,8 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\MealGateway;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -48,6 +50,14 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateways via DI container
     $mealGateway = $container->get(MealGateway::class);
     $attendanceGateway = $container->get(AttendanceGateway::class);
+
+    // Get AI Sync service for webhook notifications
+    try {
+        $settingGateway = $container->get(SettingGateway::class);
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
 
     // Meal types and quantity options
     $mealTypes = [
@@ -90,6 +100,25 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
 
             if ($result !== false) {
                 $page->addSuccess(__('Meal has been logged successfully.'));
+
+                // Trigger webhook for AI sync
+                if ($aiSyncService !== null) {
+                    try {
+                        $mealData = [
+                            'gibbonCareMealID' => $result,
+                            'gibbonPersonID' => $childID,
+                            'date' => $date,
+                            'mealType' => $mealType,
+                            'quantity' => $quantity,
+                            'allergyAlert' => $allergyAlert,
+                            'notes' => $notes,
+                            'recordedByID' => $gibbonPersonID,
+                        ];
+                        $aiSyncService->syncMealEvent($result, $mealData);
+                    } catch (Exception $e) {
+                        // Silently fail - don't break UX if webhook fails
+                    }
+                }
             } else {
                 $page->addError(__('Failed to log meal.'));
             }
@@ -121,6 +150,25 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                 );
                 if ($result !== false) {
                     $successCount++;
+
+                    // Trigger webhook for AI sync
+                    if ($aiSyncService !== null) {
+                        try {
+                            $mealData = [
+                                'gibbonCareMealID' => $result,
+                                'gibbonPersonID' => $childID,
+                                'date' => $date,
+                                'mealType' => $mealType,
+                                'quantity' => $quantity,
+                                'allergyAlert' => $allergyAlert,
+                                'notes' => $notes,
+                                'recordedByID' => $gibbonPersonID,
+                            ];
+                            $aiSyncService->syncMealEvent($result, $mealData);
+                        } catch (Exception $e) {
+                            // Silently fail - don't break UX if webhook fails
+                        }
+                    }
                 }
             }
             if ($successCount > 0) {
