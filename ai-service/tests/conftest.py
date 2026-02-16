@@ -296,6 +296,7 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
     notification_type VARCHAR(50) NOT NULL,
     channel VARCHAR(50) NOT NULL,
     is_enabled INTEGER NOT NULL DEFAULT 1,
+    frequency VARCHAR(20) NOT NULL DEFAULT 'immediate',
     quiet_hours_start VARCHAR(5),
     quiet_hours_end VARCHAR(5),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

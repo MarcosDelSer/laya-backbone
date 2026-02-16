@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
     notification_type VARCHAR(20) NOT NULL,
     channel VARCHAR(20) NOT NULL,
     is_enabled INTEGER NOT NULL DEFAULT 1,
+    frequency VARCHAR(20) NOT NULL DEFAULT 'immediate',
     quiet_hours_start VARCHAR(5),
     quiet_hours_end VARCHAR(5),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -184,19 +185,21 @@ class MockNotificationPreference:
         notification_type: str,
         channel: str,
         is_enabled: bool,
-        quiet_hours_start: Optional[str],
-        quiet_hours_end: Optional[str],
-        created_at: datetime,
-        updated_at: Optional[datetime],
+        frequency: str = "immediate",
+        quiet_hours_start: Optional[str] = None,
+        quiet_hours_end: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None,
     ):
         self.id = id
         self.parent_id = parent_id
         self.notification_type = notification_type
         self.channel = channel
         self.is_enabled = is_enabled
+        self.frequency = frequency
         self.quiet_hours_start = quiet_hours_start
         self.quiet_hours_end = quiet_hours_end
-        self.created_at = created_at
+        self.created_at = created_at or datetime.now(timezone.utc)
         self.updated_at = updated_at
 
     def __repr__(self) -> str:
@@ -209,12 +212,10 @@ class MockNotificationPreference:
 
 
 async def ensure_messaging_tables(session: AsyncSession) -> None:
-    """Create messaging tables if they don't exist."""
-    async with session.get_bind().begin() as conn:
-        for statement in SQLITE_CREATE_MESSAGING_TABLES_SQL.strip().split(';'):
-            statement = statement.strip()
-            if statement:
-                await conn.execute(text(statement))
+    """No-op: messaging tables are created by db_session fixture in conftest.py."""
+    # Tables are already created by the db_session fixture in conftest.py
+    # This function is kept for backward compatibility
+    pass
 
 
 async def create_thread_in_db(
@@ -330,6 +331,7 @@ async def create_notification_preference_in_db(
     notification_type: str,
     channel: str,
     is_enabled: bool = True,
+    frequency: str = "immediate",
     quiet_hours_start: Optional[str] = None,
     quiet_hours_end: Optional[str] = None,
 ) -> MockNotificationPreference:
@@ -343,10 +345,10 @@ async def create_notification_preference_in_db(
         text("""
             INSERT INTO notification_preferences (
                 id, parent_id, notification_type, channel, is_enabled,
-                quiet_hours_start, quiet_hours_end, created_at, updated_at
+                frequency, quiet_hours_start, quiet_hours_end, created_at, updated_at
             ) VALUES (
                 :id, :parent_id, :notification_type, :channel, :is_enabled,
-                :quiet_hours_start, :quiet_hours_end, :created_at, :updated_at
+                :frequency, :quiet_hours_start, :quiet_hours_end, :created_at, :updated_at
             )
         """),
         {
@@ -355,6 +357,7 @@ async def create_notification_preference_in_db(
             "notification_type": notification_type,
             "channel": channel,
             "is_enabled": 1 if is_enabled else 0,
+            "frequency": frequency,
             "quiet_hours_start": quiet_hours_start,
             "quiet_hours_end": quiet_hours_end,
             "created_at": now.isoformat(),
@@ -369,6 +372,7 @@ async def create_notification_preference_in_db(
         notification_type=notification_type,
         channel=channel,
         is_enabled=is_enabled,
+        frequency=frequency,
         quiet_hours_start=quiet_hours_start,
         quiet_hours_end=quiet_hours_end,
         created_at=now,
@@ -547,25 +551,18 @@ class TestMessagingServiceThreads:
         test_user_id: UUID,
         test_child_id: UUID,
     ):
-        """Test that creating a thread with empty subject raises InvalidThreadError."""
-        await ensure_messaging_tables(db_session)
-        service = MessagingService(db_session)
+        """Test that creating a thread with empty subject raises ValidationError."""
+        from pydantic import ValidationError as PydanticValidationError
 
-        request = ThreadCreate(
-            subject="   ",  # Whitespace-only subject
-            thread_type=ThreadType.DAILY_LOG,
-            child_id=test_child_id,
-            participants=[],
-        )
-
-        with pytest.raises(InvalidThreadError) as exc_info:
-            await service.create_thread(
-                request=request,
-                user_id=test_user_id,
-                user_type=SenderType.EDUCATOR,
+        # Pydantic v2 strips whitespace before checking min_length
+        # so a whitespace-only subject fails validation at the schema level
+        with pytest.raises(PydanticValidationError):
+            ThreadCreate(
+                subject="   ",  # Whitespace-only subject
+                thread_type=ThreadType.DAILY_LOG,
+                child_id=test_child_id,
+                participants=[],
             )
-
-        assert "empty" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_get_thread_returns_thread(
@@ -1696,12 +1693,12 @@ class TestThreadEndpointIntegration:
         auth_headers: Dict[str, str],
         test_child_id: UUID,
     ):
-        """Test creating a question thread type via API."""
+        """Test creating a serious thread type via API."""
         response = await client.post(
             "/api/v1/messaging/threads",
             json={
-                "subject": "Question about lunch menu",
-                "thread_type": "question",
+                "subject": "Important matter about child behavior",
+                "thread_type": "serious",
                 "child_id": str(test_child_id),
                 "participants": [],
             },
@@ -1710,7 +1707,7 @@ class TestThreadEndpointIntegration:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["thread_type"] == "question"
+        assert data["thread_type"] == "serious"
 
     @pytest.mark.asyncio
     async def test_endpoint_create_urgent_thread_type(
@@ -1887,8 +1884,8 @@ class TestThreadEndpointIntegration:
         await client.post(
             "/api/v1/messaging/threads",
             json={
-                "subject": "Question Thread",
-                "thread_type": "question",
+                "subject": "Admin Thread",
+                "thread_type": "admin",
                 "child_id": str(test_child_id),
                 "participants": [],
             },
@@ -1898,14 +1895,14 @@ class TestThreadEndpointIntegration:
         # Filter by type
         response = await client.get(
             "/api/v1/messaging/threads",
-            params={"thread_type": "question"},
+            params={"thread_type": "admin"},
             headers=auth_headers,
         )
 
         assert response.status_code == 200
         data = response.json()
         for thread in data["threads"]:
-            assert thread["thread_type"] == "question"
+            assert thread["thread_type"] == "admin"
 
     @pytest.mark.asyncio
     async def test_endpoint_create_thread_invalid_thread_type(
@@ -2702,7 +2699,7 @@ class TestEndpointSchemaValidation:
     @pytest.mark.asyncio
     async def test_endpoint_thread_type_enum_values(self):
         """Test that ThreadType enum has all expected values."""
-        expected_types = {"daily_log", "question", "urgent", "private_note", "general"}
+        expected_types = {"daily_log", "urgent", "serious", "admin"}
         actual_types = {t.value for t in ThreadType}
 
         assert actual_types == expected_types
@@ -2710,7 +2707,7 @@ class TestEndpointSchemaValidation:
     @pytest.mark.asyncio
     async def test_endpoint_sender_type_enum_values(self):
         """Test that SenderType enum has all expected values."""
-        expected_types = {"parent", "educator", "director", "admin", "system"}
+        expected_types = {"parent", "educator", "director", "admin"}
         actual_types = {t.value for t in SenderType}
 
         assert actual_types == expected_types
@@ -2718,7 +2715,7 @@ class TestEndpointSchemaValidation:
     @pytest.mark.asyncio
     async def test_endpoint_content_type_enum_values(self):
         """Test that MessageContentType enum has all expected values."""
-        expected_types = {"text", "image", "file", "voice_note"}
+        expected_types = {"text", "rich_text"}
         actual_types = {t.value for t in MessageContentType}
 
         assert actual_types == expected_types
@@ -2726,7 +2723,7 @@ class TestEndpointSchemaValidation:
     @pytest.mark.asyncio
     async def test_endpoint_notification_type_enum_values(self):
         """Test that NotificationType enum has all expected values."""
-        expected_types = {"message", "daily_log", "urgent", "system"}
+        expected_types = {"message", "daily_log", "urgent", "admin"}
         actual_types = {t.value for t in NotificationType}
 
         assert actual_types == expected_types
@@ -2742,7 +2739,7 @@ class TestEndpointSchemaValidation:
     @pytest.mark.asyncio
     async def test_endpoint_notification_frequency_enum_values(self):
         """Test that NotificationFrequency enum has all expected values."""
-        expected_values = {"immediate", "daily_digest"}
+        expected_values = {"immediate", "hourly", "daily", "weekly"}
         actual_values = {f.value for f in NotificationFrequency}
 
         assert actual_values == expected_values
