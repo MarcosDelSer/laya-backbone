@@ -167,8 +167,173 @@ AND retryCount >= 3
 ORDER BY timestampCreated DESC;
 ```
 
+## resync.php
+
+Manual re-sync command for backfilling data and recovering from sync failures.
+
+### Purpose
+
+Manually triggers re-synchronization of specific entities or entity types to the AI service. This is useful for:
+
+- **Backfilling data**: Sync historical data that existed before AISync was enabled
+- **Recovery**: Re-sync entities after fixing AI service issues
+- **Testing**: Validate webhook integrations with real data
+- **Selective sync**: Re-sync specific entities or date ranges
+
+### Features
+
+- **Entity Type Selection**: Re-sync activities, meals, naps, attendance, or photos
+- **Flexible Filtering**: By ID, date range, or all entities of a type
+- **Batch Processing**: Process multiple entities with configurable limits
+- **Dry Run Mode**: Preview what would be synced without actually syncing
+- **Synchronous Execution**: Waits for webhook responses for immediate feedback
+- **Detailed Logging**: Verbose mode for debugging and monitoring
+
+### Usage
+
+```bash
+# Re-sync a specific activity
+php /path/to/gibbon/modules/AISync/cli/resync.php --type=activity --id=123
+
+# Re-sync all meals from the last week
+php resync.php --type=meal --since=2026-02-09
+
+# Re-sync all photos (dry run to see what would be synced)
+php resync.php --type=photo --dry-run --verbose
+
+# Re-sync attendance records between two dates
+php resync.php --type=attendance --since=2026-02-01 --until=2026-02-15
+
+# Re-sync naps with a limit
+php resync.php --type=nap --limit=50
+
+# Show help
+php resync.php --help
+```
+
+### Options
+
+- `--type=TYPE` (required): Entity type to re-sync
+  - Valid types: `activity`, `meal`, `nap`, `attendance`, `photo`
+- `--id=ID`: Specific entity ID to re-sync
+- `--since=DATE`: Re-sync entities created/modified since date (YYYY-MM-DD)
+- `--until=DATE`: Re-sync entities created/modified until date (YYYY-MM-DD)
+- `--limit=N`: Maximum number of entities to re-sync (default: 100)
+- `--dry-run`: Show what would be synced without actually syncing
+- `--verbose`: Show detailed output with timestamps
+- `--force`: Re-sync even if already successfully synced (future enhancement)
+- `--help`: Show help message
+
+### Entity Types
+
+**activity**
+- Table: `gibbonCareActivity`
+- Event: `care_activity_created`
+- Includes: Activity name, type, duration, participation, notes
+
+**meal**
+- Table: `gibbonCareMeal`
+- Event: `meal_logged`
+- Includes: Meal type, food items, amount eaten, notes
+
+**nap**
+- Table: `gibbonCareNap`
+- Event: `nap_logged`
+- Includes: Start/end time, duration, quality, notes
+
+**attendance**
+- Table: `gibbonCareAttendance`
+- Events: `child_checked_in`, `child_checked_out`
+- Includes: Check-in/out times, checked by, notes
+
+**photo**
+- Table: `gibbonPhoto`
+- Event: `photo_uploaded`
+- Includes: File path, caption, timestamp, uploaded by
+
+### Examples
+
+**Backfill all activities from January 2026:**
+```bash
+php resync.php --type=activity --since=2026-01-01 --until=2026-01-31 --verbose
+```
+
+**Test photo sync with dry run:**
+```bash
+php resync.php --type=photo --limit=10 --dry-run --verbose
+```
+
+**Re-sync a specific meal that failed:**
+```bash
+php resync.php --type=meal --id=456
+```
+
+**Backfill all data types for a specific date:**
+```bash
+php resync.php --type=activity --since=2026-02-15 --until=2026-02-15
+php resync.php --type=meal --since=2026-02-15 --until=2026-02-15
+php resync.php --type=nap --since=2026-02-15 --until=2026-02-15
+php resync.php --type=attendance --since=2026-02-15 --until=2026-02-15
+```
+
+### Exit Codes
+
+- `0`: Success (all re-syncs succeeded or no entities to process)
+- `1`: Failure (one or more re-syncs failed)
+
+### Requirements
+
+- PHP 7.4 or higher
+- Gibbon CMS installation
+- GuzzleHttp library
+- Database access
+- AI Sync enabled in settings
+
+### Troubleshooting
+
+**No entities found:**
+- Check date format is YYYY-MM-DD
+- Verify entity ID exists in the database
+- Check the date range includes actual data
+
+**Re-sync fails:**
+- Verify AI service URL is correct
+- Check network connectivity
+- Ensure JWT_SECRET_KEY environment variable is set
+- Review error messages in output
+
+**Script can't find gibbon.php:**
+- Run from the Gibbon root directory
+- Or provide the full path to the script
+
+### Best Practices
+
+1. **Use dry-run first**: Always test with `--dry-run --verbose` before syncing
+2. **Limit batch sizes**: Start with small limits (10-50) for testing
+3. **Sync chronologically**: Use date ranges to sync data in order
+4. **Monitor output**: Use `--verbose` to track progress
+5. **Check sync logs**: Review `gibbonAISyncLog` table after re-sync
+
+### Monitoring
+
+Check re-sync results:
+
+```sql
+-- Check recent syncs
+SELECT eventType, entityType, entityID, status, timestampProcessed
+FROM gibbonAISyncLog
+ORDER BY timestampProcessed DESC
+LIMIT 20;
+
+-- Check success rate by entity type
+SELECT entityType, status, COUNT(*) as count
+FROM gibbonAISyncLog
+GROUP BY entityType, status
+ORDER BY entityType, status;
+```
+
 ### See Also
 
 - [AISync Module Documentation](../README.md)
 - [Webhook Integration Guide](../docs/webhook-integration.md)
-- [Manual Re-sync CLI Command](./resync.php)
+- [Retry Queue Processor](./retryQueue.php)
