@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { aiServiceClient } from '@/lib/api';
+import { setAuthTokens } from '@/lib/auth';
 
 /**
  * Login request payload interface.
@@ -70,17 +71,9 @@ export async function POST(request: NextRequest) {
       message: 'Login successful',
     };
 
-    // Create NextResponse and set httpOnly cookie
+    // Create NextResponse and set authentication tokens
     const nextResponse = NextResponse.json(responseData, { status: 200 });
-
-    // Set access token in httpOnly cookie for security
-    nextResponse.cookies.set('access_token', response.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: '/',
-    });
+    setAuthTokens(nextResponse, { accessToken: response.accessToken });
 
     return nextResponse;
   } catch (error: any) {
