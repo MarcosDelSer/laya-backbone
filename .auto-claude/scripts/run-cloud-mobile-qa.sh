@@ -43,6 +43,9 @@ resolve_dir_within_repo() {
 
 resolve_file_within_repo() {
   local input="$1"
+  if [[ -L "$input" ]]; then
+    die "For security reasons, symlinks are not allowed for the capabilities file: $input"
+  fi
   [[ -f "$input" ]] || die "Capabilities file not found: $input"
   local abs
   abs="$(cd "$(dirname "$input")" && pwd -P)/$(basename "$input")"
@@ -54,7 +57,7 @@ resolve_file_within_repo() {
 
 mask_url_credentials() {
   local url="$1"
-  if [[ "$url" =~ ^([^:]+://)([^/@:]+):([^/@]+)@(.+)$ ]]; then
+  if [[ "$url" =~ ^([^:]+://)([^/@:]+):([^@]+)@(.+)$ ]]; then
     printf '%s***:***@%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[4]}"
     return
   fi
