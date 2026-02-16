@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { DashboardWrapper } from '@/components/DashboardWrapper';
 
 // Mock data for dashboard - will be replaced with API calls
 const childData = {
@@ -109,7 +110,8 @@ function StatIcon({ icon, color }: { icon: string; color: string }) {
 
 export default function DashboardPage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <DashboardWrapper>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -372,6 +374,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </DashboardWrapper>
   );
 }
