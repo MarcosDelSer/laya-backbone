@@ -133,8 +133,18 @@
     "clang++",
     "cmake",
     "composer",
+    "createdb",
+    "createuser",
+    "dive",
+    "docker",
+    "docker-buildx",
+    "docker-compose",
+    "dockerfile",
+    "dropdb",
+    "dropuser",
     "g++",
     "gcc",
+    "initdb",
     "ipython",
     "jupyter",
     "kotlin",
@@ -142,6 +152,12 @@
     "ld",
     "make",
     "meson",
+    "mysql",
+    "mysqladmin",
+    "mysqlcheck",
+    "mysqldump",
+    "mysqlimport",
+    "mysqlshow",
     "ninja",
     "nm",
     "node",
@@ -150,13 +166,24 @@
     "npx",
     "objdump",
     "pdb",
+    "pg_ctl",
+    "pg_dump",
+    "pg_dumpall",
+    "pg_isready",
+    "pg_restore",
     "php",
+    "phpunit",
     "pip",
     "pip3",
     "pipx",
+    "postgres",
+    "psql",
     "pudb",
     "python",
     "python3",
+    "redis-benchmark",
+    "redis-cli",
+    "redis-server",
     "strip",
     "swift",
     "swiftc",
@@ -165,7 +192,10 @@
     "tsx",
     "xcodebuild"
   ],
-  "script_commands": [],
+  "script_commands": [
+    "./verify_makefile.sh",
+    "make"
+  ],
   "custom_commands": [],
   "detected_stack": {
     "languages": [
@@ -178,22 +208,42 @@
       "cpp",
       "swift"
     ],
-    "package_managers": [],
-    "frameworks": [],
-    "databases": [],
-    "infrastructure": [],
+    "package_managers": [
+      "composer"
+    ],
+    "frameworks": [
+      "phpunit"
+    ],
+    "databases": [
+      "postgresql",
+      "mysql",
+      "redis"
+    ],
+    "infrastructure": [
+      "docker"
+    ],
     "cloud_providers": [],
     "code_quality_tools": [],
     "version_managers": []
   },
   "custom_scripts": {
     "npm_scripts": [],
-    "make_targets": [],
+    "make_targets": [
+      "help",
+      "seed",
+      "seed-reset",
+      "seed-ai",
+      "seed-ai-reset",
+      "seed-gibbon",
+      "seed-gibbon-reset"
+    ],
     "poetry_scripts": [],
     "cargo_aliases": [],
-    "shell_scripts": []
+    "shell_scripts": [
+      "verify_makefile.sh"
+    ]
   },
-  "project_dir": "/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/034-document-esignature",
-  "created_at": "2026-02-16T12:21:49.402915",
-  "project_hash": "cbe31f93488074b64fd32694be779462"
+  "project_dir": "/Users/Koldan/Documents/Abdelkefi Education/Dev/laya-backbone/.auto-claude/worktrees/tasks/022-auth-ai-service-login",
+  "created_at": "2026-02-16T12:21:45.937889",
+  "project_hash": "413de77b21f746a66db4dc2679796966"
 }

@@ -245,87 +245,43 @@ CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(chi
 """
 
 
-# SQLite-compatible document tables (PostgreSQL ENUM not supported in SQLite)
-SQLITE_CREATE_DOCUMENT_TABLES_SQL = """
-CREATE TABLE IF NOT EXISTS documents (
+# SQLite-compatible auth tables
+SQLITE_CREATE_AUTH_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    type VARCHAR(20) NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    content_url TEXT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'draft',
-    created_by TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS document_templates (
-    id TEXT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    type VARCHAR(20) NOT NULL,
-    description TEXT,
-    template_content TEXT NOT NULL,
-    required_fields TEXT,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    role VARCHAR(50) NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1,
-    version INTEGER NOT NULL DEFAULT 1,
-    created_by TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS signatures (
+CREATE TABLE IF NOT EXISTS token_blacklist (
     id TEXT PRIMARY KEY,
-    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    signer_id TEXT NOT NULL,
-    signature_image_url TEXT NOT NULL,
-    ip_address VARCHAR(45) NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    device_info TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS signature_requests (
-    id TEXT PRIMARY KEY,
-    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    requester_id TEXT NOT NULL,
-    signer_id TEXT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'sent',
-    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    viewed_at TIMESTAMP,
-    completed_at TIMESTAMP,
-    expires_at TIMESTAMP,
-    notification_sent INTEGER NOT NULL DEFAULT 0,
-    notification_method VARCHAR(50),
-    message TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS document_audit_logs (
-    id TEXT PRIMARY KEY,
-    event_type VARCHAR(50) NOT NULL,
-    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
     user_id TEXT NOT NULL,
-    signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
-    signature_request_id TEXT REFERENCES signature_requests(id) ON DELETE SET NULL,
-    event_data TEXT,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    blacklisted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    is_used INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
-CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
-CREATE INDEX IF NOT EXISTS idx_documents_created_by ON documents(created_by);
-CREATE INDEX IF NOT EXISTS idx_document_templates_type ON document_templates(type);
-CREATE INDEX IF NOT EXISTS idx_document_templates_is_active ON document_templates(is_active);
-CREATE INDEX IF NOT EXISTS idx_signatures_document_id ON signatures(document_id);
-CREATE INDEX IF NOT EXISTS idx_signatures_signer_id ON signatures(signer_id);
-CREATE INDEX IF NOT EXISTS idx_signature_requests_document_id ON signature_requests(document_id);
-CREATE INDEX IF NOT EXISTS idx_signature_requests_signer_id ON signature_requests(signer_id);
-CREATE INDEX IF NOT EXISTS idx_document_audit_logs_document_id ON document_audit_logs(document_id);
-CREATE INDEX IF NOT EXISTS idx_document_audit_logs_user_id ON document_audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_token ON token_blacklist(token);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_email ON password_reset_tokens(email);
 """
 
 
@@ -417,9 +373,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
-    # Create document tables via raw SQL (SQLite compatibility)
+    # Create auth tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_DOCUMENT_TABLES_SQL.strip().split(';'):
+        for statement in SQLITE_CREATE_AUTH_TABLES_SQL.strip().split(';'):
             statement = statement.strip()
             if statement:
                 await conn.execute(text(statement))
@@ -432,6 +388,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
     # Drop all tables after test
     async with test_engine.begin() as conn:
+        # Drop auth tables (foreign keys first)
+        await conn.execute(text("DROP TABLE IF EXISTS password_reset_tokens"))
+        await conn.execute(text("DROP TABLE IF EXISTS token_blacklist"))
+        await conn.execute(text("DROP TABLE IF EXISTS users"))
         # Drop evidence sources (foreign key to recommendations)
         await conn.execute(text("DROP TABLE IF EXISTS evidence_sources"))
         # Drop coaching recommendations (foreign key to sessions)
@@ -446,12 +406,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
-        # Drop document tables (child tables first due to foreign keys)
-        await conn.execute(text("DROP TABLE IF EXISTS document_audit_logs"))
-        await conn.execute(text("DROP TABLE IF EXISTS signature_requests"))
-        await conn.execute(text("DROP TABLE IF EXISTS signatures"))
-        await conn.execute(text("DROP TABLE IF EXISTS document_templates"))
-        await conn.execute(text("DROP TABLE IF EXISTS documents"))
 
 
 @pytest_asyncio.fixture
