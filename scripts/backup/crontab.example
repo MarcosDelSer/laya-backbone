@@ -49,10 +49,11 @@
 0 3 * * * /path/to/laya-backbone/scripts/backup/retention_policy.sh >> /var/log/retention_policy.log 2>&1
 
 # =============================================================================
-# Backup Verification - Daily at 4:00 AM (to be implemented)
+# Backup Verification - Daily at 4:00 AM
 # =============================================================================
-# Verifies backups by restoring to temp DB and running integrity checks
-# 0 4 * * * /path/to/laya-backbone/scripts/backup/verify_backup.sh >> /var/log/backup_verification.log 2>&1
+# Verifies latest backup by restoring to temp DB and running integrity checks
+# Uses --latest flag to verify the most recent backup automatically
+0 4 * * * /path/to/laya-backbone/scripts/backup/verify_backup.sh --latest >> /var/log/backup_verification.log 2>&1
 
 # =============================================================================
 # Notes:

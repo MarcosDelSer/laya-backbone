@@ -84,6 +84,8 @@ Or use an environment file:
 
 ### 2. Verify Backup
 
+#### Quick Integrity Check
+
 Check if backup was created:
 
 ```bash
@@ -96,11 +98,34 @@ View backup log:
 tail -f /var/log/mysql_backup.log
 ```
 
-Test backup integrity:
+Test backup file integrity (gzip test):
 
 ```bash
 gzip -t /var/backups/mysql/laya_db_*.sql.gz
 ```
+
+#### Comprehensive Backup Verification
+
+Use the automated verification script to restore backups to a temporary database and run integrity checks:
+
+```bash
+# Verify a specific backup
+./scripts/backup/verify_backup.sh /var/backups/mysql/laya_db_20260215_020000.sql.gz
+
+# Verify the latest backup
+./scripts/backup/verify_backup.sh --latest
+
+# Verify all backups from the last 7 days
+./scripts/backup/verify_backup.sh --all
+```
+
+The verification script:
+- ✅ Automatically detects database type (MySQL/PostgreSQL)
+- ✅ Restores backup to temporary database with `_verify_temp` suffix
+- ✅ Runs comprehensive integrity checks (table count, database size, table checks, row counts)
+- ✅ Cleans up temporary database automatically
+- ✅ Non-destructive (no impact on production databases)
+- ✅ Detailed logging to `/var/log/backup_verification.log`
 
 ### 3. Restore from Backup
 
@@ -603,12 +628,98 @@ export BACKUP_DIR=/var/backups/postgres  # For --list option
    - Use environment files or secrets management
    - Audit restore operations in production
 
+## Backup Verification
+
+### Verification Script (`verify_backup.sh`)
+
+**Features:**
+- ✅ Automatic database type detection (MySQL/PostgreSQL)
+- ✅ Restore to temporary database (non-destructive)
+- ✅ Comprehensive integrity checks
+- ✅ Automatic cleanup of temporary resources
+- ✅ Support for single backup or batch verification
+- ✅ Detailed logging and reporting
+
+**Verification Process:**
+
+1. **File Integrity Check**: Verifies gzip compression integrity
+2. **Database Type Detection**: Automatically detects MySQL or PostgreSQL
+3. **Temporary Restore**: Restores backup to `{database_name}_verify_temp`
+4. **Integrity Checks**:
+   - Table count verification
+   - Database size calculation
+   - Table structure validation (MySQL: CHECK TABLE)
+   - Row count verification
+   - Connection and query testing
+5. **Cleanup**: Automatically drops temporary database
+
+**Usage:**
+
+```bash
+# Verify a specific backup (auto-detects MySQL or PostgreSQL)
+./scripts/backup/verify_backup.sh /var/backups/mysql/laya_db_20260215_020000.sql.gz
+
+# Verify the latest backup
+./scripts/backup/verify_backup.sh --latest
+
+# Verify all backups from last 7 days
+./scripts/backup/verify_backup.sh --all
+
+# Show help
+./scripts/backup/verify_backup.sh --help
+```
+
+**Environment Variables:**
+
+For MySQL verification:
+```bash
+export MYSQL_HOST=localhost
+export MYSQL_PORT=3306
+export MYSQL_USER=root
+export MYSQL_PASSWORD=secure_password
+export MYSQL_BACKUP_DIR=/var/backups/mysql
+```
+
+For PostgreSQL verification:
+```bash
+export PGHOST=localhost
+export PGPORT=5432
+export PGUSER=postgres
+export PGPASSWORD=secure_password
+export POSTGRES_BACKUP_DIR=/var/backups/postgres
+```
+
+**Automated Verification (Cron):**
+
+Add to crontab to verify latest backup daily at 4:00 AM:
+
+```bash
+crontab -e
+```
+
+Add this line:
+```
+0 4 * * * /path/to/laya-backbone/scripts/backup/verify_backup.sh --latest >> /var/log/backup_verification.log 2>&1
+```
+
+**Monitoring:**
+
+Check verification logs:
+```bash
+tail -f /var/log/backup_verification.log
+```
+
+View verification results:
+```bash
+grep "SUCCESS\|FAILED" /var/log/backup_verification.log
+```
+
 ## Future Enhancements
 
 - [x] PostgreSQL backup script (scheduled at 2:15 AM)
 - [x] Automated backup retention/cleanup (7 daily, 4 weekly, 12 monthly)
 - [x] MySQL and PostgreSQL restore scripts with safety checks
-- [ ] Backup verification script (restore to temp DB)
+- [x] Backup verification script (restore to temp DB)
 - [ ] Remote backup to S3 or rsync to remote server
 - [ ] Photo and upload file backups
 - [ ] Docker volume backups
