@@ -1,0 +1,547 @@
+"""Service for parent-educator messaging operations.
+
+Provides CRUD operations for message threads, messages, and notification
+preferences. Supports direct communication between parents and educators/directors
+with thread organization by type (daily_log, urgent, serious, admin).
+"""
+
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from sqlalchemy import and_, cast, func, or_, select, String, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.models.messaging import (
+    Message,
+    MessageAttachment,
+    MessageThread,
+    NotificationPreference,
+)
+from app.schemas.messaging import (
+    AttachmentResponse,
+    MessageContentType,
+    MessageResponse,
+    SenderType,
+    ThreadCreate,
+    ThreadParticipant,
+    ThreadResponse,
+    ThreadType,
+    ThreadUpdate,
+    ThreadWithMessagesResponse,
+    UnreadCountResponse,
+)
+
+
+# =============================================================================
+# Exception Classes
+# =============================================================================
+
+
+class MessagingServiceError(Exception):
+    """Base exception for messaging service errors."""
+
+    pass
+
+
+class ThreadNotFoundError(MessagingServiceError):
+    """Raised when the specified thread is not found."""
+
+    pass
+
+
+class MessageNotFoundError(MessagingServiceError):
+    """Raised when the specified message is not found."""
+
+    pass
+
+
+class UnauthorizedAccessError(MessagingServiceError):
+    """Raised when the user does not have permission to access a resource."""
+
+    pass
+
+
+class InvalidThreadError(MessagingServiceError):
+    """Raised when thread data is invalid."""
+
+    pass
+
+
+# =============================================================================
+# Messaging Service
+# =============================================================================
+
+
+class MessagingService:
+    """Service for managing parent-educator messaging.
+
+    This service provides CRUD operations for message threads and messages,
+    enabling direct communication between parents and educators/directors.
+    Threads are organized by type and associated with specific children.
+
+    Attributes:
+        db: Async database session for database operations
+    """
+
+    def __init__(self, db: AsyncSession) -> None:
+        """Initialize the messaging service.
+
+        Args:
+            db: Async database session
+        """
+        self.db = db
+
+    # =========================================================================
+    # Thread Operations
+    # =========================================================================
+
+    async def create_thread(
+        self,
+        request: ThreadCreate,
+        user_id: UUID,
+        user_type: SenderType,
+    ) -> ThreadResponse:
+        """Create a new message thread.
+
+        Creates a new conversation thread between parents and educators.
+        Optionally includes an initial message if provided.
+
+        Args:
+            request: The thread creation request with subject, type, and participants
+            user_id: ID of the user creating the thread
+            user_type: Type of the user creating the thread
+
+        Returns:
+            ThreadResponse with the created thread data
+
+        Raises:
+            InvalidThreadError: When thread data is invalid
+        """
+        # Validate thread data
+        if not request.subject.strip():
+            raise InvalidThreadError("Thread subject cannot be empty")
+
+        # Build participants list including the creator
+        participants_data = []
+        creator_included = False
+
+        for participant in request.participants:
+            participants_data.append({
+                "user_id": str(participant.user_id),
+                "user_type": participant.user_type.value,
+                "display_name": participant.display_name,
+            })
+            if participant.user_id == user_id:
+                creator_included = True
+
+        # Add creator if not already in participants
+        if not creator_included:
+            participants_data.append({
+                "user_id": str(user_id),
+                "user_type": user_type.value,
+                "display_name": None,
+            })
+
+        # Create the thread
+        thread = MessageThread(
+            subject=request.subject.strip(),
+            thread_type=request.thread_type.value,
+            child_id=request.child_id,
+            created_by=user_id,
+            participants=participants_data,
+            is_active=True,
+        )
+
+        self.db.add(thread)
+        await self.db.commit()
+        await self.db.refresh(thread)
+
+        # Create initial message if provided
+        if request.initial_message:
+            initial_message = Message(
+                thread_id=thread.id,
+                sender_id=user_id,
+                sender_type=user_type.value,
+                content=request.initial_message,
+                content_type=MessageContentType.TEXT.value,
+                is_read=False,
+            )
+            self.db.add(initial_message)
+            await self.db.commit()
+
+        return await self._build_thread_response(thread, user_id)
+
+    async def get_thread(
+        self,
+        thread_id: UUID,
+        user_id: UUID,
+        include_messages: bool = False,
+    ) -> ThreadResponse | ThreadWithMessagesResponse:
+        """Get a message thread by ID.
+
+        Retrieves a thread and optionally its messages. Validates that the
+        user has permission to access the thread.
+
+        Args:
+            thread_id: Unique identifier of the thread
+            user_id: ID of the user requesting the thread
+            include_messages: Whether to include messages in the response
+
+        Returns:
+            ThreadResponse or ThreadWithMessagesResponse with the thread data
+
+        Raises:
+            ThreadNotFoundError: When the thread is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        # Query the thread
+        query = select(MessageThread).where(
+            cast(MessageThread.id, String) == str(thread_id)
+        )
+        result = await self.db.execute(query)
+        thread = result.scalar_one_or_none()
+
+        if not thread:
+            raise ThreadNotFoundError(f"Thread with ID {thread_id} not found")
+
+        # Verify user has access to the thread
+        if not self._user_has_thread_access(thread, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this thread"
+            )
+
+        if include_messages:
+            return await self._build_thread_with_messages_response(thread, user_id)
+
+        return await self._build_thread_response(thread, user_id)
+
+    async def list_threads_for_user(
+        self,
+        user_id: UUID,
+        child_id: Optional[UUID] = None,
+        thread_type: Optional[ThreadType] = None,
+        include_archived: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ThreadResponse]:
+        """List message threads for a user.
+
+        Retrieves all threads the user participates in, optionally filtered
+        by child, type, and active status.
+
+        Args:
+            user_id: ID of the user requesting threads
+            child_id: Optional filter by child ID
+            thread_type: Optional filter by thread type
+            include_archived: Whether to include archived (inactive) threads
+            limit: Maximum number of threads to return
+            offset: Number of threads to skip for pagination
+
+        Returns:
+            List of ThreadResponse objects
+        """
+        # Build the query
+        query = select(MessageThread)
+
+        # Filter conditions
+        conditions = []
+
+        # User must be a participant or creator
+        # Check if user is in participants JSON or is the creator
+        conditions.append(
+            or_(
+                cast(MessageThread.created_by, String) == str(user_id),
+                MessageThread.participants.contains([{"user_id": str(user_id)}]),
+            )
+        )
+
+        if child_id:
+            conditions.append(
+                cast(MessageThread.child_id, String) == str(child_id)
+            )
+
+        if thread_type:
+            conditions.append(MessageThread.thread_type == thread_type.value)
+
+        if not include_archived:
+            conditions.append(MessageThread.is_active == True)  # noqa: E712
+
+        if conditions:
+            query = query.where(and_(*conditions))
+
+        # Order by most recent activity (updated_at or created_at)
+        query = query.order_by(
+            MessageThread.updated_at.desc().nulls_last(),
+            MessageThread.created_at.desc(),
+        )
+
+        # Apply pagination
+        query = query.offset(offset).limit(limit)
+
+        result = await self.db.execute(query)
+        threads = result.scalars().all()
+
+        # Build responses
+        responses = []
+        for thread in threads:
+            response = await self._build_thread_response(thread, user_id)
+            responses.append(response)
+
+        return responses
+
+    async def update_thread(
+        self,
+        thread_id: UUID,
+        request: ThreadUpdate,
+        user_id: UUID,
+    ) -> ThreadResponse:
+        """Update a message thread.
+
+        Updates thread properties like subject or active status.
+
+        Args:
+            thread_id: Unique identifier of the thread
+            request: The thread update request
+            user_id: ID of the user updating the thread
+
+        Returns:
+            ThreadResponse with the updated thread data
+
+        Raises:
+            ThreadNotFoundError: When the thread is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        # Get the thread
+        query = select(MessageThread).where(
+            cast(MessageThread.id, String) == str(thread_id)
+        )
+        result = await self.db.execute(query)
+        thread = result.scalar_one_or_none()
+
+        if not thread:
+            raise ThreadNotFoundError(f"Thread with ID {thread_id} not found")
+
+        # Verify user has access
+        if not self._user_has_thread_access(thread, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to update this thread"
+            )
+
+        # Apply updates
+        if request.subject is not None:
+            thread.subject = request.subject.strip()
+
+        if request.is_active is not None:
+            thread.is_active = request.is_active
+
+        thread.updated_at = datetime.utcnow()
+
+        await self.db.commit()
+        await self.db.refresh(thread)
+
+        return await self._build_thread_response(thread, user_id)
+
+    async def archive_thread(
+        self,
+        thread_id: UUID,
+        user_id: UUID,
+    ) -> ThreadResponse:
+        """Archive a message thread.
+
+        Sets the thread's is_active flag to False, effectively archiving it.
+
+        Args:
+            thread_id: Unique identifier of the thread
+            user_id: ID of the user archiving the thread
+
+        Returns:
+            ThreadResponse with the archived thread data
+
+        Raises:
+            ThreadNotFoundError: When the thread is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        update_request = ThreadUpdate(is_active=False)
+        return await self.update_thread(thread_id, update_request, user_id)
+
+    # =========================================================================
+    # Helper Methods
+    # =========================================================================
+
+    def _user_has_thread_access(
+        self,
+        thread: MessageThread,
+        user_id: UUID,
+    ) -> bool:
+        """Check if a user has access to a thread.
+
+        User has access if they are the creator or a participant.
+
+        Args:
+            thread: The thread to check access for
+            user_id: ID of the user to check
+
+        Returns:
+            True if user has access, False otherwise
+        """
+        # Creator always has access
+        if str(thread.created_by) == str(user_id):
+            return True
+
+        # Check if user is in participants
+        if thread.participants:
+            for participant in thread.participants:
+                if participant.get("user_id") == str(user_id):
+                    return True
+
+        return False
+
+    async def _build_thread_response(
+        self,
+        thread: MessageThread,
+        user_id: UUID,
+    ) -> ThreadResponse:
+        """Build a ThreadResponse from a MessageThread model.
+
+        Args:
+            thread: The thread model
+            user_id: ID of the user for unread count calculation
+
+        Returns:
+            ThreadResponse with all thread data
+        """
+        # Get unread count for this user
+        unread_query = select(func.count(Message.id)).where(
+            and_(
+                cast(Message.thread_id, String) == str(thread.id),
+                Message.is_read == False,  # noqa: E712
+                cast(Message.sender_id, String) != str(user_id),
+            )
+        )
+        unread_result = await self.db.execute(unread_query)
+        unread_count = unread_result.scalar() or 0
+
+        # Get last message
+        last_message_query = (
+            select(Message)
+            .where(cast(Message.thread_id, String) == str(thread.id))
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        last_message_result = await self.db.execute(last_message_query)
+        last_message = last_message_result.scalar_one_or_none()
+
+        # Build participants list
+        participants = []
+        if thread.participants:
+            for p in thread.participants:
+                participants.append(
+                    ThreadParticipant(
+                        user_id=UUID(p["user_id"]),
+                        user_type=SenderType(p["user_type"]),
+                        display_name=p.get("display_name"),
+                    )
+                )
+
+        return ThreadResponse(
+            id=thread.id,
+            subject=thread.subject,
+            thread_type=ThreadType(thread.thread_type),
+            child_id=thread.child_id,
+            created_by=thread.created_by,
+            participants=participants,
+            is_active=thread.is_active,
+            unread_count=unread_count,
+            last_message=last_message.content[:500] if last_message else None,
+            last_message_at=last_message.created_at if last_message else None,
+            created_at=thread.created_at,
+            updated_at=thread.updated_at,
+        )
+
+    async def _build_thread_with_messages_response(
+        self,
+        thread: MessageThread,
+        user_id: UUID,
+    ) -> ThreadWithMessagesResponse:
+        """Build a ThreadWithMessagesResponse from a MessageThread model.
+
+        Args:
+            thread: The thread model
+            user_id: ID of the user for unread count calculation
+
+        Returns:
+            ThreadWithMessagesResponse with thread and messages data
+        """
+        # Get base thread response
+        base_response = await self._build_thread_response(thread, user_id)
+
+        # Get all messages for the thread
+        messages_query = (
+            select(Message)
+            .options(selectinload(Message.attachments))
+            .where(cast(Message.thread_id, String) == str(thread.id))
+            .order_by(Message.created_at.asc())
+        )
+        messages_result = await self.db.execute(messages_query)
+        messages = messages_result.scalars().all()
+
+        # Build message responses
+        message_responses = []
+        for message in messages:
+            # Build attachment responses
+            attachment_responses = []
+            for attachment in message.attachments:
+                attachment_responses.append(
+                    AttachmentResponse(
+                        id=attachment.id,
+                        message_id=attachment.message_id,
+                        file_url=attachment.file_url,
+                        file_type=attachment.file_type,
+                        file_name=attachment.file_name,
+                        file_size=attachment.file_size,
+                        created_at=attachment.created_at,
+                        updated_at=None,
+                    )
+                )
+
+            # Find sender display name from participants
+            sender_name = None
+            if thread.participants:
+                for p in thread.participants:
+                    if p.get("user_id") == str(message.sender_id):
+                        sender_name = p.get("display_name")
+                        break
+
+            message_responses.append(
+                MessageResponse(
+                    id=message.id,
+                    thread_id=message.thread_id,
+                    sender_id=message.sender_id,
+                    sender_type=SenderType(message.sender_type),
+                    sender_name=sender_name,
+                    content=message.content,
+                    content_type=MessageContentType(message.content_type),
+                    is_read=message.is_read,
+                    attachments=attachment_responses,
+                    created_at=message.created_at,
+                    updated_at=message.updated_at,
+                )
+            )
+
+        return ThreadWithMessagesResponse(
+            id=base_response.id,
+            subject=base_response.subject,
+            thread_type=base_response.thread_type,
+            child_id=base_response.child_id,
+            created_by=base_response.created_by,
+            participants=base_response.participants,
+            is_active=base_response.is_active,
+            unread_count=base_response.unread_count,
+            last_message=base_response.last_message,
+            last_message_at=base_response.last_message_at,
+            created_at=base_response.created_at,
+            updated_at=base_response.updated_at,
+            messages=message_responses,
+        )
