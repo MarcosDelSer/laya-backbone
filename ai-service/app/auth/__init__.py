@@ -9,11 +9,12 @@ This package contains authentication and authorization functionality including:
 """
 
 from app.auth.models import User, UserRole
-from app.auth.schemas import LoginRequest, TokenResponse
+from app.auth.schemas import LoginRequest, RefreshRequest, TokenResponse
 
 __all__ = [
     "User",
     "UserRole",
     "LoginRequest",
+    "RefreshRequest",
     "TokenResponse",
 ]

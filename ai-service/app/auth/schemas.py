@@ -30,6 +30,22 @@ class LoginRequest(BaseSchema):
     )
 
 
+class RefreshRequest(BaseSchema):
+    """Request schema for token refresh.
+
+    Used to obtain a new access token using a valid refresh token.
+
+    Attributes:
+        refresh_token: Valid JWT refresh token
+    """
+
+    refresh_token: str = Field(
+        ...,
+        min_length=1,
+        description="Valid JWT refresh token",
+    )
+
+
 class TokenResponse(BaseSchema):
     """Response schema for authentication token.
 

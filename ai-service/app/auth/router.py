@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.schemas import LoginRequest, TokenResponse
+from app.auth.schemas import LoginRequest, RefreshRequest, TokenResponse
 from app.auth.service import AuthService
 from app.database import get_db
 
@@ -69,3 +69,58 @@ async def login(
     """
     service = AuthService(db)
     return await service.login(login_request)
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Refresh access token",
+    description="Obtain new access and refresh tokens using a valid refresh token.",
+)
+async def refresh(
+    refresh_request: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """Refresh authentication tokens.
+
+    This endpoint allows clients to obtain new access and refresh tokens using
+    a valid refresh token. This is useful when the access token has expired but
+    the refresh token is still valid, avoiding the need for the user to log in again.
+
+    Both new access and refresh tokens are issued to implement refresh token rotation,
+    which enhances security by reducing the window of opportunity for token theft.
+
+    Args:
+        refresh_request: Request containing the refresh token
+        db: Async database session (injected)
+
+    Returns:
+        TokenResponse containing:
+            - access_token: New JWT access token (15min expiry)
+            - refresh_token: New JWT refresh token (7day expiry)
+            - expires_in: Time in seconds until access token expires
+            - token_type: Token type ("bearer")
+
+    Raises:
+        HTTPException: 401 Unauthorized if:
+            - Refresh token is invalid or expired
+            - Refresh token is not of type 'refresh'
+            - User associated with token not found
+            - User account is inactive
+
+    Example:
+        POST /api/v1/auth/refresh
+        {
+            "refresh_token": "eyJhbGc..."
+        }
+
+        Response:
+        {
+            "access_token": "eyJhbGc...",
+            "refresh_token": "eyJhbGc...",
+            "expires_in": 900,
+            "token_type": "bearer"
+        }
+    """
+    service = AuthService(db)
+    return await service.refresh_tokens(refresh_request)
