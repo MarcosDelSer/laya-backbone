@@ -1592,6 +1592,55 @@ Docker volume backups are automatically included in the retention policy:
 - Backups follow the same naming convention: `{volume_name}_{timestamp}.tar.gz`
 - Subject to the same retention rules: 7 daily, 4 weekly, 12 monthly
 
+## Disaster Recovery
+
+### Disaster Recovery Runbook
+
+**Complete runbook available:** `DISASTER_RECOVERY_RUNBOOK.md`
+
+The disaster recovery runbook provides comprehensive procedures for:
+- Complete system recovery from catastrophic failures
+- Database corruption or data loss recovery
+- Ransomware/security incident recovery
+- Infrastructure failure recovery
+- Photo/upload file loss recovery
+
+**Key Features:**
+- ✅ Emergency contact information and escalation paths
+- ✅ Recovery Time Objective (RTO): 4 hours
+- ✅ Recovery Point Objective (RPO): 24 hours
+- ✅ Step-by-step recovery procedures for all disaster scenarios
+- ✅ Pre-recovery checklists and security considerations
+- ✅ Post-recovery verification procedures
+- ✅ Monthly, quarterly, and annual testing schedules
+- ✅ Troubleshooting guides and quick reference commands
+
+**Quick Access:**
+```bash
+# View disaster recovery runbook
+cat /path/to/laya-backbone/scripts/backup/DISASTER_RECOVERY_RUNBOOK.md
+
+# Or open in browser/editor
+vim /path/to/laya-backbone/scripts/backup/DISASTER_RECOVERY_RUNBOOK.md
+```
+
+**Testing Schedule:**
+- **Daily:** Automated backup verification (4:00 AM)
+- **Monthly:** Recovery drill (1st Sunday)
+- **Quarterly:** Full DR simulation (Mar, Jun, Sep, Dec)
+- **Annual:** Full-scale DR test with production failover (May)
+
+**Emergency Procedures:**
+1. Declare disaster and activate incident response
+2. Assess damage and identify recovery scope
+3. Follow relevant recovery procedure from runbook
+4. Verify system functionality post-recovery
+5. Document incident and lessons learned
+
+For detailed procedures, refer to `DISASTER_RECOVERY_RUNBOOK.md`.
+
+---
+
 ## Future Enhancements
 
 - [x] PostgreSQL backup script (scheduled at 2:15 AM)
@@ -1601,10 +1650,10 @@ Docker volume backups are automatically included in the retention policy:
 - [x] Remote backup to S3 or rsync to remote server
 - [x] Photo and upload file backups
 - [x] Docker volume backups
+- [x] Disaster recovery runbook
 - [ ] Email/Slack notifications on failure
 - [ ] Backup encryption
 - [ ] Incremental backups
-- [ ] Disaster recovery runbook
 
 ## References
 
