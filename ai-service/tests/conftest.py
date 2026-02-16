@@ -1,7 +1,7 @@
 """Pytest fixtures and test configuration for LAYA AI Service.
 
 Provides reusable fixtures for async testing, database sessions,
-test data, and authentication mocking for coaching, activity, and communication domains.
+test data, and authentication mocking for coaching, activity, communication, and portfolio domains.
 """
 
 from __future__ import annotations
@@ -294,6 +294,96 @@ CREATE INDEX IF NOT EXISTS idx_evidence_sources_recommendation ON evidence_sourc
 """
 
 
+# SQLite-compatible portfolio tables (PostgreSQL ARRAY/JSONB not supported in SQLite)
+SQLITE_CREATE_PORTFOLIO_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS portfolio_items (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    item_type VARCHAR(20) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    media_url VARCHAR(500) NOT NULL,
+    thumbnail_url VARCHAR(500),
+    privacy_level VARCHAR(20) NOT NULL DEFAULT 'family',
+    tags TEXT DEFAULT '[]',
+    captured_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    captured_by_id TEXT,
+    is_family_contribution INTEGER NOT NULL DEFAULT 0,
+    item_metadata TEXT,
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS observations (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    observer_id TEXT NOT NULL,
+    observation_type VARCHAR(30) NOT NULL DEFAULT 'anecdotal',
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    developmental_areas TEXT DEFAULT '[]',
+    portfolio_item_id TEXT REFERENCES portfolio_items(id) ON DELETE SET NULL,
+    observation_date DATE NOT NULL,
+    context VARCHAR(255),
+    is_shared_with_family INTEGER NOT NULL DEFAULT 1,
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS milestones (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    category VARCHAR(30) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    expected_age_months INTEGER,
+    status VARCHAR(20) NOT NULL DEFAULT 'not_started',
+    first_observed_at DATE,
+    achieved_at DATE,
+    observation_id TEXT REFERENCES observations(id) ON DELETE SET NULL,
+    notes TEXT,
+    is_flagged INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS work_samples (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL,
+    portfolio_item_id TEXT NOT NULL REFERENCES portfolio_items(id) ON DELETE CASCADE,
+    sample_type VARCHAR(20) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    learning_objectives TEXT DEFAULT '[]',
+    educator_notes TEXT,
+    child_reflection TEXT,
+    sample_date DATE NOT NULL,
+    is_shared_with_family INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_portfolio_items_child ON portfolio_items(child_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_items_type ON portfolio_items(item_type);
+CREATE INDEX IF NOT EXISTS idx_portfolio_items_privacy ON portfolio_items(privacy_level);
+CREATE INDEX IF NOT EXISTS idx_portfolio_items_archived ON portfolio_items(is_archived);
+CREATE INDEX IF NOT EXISTS idx_observations_child ON observations(child_id);
+CREATE INDEX IF NOT EXISTS idx_observations_observer ON observations(observer_id);
+CREATE INDEX IF NOT EXISTS idx_observations_type ON observations(observation_type);
+CREATE INDEX IF NOT EXISTS idx_observations_portfolio_item ON observations(portfolio_item_id);
+CREATE INDEX IF NOT EXISTS idx_observations_archived ON observations(is_archived);
+CREATE INDEX IF NOT EXISTS idx_milestones_child ON milestones(child_id);
+CREATE INDEX IF NOT EXISTS idx_milestones_category ON milestones(category);
+CREATE INDEX IF NOT EXISTS idx_milestones_status ON milestones(status);
+CREATE INDEX IF NOT EXISTS idx_milestones_observation ON milestones(observation_id);
+CREATE INDEX IF NOT EXISTS idx_milestones_flagged ON milestones(is_flagged);
+CREATE INDEX IF NOT EXISTS idx_work_samples_child ON work_samples(child_id);
+CREATE INDEX IF NOT EXISTS idx_work_samples_portfolio_item ON work_samples(portfolio_item_id);
+CREATE INDEX IF NOT EXISTS idx_work_samples_type ON work_samples(sample_type);
+"""
+
+
 @pytest.fixture(scope="session")
 def event_loop_policy():
     """Use default event loop policy for tests."""
@@ -333,6 +423,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
+    # Create portfolio tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_PORTFOLIO_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     async with TestAsyncSessionLocal() as session:
         try:
             yield session
@@ -355,6 +452,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
+        # Drop portfolio tables (respecting foreign key order)
+        await conn.execute(text("DROP TABLE IF EXISTS work_samples"))
+        await conn.execute(text("DROP TABLE IF EXISTS milestones"))
+        await conn.execute(text("DROP TABLE IF EXISTS observations"))
+        await conn.execute(text("DROP TABLE IF EXISTS portfolio_items"))
 
 
 @pytest_asyncio.fixture
@@ -1545,3 +1647,961 @@ async def sample_home_activities(
         activities.append(activity)
 
     return activities
+
+
+# ============================================================================
+# Portfolio fixtures
+# ============================================================================
+
+
+class MockPortfolioItem:
+    """Mock PortfolioItem object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        child_id,
+        item_type,
+        title,
+        description,
+        media_url,
+        thumbnail_url,
+        privacy_level,
+        tags,
+        captured_at,
+        captured_by_id,
+        is_family_contribution,
+        item_metadata,
+        is_archived,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.child_id = child_id
+        self.item_type = item_type
+        self.title = title
+        self.description = description
+        self.media_url = media_url
+        self.thumbnail_url = thumbnail_url
+        self.privacy_level = privacy_level
+        self.tags = tags
+        self.captured_at = captured_at
+        self.captured_by_id = captured_by_id
+        self.is_family_contribution = is_family_contribution
+        self.item_metadata = item_metadata
+        self.is_archived = is_archived
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<PortfolioItem(id={self.id}, child_id={self.child_id}, type={self.item_type}, title='{self.title}')>"
+
+
+class MockObservation:
+    """Mock Observation object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        child_id,
+        observer_id,
+        observation_type,
+        title,
+        content,
+        developmental_areas,
+        portfolio_item_id,
+        observation_date,
+        context,
+        is_shared_with_family,
+        is_archived,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.child_id = child_id
+        self.observer_id = observer_id
+        self.observation_type = observation_type
+        self.title = title
+        self.content = content
+        self.developmental_areas = developmental_areas
+        self.portfolio_item_id = portfolio_item_id
+        self.observation_date = observation_date
+        self.context = context
+        self.is_shared_with_family = is_shared_with_family
+        self.is_archived = is_archived
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<Observation(id={self.id}, child_id={self.child_id}, type={self.observation_type}, title='{self.title}')>"
+
+
+class MockMilestone:
+    """Mock Milestone object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        child_id,
+        category,
+        name,
+        expected_age_months,
+        status,
+        first_observed_at,
+        achieved_at,
+        observation_id,
+        notes,
+        is_flagged,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.child_id = child_id
+        self.category = category
+        self.name = name
+        self.expected_age_months = expected_age_months
+        self.status = status
+        self.first_observed_at = first_observed_at
+        self.achieved_at = achieved_at
+        self.observation_id = observation_id
+        self.notes = notes
+        self.is_flagged = is_flagged
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<Milestone(id={self.id}, child_id={self.child_id}, category={self.category}, name='{self.name}', status={self.status})>"
+
+
+class MockWorkSample:
+    """Mock WorkSample object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        child_id,
+        portfolio_item_id,
+        sample_type,
+        title,
+        description,
+        learning_objectives,
+        educator_notes,
+        child_reflection,
+        sample_date,
+        is_shared_with_family,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.child_id = child_id
+        self.portfolio_item_id = portfolio_item_id
+        self.sample_type = sample_type
+        self.title = title
+        self.description = description
+        self.learning_objectives = learning_objectives
+        self.educator_notes = educator_notes
+        self.child_reflection = child_reflection
+        self.sample_date = sample_date
+        self.is_shared_with_family = is_shared_with_family
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<WorkSample(id={self.id}, child_id={self.child_id}, type={self.sample_type}, title='{self.title}')>"
+
+
+async def create_portfolio_item_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    item_type: str,
+    title: str,
+    media_url: str,
+    description: Optional[str] = None,
+    thumbnail_url: Optional[str] = None,
+    privacy_level: str = "family",
+    tags: Optional[List[str]] = None,
+    captured_at: Optional[datetime] = None,
+    captured_by_id: Optional[UUID] = None,
+    is_family_contribution: bool = False,
+    item_metadata: Optional[Dict[str, Any]] = None,
+    is_archived: bool = False,
+) -> MockPortfolioItem:
+    """Helper function to create a portfolio item directly in SQLite database."""
+    import json
+
+    item_id = str(uuid4())
+    tags_json = json.dumps(tags or [])
+    metadata_json = json.dumps(item_metadata) if item_metadata else None
+    now = datetime.now(timezone.utc)
+    captured = captured_at or now
+
+    await session.execute(
+        text("""
+            INSERT INTO portfolio_items (
+                id, child_id, item_type, title, description, media_url,
+                thumbnail_url, privacy_level, tags, captured_at, captured_by_id,
+                is_family_contribution, item_metadata, is_archived, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :item_type, :title, :description, :media_url,
+                :thumbnail_url, :privacy_level, :tags, :captured_at, :captured_by_id,
+                :is_family_contribution, :item_metadata, :is_archived, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": item_id,
+            "child_id": str(child_id),
+            "item_type": item_type,
+            "title": title,
+            "description": description,
+            "media_url": media_url,
+            "thumbnail_url": thumbnail_url,
+            "privacy_level": privacy_level,
+            "tags": tags_json,
+            "captured_at": captured.isoformat(),
+            "captured_by_id": str(captured_by_id) if captured_by_id else None,
+            "is_family_contribution": 1 if is_family_contribution else 0,
+            "item_metadata": metadata_json,
+            "is_archived": 1 if is_archived else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockPortfolioItem(
+        id=UUID(item_id),
+        child_id=child_id,
+        item_type=item_type,
+        title=title,
+        description=description,
+        media_url=media_url,
+        thumbnail_url=thumbnail_url,
+        privacy_level=privacy_level,
+        tags=tags or [],
+        captured_at=captured,
+        captured_by_id=captured_by_id,
+        is_family_contribution=is_family_contribution,
+        item_metadata=item_metadata,
+        is_archived=is_archived,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_observation_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    observer_id: UUID,
+    title: str,
+    content: str,
+    observation_date: datetime,
+    observation_type: str = "anecdotal",
+    developmental_areas: Optional[List[str]] = None,
+    portfolio_item_id: Optional[UUID] = None,
+    context: Optional[str] = None,
+    is_shared_with_family: bool = True,
+    is_archived: bool = False,
+) -> MockObservation:
+    """Helper function to create an observation directly in SQLite database."""
+    import json
+
+    observation_id = str(uuid4())
+    areas_json = json.dumps(developmental_areas or [])
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO observations (
+                id, child_id, observer_id, observation_type, title, content,
+                developmental_areas, portfolio_item_id, observation_date, context,
+                is_shared_with_family, is_archived, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :observer_id, :observation_type, :title, :content,
+                :developmental_areas, :portfolio_item_id, :observation_date, :context,
+                :is_shared_with_family, :is_archived, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": observation_id,
+            "child_id": str(child_id),
+            "observer_id": str(observer_id),
+            "observation_type": observation_type,
+            "title": title,
+            "content": content,
+            "developmental_areas": areas_json,
+            "portfolio_item_id": str(portfolio_item_id) if portfolio_item_id else None,
+            "observation_date": observation_date.strftime("%Y-%m-%d") if hasattr(observation_date, 'strftime') else str(observation_date),
+            "context": context,
+            "is_shared_with_family": 1 if is_shared_with_family else 0,
+            "is_archived": 1 if is_archived else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockObservation(
+        id=UUID(observation_id),
+        child_id=child_id,
+        observer_id=observer_id,
+        observation_type=observation_type,
+        title=title,
+        content=content,
+        developmental_areas=developmental_areas or [],
+        portfolio_item_id=portfolio_item_id,
+        observation_date=observation_date,
+        context=context,
+        is_shared_with_family=is_shared_with_family,
+        is_archived=is_archived,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_milestone_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    category: str,
+    name: str,
+    expected_age_months: Optional[int] = None,
+    status: str = "not_started",
+    first_observed_at: Optional[datetime] = None,
+    achieved_at: Optional[datetime] = None,
+    observation_id: Optional[UUID] = None,
+    notes: Optional[str] = None,
+    is_flagged: bool = False,
+) -> MockMilestone:
+    """Helper function to create a milestone directly in SQLite database."""
+    milestone_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO milestones (
+                id, child_id, category, name, expected_age_months, status,
+                first_observed_at, achieved_at, observation_id, notes,
+                is_flagged, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :category, :name, :expected_age_months, :status,
+                :first_observed_at, :achieved_at, :observation_id, :notes,
+                :is_flagged, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": milestone_id,
+            "child_id": str(child_id),
+            "category": category,
+            "name": name,
+            "expected_age_months": expected_age_months,
+            "status": status,
+            "first_observed_at": first_observed_at.strftime("%Y-%m-%d") if first_observed_at and hasattr(first_observed_at, 'strftime') else None,
+            "achieved_at": achieved_at.strftime("%Y-%m-%d") if achieved_at and hasattr(achieved_at, 'strftime') else None,
+            "observation_id": str(observation_id) if observation_id else None,
+            "notes": notes,
+            "is_flagged": 1 if is_flagged else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockMilestone(
+        id=UUID(milestone_id),
+        child_id=child_id,
+        category=category,
+        name=name,
+        expected_age_months=expected_age_months,
+        status=status,
+        first_observed_at=first_observed_at,
+        achieved_at=achieved_at,
+        observation_id=observation_id,
+        notes=notes,
+        is_flagged=is_flagged,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_work_sample_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    portfolio_item_id: UUID,
+    sample_type: str,
+    title: str,
+    sample_date: datetime,
+    description: Optional[str] = None,
+    learning_objectives: Optional[List[str]] = None,
+    educator_notes: Optional[str] = None,
+    child_reflection: Optional[str] = None,
+    is_shared_with_family: bool = True,
+) -> MockWorkSample:
+    """Helper function to create a work sample directly in SQLite database."""
+    import json
+
+    sample_id = str(uuid4())
+    objectives_json = json.dumps(learning_objectives or [])
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO work_samples (
+                id, child_id, portfolio_item_id, sample_type, title, description,
+                learning_objectives, educator_notes, child_reflection, sample_date,
+                is_shared_with_family, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :portfolio_item_id, :sample_type, :title, :description,
+                :learning_objectives, :educator_notes, :child_reflection, :sample_date,
+                :is_shared_with_family, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": sample_id,
+            "child_id": str(child_id),
+            "portfolio_item_id": str(portfolio_item_id),
+            "sample_type": sample_type,
+            "title": title,
+            "description": description,
+            "learning_objectives": objectives_json,
+            "educator_notes": educator_notes,
+            "child_reflection": child_reflection,
+            "sample_date": sample_date.strftime("%Y-%m-%d") if hasattr(sample_date, 'strftime') else str(sample_date),
+            "is_shared_with_family": 1 if is_shared_with_family else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockWorkSample(
+        id=UUID(sample_id),
+        child_id=child_id,
+        portfolio_item_id=portfolio_item_id,
+        sample_type=sample_type,
+        title=title,
+        description=description,
+        learning_objectives=learning_objectives or [],
+        educator_notes=educator_notes,
+        child_reflection=child_reflection,
+        sample_date=sample_date,
+        is_shared_with_family=is_shared_with_family,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def sample_portfolio_item_data(test_child_id: UUID, test_user_id: UUID) -> Dict[str, Any]:
+    """Create sample portfolio item data for testing."""
+    return {
+        "child_id": test_child_id,
+        "item_type": "photo",
+        "title": "First Day at Daycare",
+        "description": "Capturing the special moment of the first day.",
+        "media_url": "https://storage.example.com/photos/first-day.jpg",
+        "thumbnail_url": "https://storage.example.com/photos/first-day-thumb.jpg",
+        "privacy_level": "family",
+        "tags": ["milestone", "first-day", "special-moment"],
+        "captured_by_id": test_user_id,
+        "is_family_contribution": False,
+        "item_metadata": {"width": 1920, "height": 1080, "format": "jpeg"},
+    }
+
+
+@pytest.fixture
+def sample_observation_data(test_child_id: UUID, test_user_id: UUID) -> Dict[str, Any]:
+    """Create sample observation data for testing."""
+    return {
+        "child_id": test_child_id,
+        "observer_id": test_user_id,
+        "observation_type": "anecdotal",
+        "title": "Block Tower Building",
+        "content": "Today, Emma built a tower using 8 blocks, demonstrating improved fine motor skills and patience. She carefully balanced each block and showed great focus throughout the activity.",
+        "developmental_areas": ["motor_fine", "cognitive"],
+        "observation_date": datetime.now(timezone.utc),
+        "context": "free play",
+        "is_shared_with_family": True,
+    }
+
+
+@pytest.fixture
+def sample_milestone_data(test_child_id: UUID) -> Dict[str, Any]:
+    """Create sample milestone data for testing."""
+    return {
+        "child_id": test_child_id,
+        "category": "motor_fine",
+        "name": "Stacks 6+ blocks",
+        "expected_age_months": 24,
+        "status": "developing",
+        "notes": "Showing good progress in block stacking activities.",
+        "is_flagged": False,
+    }
+
+
+@pytest.fixture
+def sample_work_sample_data(test_child_id: UUID) -> Dict[str, Any]:
+    """Create sample work sample data for testing."""
+    return {
+        "child_id": test_child_id,
+        "sample_type": "artwork",
+        "title": "My Family Drawing",
+        "description": "Child drew a picture of their family using crayons.",
+        "learning_objectives": ["creative expression", "fine motor skills", "family recognition"],
+        "educator_notes": "Shows understanding of family relationships and improved pencil grip.",
+        "child_reflection": "I drew mommy, daddy, and my dog!",
+        "sample_date": datetime.now(timezone.utc),
+        "is_shared_with_family": True,
+    }
+
+
+@pytest_asyncio.fixture
+async def sample_portfolio_item(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+    test_user_id: UUID,
+) -> MockPortfolioItem:
+    """Create a sample portfolio item in the database."""
+    return await create_portfolio_item_in_db(
+        db_session,
+        child_id=test_child_id,
+        item_type="photo",
+        title="Building Block Activity",
+        description="Emma building with colorful blocks during free play time.",
+        media_url="https://storage.example.com/photos/block-activity.jpg",
+        thumbnail_url="https://storage.example.com/photos/block-activity-thumb.jpg",
+        privacy_level="family",
+        tags=["activity", "blocks", "motor-skills"],
+        captured_by_id=test_user_id,
+        is_family_contribution=False,
+        item_metadata={"width": 1920, "height": 1080},
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_observation(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+    test_user_id: UUID,
+) -> MockObservation:
+    """Create a sample observation in the database."""
+    return await create_observation_in_db(
+        db_session,
+        child_id=test_child_id,
+        observer_id=test_user_id,
+        observation_type="anecdotal",
+        title="Creative Play Observation",
+        content="During creative play time, the child demonstrated excellent imagination by creating a story about their block construction. They described it as a 'castle for the dragons' and engaged other children in their imaginative play.",
+        developmental_areas=["cognitive", "social_emotional", "language"],
+        observation_date=datetime.now(timezone.utc),
+        context="creative play",
+        is_shared_with_family=True,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_observation_with_portfolio_item(
+    db_session: AsyncSession,
+    sample_portfolio_item: MockPortfolioItem,
+    test_child_id: UUID,
+    test_user_id: UUID,
+) -> MockObservation:
+    """Create a sample observation linked to a portfolio item."""
+    return await create_observation_in_db(
+        db_session,
+        child_id=test_child_id,
+        observer_id=test_user_id,
+        observation_type="photo_documentation",
+        title="Block Building Progress",
+        content="Photo documentation of block building activity showing fine motor skill development.",
+        developmental_areas=["motor_fine"],
+        portfolio_item_id=sample_portfolio_item.id,
+        observation_date=datetime.now(timezone.utc),
+        context="free play",
+        is_shared_with_family=True,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_milestone(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+) -> MockMilestone:
+    """Create a sample milestone in the database."""
+    return await create_milestone_in_db(
+        db_session,
+        child_id=test_child_id,
+        category="motor_fine",
+        name="Stacks 6+ blocks",
+        expected_age_months=24,
+        status="developing",
+        notes="Child is making good progress with block stacking.",
+        is_flagged=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_milestone_achieved(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+) -> MockMilestone:
+    """Create a sample achieved milestone in the database."""
+    now = datetime.now(timezone.utc)
+    return await create_milestone_in_db(
+        db_session,
+        child_id=test_child_id,
+        category="language",
+        name="Uses 2-word phrases",
+        expected_age_months=18,
+        status="achieved",
+        first_observed_at=now,
+        achieved_at=now,
+        notes="Child consistently using 2-word phrases throughout the day.",
+        is_flagged=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_milestone_flagged(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+) -> MockMilestone:
+    """Create a sample flagged milestone in the database."""
+    return await create_milestone_in_db(
+        db_session,
+        child_id=test_child_id,
+        category="motor_gross",
+        name="Walks independently",
+        expected_age_months=15,
+        status="emerging",
+        notes="May need additional support for gross motor development.",
+        is_flagged=True,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_work_sample(
+    db_session: AsyncSession,
+    sample_portfolio_item: MockPortfolioItem,
+    test_child_id: UUID,
+) -> MockWorkSample:
+    """Create a sample work sample in the database."""
+    return await create_work_sample_in_db(
+        db_session,
+        child_id=test_child_id,
+        portfolio_item_id=sample_portfolio_item.id,
+        sample_type="artwork",
+        title="Family Portrait Drawing",
+        description="Child's drawing of their family members using crayons.",
+        learning_objectives=["creative expression", "fine motor skills", "family recognition"],
+        educator_notes="Shows developing understanding of human figures and family relationships.",
+        child_reflection="This is my mommy, daddy, and me!",
+        sample_date=datetime.now(timezone.utc),
+        is_shared_with_family=True,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_portfolio_items(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+    test_user_id: UUID,
+) -> List[MockPortfolioItem]:
+    """Create multiple sample portfolio items with varied properties."""
+    items_data = [
+        {
+            "item_type": "photo",
+            "title": "First Day at Daycare",
+            "description": "Capturing the special first day moment.",
+            "media_url": "https://storage.example.com/photos/first-day.jpg",
+            "privacy_level": "family",
+            "tags": ["milestone", "first-day"],
+        },
+        {
+            "item_type": "photo",
+            "title": "Block Tower Building",
+            "description": "Building with colorful blocks.",
+            "media_url": "https://storage.example.com/photos/blocks.jpg",
+            "privacy_level": "family",
+            "tags": ["activity", "motor-skills"],
+        },
+        {
+            "item_type": "video",
+            "title": "Story Time",
+            "description": "Reading a favorite book together.",
+            "media_url": "https://storage.example.com/videos/story-time.mp4",
+            "thumbnail_url": "https://storage.example.com/videos/story-time-thumb.jpg",
+            "privacy_level": "family",
+            "tags": ["activity", "language"],
+        },
+        {
+            "item_type": "document",
+            "title": "Artwork Scan",
+            "description": "Scanned artwork from painting activity.",
+            "media_url": "https://storage.example.com/documents/artwork.pdf",
+            "privacy_level": "family",
+            "tags": ["artwork", "creative"],
+        },
+        {
+            "item_type": "photo",
+            "title": "Group Activity",
+            "description": "Children playing together during group time.",
+            "media_url": "https://storage.example.com/photos/group.jpg",
+            "privacy_level": "shared",
+            "tags": ["group", "social"],
+        },
+        {
+            "item_type": "photo",
+            "title": "Staff Note Photo",
+            "description": "Photo for internal documentation only.",
+            "media_url": "https://storage.example.com/photos/internal.jpg",
+            "privacy_level": "private",
+            "tags": ["internal"],
+        },
+    ]
+
+    items = []
+    for data in items_data:
+        item = await create_portfolio_item_in_db(
+            db_session,
+            child_id=test_child_id,
+            captured_by_id=test_user_id,
+            **data,
+        )
+        items.append(item)
+
+    return items
+
+
+@pytest_asyncio.fixture
+async def sample_observations(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+    test_user_id: UUID,
+) -> List[MockObservation]:
+    """Create multiple sample observations with varied properties."""
+    observations_data = [
+        {
+            "observation_type": "anecdotal",
+            "title": "Social Interaction",
+            "content": "Child initiated play with peers and shared toys willingly.",
+            "developmental_areas": ["social_emotional"],
+            "context": "free play",
+        },
+        {
+            "observation_type": "learning_story",
+            "title": "Building Adventures",
+            "content": "Extended narrative about the child's building project over several days.",
+            "developmental_areas": ["cognitive", "motor_fine"],
+            "context": "construction area",
+        },
+        {
+            "observation_type": "running_record",
+            "title": "Language Development",
+            "content": "Detailed record of verbal interactions during circle time.",
+            "developmental_areas": ["language"],
+            "context": "circle time",
+        },
+        {
+            "observation_type": "checklist",
+            "title": "Self-Care Skills Check",
+            "content": "Assessment of self-care abilities including hand washing and dressing.",
+            "developmental_areas": ["self_care"],
+            "context": "daily routines",
+        },
+    ]
+
+    observations = []
+    for data in observations_data:
+        observation = await create_observation_in_db(
+            db_session,
+            child_id=test_child_id,
+            observer_id=test_user_id,
+            observation_date=datetime.now(timezone.utc),
+            **data,
+        )
+        observations.append(observation)
+
+    return observations
+
+
+@pytest_asyncio.fixture
+async def sample_milestones(
+    db_session: AsyncSession,
+    test_child_id: UUID,
+) -> List[MockMilestone]:
+    """Create multiple sample milestones with varied properties."""
+    milestones_data = [
+        {
+            "category": "cognitive",
+            "name": "Sorts by color",
+            "expected_age_months": 30,
+            "status": "achieved",
+        },
+        {
+            "category": "motor_fine",
+            "name": "Stacks 6+ blocks",
+            "expected_age_months": 24,
+            "status": "developing",
+        },
+        {
+            "category": "motor_gross",
+            "name": "Runs smoothly",
+            "expected_age_months": 24,
+            "status": "achieved",
+        },
+        {
+            "category": "language",
+            "name": "Uses 2-word phrases",
+            "expected_age_months": 18,
+            "status": "achieved",
+        },
+        {
+            "category": "social_emotional",
+            "name": "Plays alongside peers",
+            "expected_age_months": 24,
+            "status": "achieved",
+        },
+        {
+            "category": "self_care",
+            "name": "Feeds self with spoon",
+            "expected_age_months": 18,
+            "status": "achieved",
+        },
+        {
+            "category": "language",
+            "name": "Follows 2-step instructions",
+            "expected_age_months": 24,
+            "status": "emerging",
+        },
+        {
+            "category": "motor_fine",
+            "name": "Holds crayon correctly",
+            "expected_age_months": 36,
+            "status": "not_started",
+        },
+    ]
+
+    milestones = []
+    for data in milestones_data:
+        milestone = await create_milestone_in_db(
+            db_session,
+            child_id=test_child_id,
+            **data,
+        )
+        milestones.append(milestone)
+
+    return milestones
+
+
+@pytest_asyncio.fixture
+async def sample_work_samples(
+    db_session: AsyncSession,
+    sample_portfolio_items: List[MockPortfolioItem],
+    test_child_id: UUID,
+) -> List[MockWorkSample]:
+    """Create multiple sample work samples with varied properties."""
+    # Get only photo/document items that can have work samples
+    valid_items = [item for item in sample_portfolio_items if item.item_type in ("photo", "document")]
+
+    if len(valid_items) < 3:
+        raise ValueError("Not enough portfolio items for work samples fixture")
+
+    work_samples_data = [
+        {
+            "portfolio_item_id": valid_items[0].id,
+            "sample_type": "artwork",
+            "title": "Family Portrait",
+            "description": "Drawing of family members.",
+            "learning_objectives": ["creative expression", "fine motor"],
+            "educator_notes": "Shows good understanding of family relationships.",
+        },
+        {
+            "portfolio_item_id": valid_items[1].id,
+            "sample_type": "construction",
+            "title": "Block Tower",
+            "description": "Tall tower built with blocks.",
+            "learning_objectives": ["spatial awareness", "problem solving"],
+            "educator_notes": "Demonstrated patience and planning.",
+        },
+        {
+            "portfolio_item_id": valid_items[2].id,
+            "sample_type": "writing",
+            "title": "Name Practice",
+            "description": "Practice writing their name.",
+            "learning_objectives": ["letter recognition", "fine motor"],
+            "educator_notes": "Good progress on letter formation.",
+        },
+    ]
+
+    work_samples = []
+    for data in work_samples_data:
+        sample = await create_work_sample_in_db(
+            db_session,
+            child_id=test_child_id,
+            sample_date=datetime.now(timezone.utc),
+            **data,
+        )
+        work_samples.append(sample)
+
+    return work_samples
+
+
+# Portfolio request/response fixtures
+
+@pytest.fixture
+def sample_portfolio_item_request(test_child_id: UUID) -> Dict[str, Any]:
+    """Create a sample portfolio item creation request."""
+    return {
+        "child_id": str(test_child_id),
+        "item_type": "photo",
+        "title": "New Photo Upload",
+        "description": "A new photo from today's activities.",
+        "media_url": "https://storage.example.com/photos/new-photo.jpg",
+        "privacy_level": "family",
+        "tags": ["activity", "new"],
+    }
+
+
+@pytest.fixture
+def sample_observation_request(test_child_id: UUID, test_user_id: UUID) -> Dict[str, Any]:
+    """Create a sample observation creation request."""
+    return {
+        "child_id": str(test_child_id),
+        "observer_id": str(test_user_id),
+        "observation_type": "anecdotal",
+        "title": "New Observation",
+        "content": "Detailed observation content goes here.",
+        "developmental_areas": ["cognitive", "language"],
+        "observation_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "context": "morning circle",
+        "is_shared_with_family": True,
+    }
+
+
+@pytest.fixture
+def sample_milestone_request(test_child_id: UUID) -> Dict[str, Any]:
+    """Create a sample milestone creation request."""
+    return {
+        "child_id": str(test_child_id),
+        "category": "cognitive",
+        "name": "Counts to 10",
+        "expected_age_months": 36,
+        "status": "emerging",
+        "notes": "Beginning to show interest in counting.",
+    }
+
+
+@pytest.fixture
+def sample_work_sample_request(test_child_id: UUID) -> Dict[str, Any]:
+    """Create a sample work sample creation request.
+
+    Note: portfolio_item_id must be added separately as it depends on a created item.
+    """
+    return {
+        "child_id": str(test_child_id),
+        "sample_type": "artwork",
+        "title": "New Work Sample",
+        "description": "Description of the work sample.",
+        "learning_objectives": ["creativity", "fine motor"],
+        "sample_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "is_shared_with_family": True,
+    }
