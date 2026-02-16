@@ -305,285 +305,9 @@ async def delete_template(
         )
 
 
-# Document Endpoints
-
-
-@router.post(
-    "",
-    response_model=DocumentResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a document",
-    description="Create a new document that requires signature. Can be created "
-    "standalone or from a template.",
-)
-async def create_document(
-    document_data: DocumentCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
-) -> DocumentResponse:
-    """Create a new document.
-
-    Args:
-        document_data: Document creation data.
-        db: Async database session (injected).
-        current_user: Authenticated user information (injected).
-
-    Returns:
-        DocumentResponse with the created document.
-
-    Raises:
-        HTTPException: 401 if not authenticated.
-        HTTPException: 400 if validation fails.
-    """
-    service = DocumentService(db)
-
-    # If template_id provided, create from template
-    if document_data.template_id:
-        document = await service.create_document_from_template(
-            template_id=document_data.template_id,
-            title=document_data.title,
-            content_url=document_data.content_url,
-            created_by=document_data.created_by,
-        )
-        if document is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Template with id {document_data.template_id} not found or inactive",
-            )
-    else:
-        document = await service.create_document(document_data)
-
-    return service._document_to_response(document)
-
-
-@router.get(
-    "/{document_id}",
-    response_model=DocumentResponse,
-    summary="Get document by ID",
-    description="Retrieve a single document by its unique identifier.",
-)
-async def get_document(
-    document_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
-) -> DocumentResponse:
-    """Get a document by ID.
-
-    Args:
-        document_id: Unique identifier of the document.
-        db: Async database session (injected).
-        current_user: Authenticated user information (injected).
-
-    Returns:
-        DocumentResponse with document details.
-
-    Raises:
-        HTTPException: 404 if document not found.
-        HTTPException: 401 if not authenticated.
-    """
-    service = DocumentService(db)
-    document = await service.get_document_by_id(document_id)
-
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with id {document_id} not found",
-        )
-
-    return service._document_to_response(document)
-
-
-@router.get(
-    "",
-    response_model=DocumentListResponse,
-    summary="List documents",
-    description="List all documents with optional filtering and pagination.",
-)
-async def list_documents(
-    skip: int = Query(
-        default=0,
-        ge=0,
-        description="Number of records to skip for pagination",
-    ),
-    limit: int = Query(
-        default=20,
-        ge=1,
-        le=100,
-        description="Maximum number of records to return",
-    ),
-    document_type: Optional[str] = Query(
-        default=None,
-        description="Filter by document type",
-    ),
-    status: Optional[str] = Query(
-        default=None,
-        description="Filter by document status (draft/pending/signed/expired)",
-    ),
-    created_by: Optional[UUID] = Query(
-        default=None,
-        description="Filter by creator user ID",
-    ),
-    db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
-) -> DocumentListResponse:
-    """List documents with optional filtering and pagination.
-
-    Args:
-        skip: Number of records to skip.
-        limit: Maximum number of records to return.
-        document_type: Optional filter by document type.
-        status: Optional filter by document status.
-        created_by: Optional filter by creator user ID.
-        db: Async database session (injected).
-        current_user: Authenticated user information (injected).
-
-    Returns:
-        DocumentListResponse with paginated list of documents.
-
-    Raises:
-        HTTPException: 401 if not authenticated.
-    """
-    service = DocumentService(db)
-    documents, total = await service.list_documents(
-        skip=skip,
-        limit=limit,
-        document_type=document_type,
-        status=status,
-        created_by=created_by,
-    )
-
-    items = [service._document_to_response(document) for document in documents]
-
-    return DocumentListResponse(
-        items=items,
-        total=total,
-        skip=skip,
-        limit=limit,
-    )
-
-
-@router.patch(
-    "/{document_id}",
-    response_model=DocumentResponse,
-    summary="Update a document",
-    description="Update an existing document. Limited updates allowed after signing.",
-)
-async def update_document(
-    document_id: UUID,
-    update_data: DocumentUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
-) -> DocumentResponse:
-    """Update a document.
-
-    Args:
-        document_id: ID of the document to update.
-        update_data: Fields to update.
-        db: Async database session (injected).
-        current_user: Authenticated user information (injected).
-
-    Returns:
-        DocumentResponse with updated document.
-
-    Raises:
-        HTTPException: 404 if document not found.
-        HTTPException: 401 if not authenticated.
-    """
-    service = DocumentService(db)
-    document = await service.update_document(document_id, update_data)
-
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with id {document_id} not found",
-        )
-
-    return service._document_to_response(document)
-
-
-# Signature Endpoints
-
-
-@router.post(
-    "/{document_id}/signatures",
-    response_model=SignatureResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Sign a document",
-    description="Create a signature for a document. Automatically updates document "
-    "status to SIGNED and records audit trail.",
-)
-async def create_signature(
-    document_id: UUID,
-    signature_data: SignatureCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
-) -> SignatureResponse:
-    """Create a signature for a document.
-
-    Args:
-        document_id: ID of the document to sign.
-        signature_data: Signature creation data.
-        db: Async database session (injected).
-        current_user: Authenticated user information (injected).
-
-    Returns:
-        SignatureResponse with the created signature.
-
-    Raises:
-        HTTPException: 404 if document not found.
-        HTTPException: 401 if not authenticated.
-        HTTPException: 400 if document_id mismatch.
-    """
-    # Verify document_id matches
-    if signature_data.document_id != document_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document ID in path and body must match",
-        )
-
-    service = DocumentService(db)
-    signature = await service.create_signature(signature_data)
-
-    if signature is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with id {document_id} not found",
-        )
-
-    return service._signature_to_response(signature)
-
-
-@router.get(
-    "/{document_id}/signatures",
-    response_model=list[SignatureResponse],
-    summary="Get document signatures",
-    description="Retrieve all signatures for a specific document.",
-)
-async def get_document_signatures(
-    document_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
-) -> list[SignatureResponse]:
-    """Get all signatures for a document.
-
-    Args:
-        document_id: ID of the document.
-        db: Async database session (injected).
-        current_user: Authenticated user information (injected).
-
-    Returns:
-        List of SignatureResponse for the document.
-
-    Raises:
-        HTTPException: 401 if not authenticated.
-    """
-    service = DocumentService(db)
-    signatures = await service.get_signatures_for_document(document_id)
-
-    return [service._signature_to_response(sig) for sig in signatures]
-
-
-# Signature Request Workflow Endpoints
+# Signature Request Workflow Endpoints (defined before document endpoints to avoid route shadowing)
+# NOTE: Static paths like /signature-requests must be defined before dynamic /{document_id}
+# routes to prevent FastAPI from matching "signature-requests" as a document_id parameter.
 
 
 @router.post(
@@ -777,6 +501,359 @@ async def list_my_signature_requests(
     return [service._signature_request_to_response(req) for req in requests]
 
 
+# Audit Log Endpoints (static paths before dynamic document endpoints)
+
+
+@router.get(
+    "/audit-logs/user/{user_id}",
+    response_model=DocumentAuditLogListResponse,
+    summary="Get audit logs for a user",
+    description="Retrieve all audit logs for a specific user across all documents.",
+)
+async def get_user_audit_logs(
+    user_id: UUID,
+    skip: int = Query(
+        default=0,
+        ge=0,
+        description="Number of records to skip for pagination",
+    ),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=200,
+        description="Maximum number of records to return",
+    ),
+    event_type: Optional[str] = Query(
+        default=None,
+        description="Filter by event type",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> DocumentAuditLogListResponse:
+    """Get all audit logs for a specific user.
+
+    Retrieves audit trail for all document and signature events
+    performed by a specific user.
+
+    Args:
+        user_id: ID of the user.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+        event_type: Optional filter by event type.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        DocumentAuditLogListResponse with paginated audit logs.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+
+    audit_logs, total = await service.get_audit_logs_for_user(
+        user_id=user_id,
+        skip=skip,
+        limit=limit,
+        event_type=event_type,
+    )
+
+    items = [service._audit_log_to_response(log) for log in audit_logs]
+
+    return DocumentAuditLogListResponse(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
+
+
+# Document Endpoints (dynamic routes with /{document_id} must come after static routes)
+
+
+@router.post(
+    "",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a document",
+    description="Create a new document that requires signature. Can be created "
+    "standalone or from a template.",
+)
+async def create_document(
+    document_data: DocumentCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> DocumentResponse:
+    """Create a new document.
+
+    Args:
+        document_data: Document creation data.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        DocumentResponse with the created document.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+        HTTPException: 400 if validation fails.
+    """
+    service = DocumentService(db)
+
+    # If template_id provided, create from template
+    if document_data.template_id:
+        document = await service.create_document_from_template(
+            template_id=document_data.template_id,
+            title=document_data.title,
+            content_url=document_data.content_url,
+            created_by=document_data.created_by,
+        )
+        if document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Template with id {document_data.template_id} not found or inactive",
+            )
+    else:
+        document = await service.create_document(document_data)
+
+    return service._document_to_response(document)
+
+
+@router.get(
+    "",
+    response_model=DocumentListResponse,
+    summary="List documents",
+    description="List all documents with optional filtering and pagination.",
+)
+async def list_documents(
+    skip: int = Query(
+        default=0,
+        ge=0,
+        description="Number of records to skip for pagination",
+    ),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of records to return",
+    ),
+    document_type: Optional[str] = Query(
+        default=None,
+        description="Filter by document type",
+    ),
+    status: Optional[str] = Query(
+        default=None,
+        description="Filter by document status (draft/pending/signed/expired)",
+    ),
+    created_by: Optional[UUID] = Query(
+        default=None,
+        description="Filter by creator user ID",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> DocumentListResponse:
+    """List documents with optional filtering and pagination.
+
+    Args:
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+        document_type: Optional filter by document type.
+        status: Optional filter by document status.
+        created_by: Optional filter by creator user ID.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        DocumentListResponse with paginated list of documents.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+    documents, total = await service.list_documents(
+        skip=skip,
+        limit=limit,
+        document_type=document_type,
+        status=status,
+        created_by=created_by,
+    )
+
+    items = [service._document_to_response(document) for document in documents]
+
+    return DocumentListResponse(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/{document_id}",
+    response_model=DocumentResponse,
+    summary="Get document by ID",
+    description="Retrieve a single document by its unique identifier.",
+)
+async def get_document(
+    document_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> DocumentResponse:
+    """Get a document by ID.
+
+    Args:
+        document_id: Unique identifier of the document.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        DocumentResponse with document details.
+
+    Raises:
+        HTTPException: 404 if document not found.
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+    document = await service.get_document_by_id(document_id)
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with id {document_id} not found",
+        )
+
+    return service._document_to_response(document)
+
+
+@router.patch(
+    "/{document_id}",
+    response_model=DocumentResponse,
+    summary="Update a document",
+    description="Update an existing document. Updates are not allowed on signed documents.",
+)
+async def update_document(
+    document_id: UUID,
+    update_data: DocumentUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> DocumentResponse:
+    """Update a document.
+
+    Args:
+        document_id: ID of the document to update.
+        update_data: Fields to update.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        DocumentResponse with updated document.
+
+    Raises:
+        HTTPException: 404 if document not found.
+        HTTPException: 400 if document is signed (immutable).
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+    result = await service.update_document(document_id, update_data)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with id {document_id} not found",
+        )
+
+    # Check if update was rejected due to immutability
+    if isinstance(result, str) and result == "immutable":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot update a signed document. Signed documents are immutable.",
+        )
+
+    return service._document_to_response(result)
+
+
+# Signature Endpoints (sub-resources of documents)
+
+
+@router.post(
+    "/{document_id}/signatures",
+    response_model=SignatureResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Sign a document",
+    description="Create a signature for a document. Automatically updates document "
+    "status to SIGNED and records audit trail.",
+)
+async def create_signature(
+    document_id: UUID,
+    signature_data: SignatureCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> SignatureResponse:
+    """Create a signature for a document.
+
+    Args:
+        document_id: ID of the document to sign.
+        signature_data: Signature creation data.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        SignatureResponse with the created signature.
+
+    Raises:
+        HTTPException: 404 if document not found.
+        HTTPException: 401 if not authenticated.
+        HTTPException: 400 if document_id mismatch.
+    """
+    # Verify document_id matches
+    if signature_data.document_id != document_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document ID in path and body must match",
+        )
+
+    service = DocumentService(db)
+    signature = await service.create_signature(signature_data)
+
+    if signature is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with id {document_id} not found",
+        )
+
+    return service._signature_to_response(signature)
+
+
+@router.get(
+    "/{document_id}/signatures",
+    response_model=list[SignatureResponse],
+    summary="Get document signatures",
+    description="Retrieve all signatures for a specific document.",
+)
+async def get_document_signatures(
+    document_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> list[SignatureResponse]:
+    """Get all signatures for a document.
+
+    Args:
+        document_id: ID of the document.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        List of SignatureResponse for the document.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+    signatures = await service.get_signatures_for_document(document_id)
+
+    return [service._signature_to_response(sig) for sig in signatures]
+
+
 @router.get(
     "/{document_id}/signature-request",
     response_model=SignatureRequestResponse,
@@ -812,9 +889,6 @@ async def get_document_signature_request(
         )
 
     return service._signature_request_to_response(signature_request)
-
-
-# Audit Log Endpoints
 
 
 @router.get(
@@ -873,70 +947,6 @@ async def get_document_audit_logs(
         document_id=document_id,
         skip=skip,
         limit=limit,
-    )
-
-    items = [service._audit_log_to_response(log) for log in audit_logs]
-
-    return DocumentAuditLogListResponse(
-        items=items,
-        total=total,
-        skip=skip,
-        limit=limit,
-    )
-
-
-@router.get(
-    "/audit-logs/user/{user_id}",
-    response_model=DocumentAuditLogListResponse,
-    summary="Get audit logs for a user",
-    description="Retrieve all audit logs for a specific user across all documents.",
-)
-async def get_user_audit_logs(
-    user_id: UUID,
-    skip: int = Query(
-        default=0,
-        ge=0,
-        description="Number of records to skip for pagination",
-    ),
-    limit: int = Query(
-        default=50,
-        ge=1,
-        le=200,
-        description="Maximum number of records to return",
-    ),
-    event_type: Optional[str] = Query(
-        default=None,
-        description="Filter by event type",
-    ),
-    db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
-) -> DocumentAuditLogListResponse:
-    """Get all audit logs for a specific user.
-
-    Retrieves audit trail for all document and signature events
-    performed by a specific user.
-
-    Args:
-        user_id: ID of the user.
-        skip: Number of records to skip.
-        limit: Maximum number of records to return.
-        event_type: Optional filter by event type.
-        db: Async database session (injected).
-        current_user: Authenticated user information (injected).
-
-    Returns:
-        DocumentAuditLogListResponse with paginated audit logs.
-
-    Raises:
-        HTTPException: 401 if not authenticated.
-    """
-    service = DocumentService(db)
-
-    audit_logs, total = await service.get_audit_logs_for_user(
-        user_id=user_id,
-        skip=skip,
-        limit=limit,
-        event_type=event_type,
     )
 
     items = [service._audit_log_to_response(log) for log in audit_logs]
