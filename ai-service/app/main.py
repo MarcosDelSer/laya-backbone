@@ -10,6 +10,7 @@ from app.middleware import CacheHeadersMiddleware, GzipCompressionMiddleware
 from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
+from app.routers.batch import router as batch_router
 from app.routers.communication import router as communication_router
 from app.routers.pool_monitoring import router as pool_monitoring_router
 from app.routers.webhooks import router as webhooks_router
@@ -41,6 +42,7 @@ app.add_middleware(GzipCompressionMiddleware, minimum_size=500, compresslevel=6)
 app.include_router(coaching.router, prefix="/api/v1/coaching", tags=["coaching"])
 app.include_router(activities_router)
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytics"])
+app.include_router(batch_router)
 app.include_router(communication_router, prefix="/api/v1/communication", tags=["communication"])
 app.include_router(pool_monitoring_router, prefix="/api/v1/monitoring", tags=["monitoring"])
 app.include_router(webhooks_router, prefix="/api/v1/webhook", tags=["webhooks"])
