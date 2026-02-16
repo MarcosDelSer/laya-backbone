@@ -725,6 +725,217 @@ class MessageQualityService:
         # Consider factual if less than 2 emotional indicators
         return emotional_count < 2
 
+    def _check_single_objective(
+        self,
+        message_text: str,
+        language: Language,
+    ) -> bool:
+        """Check if message focuses on a single main objective.
+
+        Messages with too many topics can overwhelm parents. This method
+        detects if a message tries to address multiple unrelated concerns.
+
+        Args:
+            message_text: The message text to check
+            language: Language of the message
+
+        Returns:
+            True if the message has a single main objective
+        """
+        text_lower = message_text.lower()
+
+        # Patterns that indicate multiple topics being addressed
+        if language == Language.FR:
+            multiple_topic_indicators = [
+                r"\bégalement\b.*\bje\s+(?:voulais|voudrais|dois)\b",
+                r"\baussi\b.*\bun\s+autre\s+(?:point|sujet|chose)\b",
+                r"\bde\s+plus\b.*\bje\s+(?:voulais|dois)\s+(?:mentionner|signaler)\b",
+                r"\bpremièrement\b.*\bdeuxièmement\b",
+                r"\bd\'?abord\b.*\bensuite\b.*\bfinalement\b",
+                r"\bplusieurs\s+(?:choses|points|sujets)\s+à\s+(?:aborder|discuter)\b",
+                r"\bje\s+(?:voulais|voudrais)\s+(?:aussi|également)\s+(?:mentionner|signaler|parler)\b",
+            ]
+            # Count distinct topic markers
+            topic_markers = [
+                r"\b(?:concernant|au\s+sujet\s+de|à\s+propos\s+de)\b",
+                r"\b(?:un\s+autre\s+(?:point|sujet))\b",
+            ]
+        else:
+            multiple_topic_indicators = [
+                r"\balso\b.*\bi\s+(?:wanted|need|would\s+like)\s+to\b",
+                r"\badditionally\b.*\bi\s+(?:wanted|need)\s+to\s+(?:mention|discuss)\b",
+                r"\bfirst(?:ly)?\b.*\bsecond(?:ly)?\b",
+                r"\bfirst\b.*\bthen\b.*\bfinally\b",
+                r"\bseveral\s+(?:things|points|topics)\s+to\s+(?:discuss|address)\b",
+                r"\bi\s+(?:also|additionally)\s+(?:wanted|need)\s+to\s+(?:mention|discuss|bring\s+up)\b",
+                r"\bon\s+(?:another|a\s+different)\s+(?:note|topic|subject)\b",
+            ]
+            # Count distinct topic markers
+            topic_markers = [
+                r"\b(?:regarding|concerning|about|on\s+the\s+topic\s+of)\b",
+                r"\b(?:another\s+(?:point|topic|matter))\b",
+            ]
+
+        # Check for multiple topic indicator phrases
+        for pattern in multiple_topic_indicators:
+            if re.search(pattern, text_lower, re.IGNORECASE):
+                return False
+
+        # Count topic markers
+        topic_count = 0
+        for pattern in topic_markers:
+            matches = re.findall(pattern, text_lower, re.IGNORECASE)
+            topic_count += len(matches)
+
+        # If more than 2 topic markers, likely multiple objectives
+        if topic_count > 2:
+            return False
+
+        # Count sentence count as an indicator (very long messages often have multiple topics)
+        sentences = re.split(r'[.!?]+', message_text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        # If message is very long with many sentences, check for topic diversity
+        if len(sentences) > 8:
+            # Heuristic: long messages are more likely to have multiple topics
+            # unless they're narratively connected
+            return False
+
+        return True
+
+    def _check_neutral_tone(
+        self,
+        message_text: str,
+        language: Language,
+    ) -> bool:
+        """Check if message maintains a neutral, non-accusatory tone.
+
+        A neutral tone avoids accusatory language, emotional escalation,
+        and judgmental statements. It focuses on facts and observations.
+
+        Args:
+            message_text: The message text to check
+            language: Language of the message
+
+        Returns:
+            True if the message maintains a neutral tone
+        """
+        text_lower = message_text.lower()
+
+        # Patterns indicating non-neutral (accusatory, judgmental, emotional) tone
+        if language == Language.FR:
+            non_neutral_patterns = [
+                # Accusatory patterns
+                r"\bvous\s+(?:devez|devriez|auriez\s+dû)\b",
+                r"\bc\'?est\s+(?:votre|de\s+votre)\s+(?:faute|responsabilité)\b",
+                r"\bpourquoi\s+(?:vous|n\'?avez-vous)\b",
+                # Emotional escalation
+                r"\b(?:inacceptable|inadmissible|scandaleux|honteux)\b",
+                r"\b(?:je\s+suis\s+(?:très\s+)?(?:déçu|frustré|fâché|en\s+colère))\b",
+                r"\b(?:franchement|sincèrement)\s+(?:déçu|frustré)\b",
+                # Judgmental patterns
+                r"\b(?:votre\s+enfant\s+est\s+(?:toujours|jamais))\b",
+                r"\b(?:il|elle)\s+(?:est|semble)\s+(?:être\s+)?(?:paresseux|difficile|méchant)\b",
+                # Threatening or ultimatum language
+                r"\b(?:si\s+(?:cela|ça)\s+continue|sinon|autrement)\b",
+                r"\b(?:nous\s+(?:devrons|serons\s+obligés\s+de))\b",
+            ]
+        else:
+            non_neutral_patterns = [
+                # Accusatory patterns
+                r"\byou\s+(?:need\s+to|have\s+to|must|should\s+have)\b",
+                r"\b(?:it\'?s|this\s+is)\s+(?:your|the\s+parent\'?s?)\s+(?:fault|responsibility)\b",
+                r"\bwhy\s+(?:didn\'?t|don\'?t|can\'?t|won\'?t)\s+you\b",
+                # Emotional escalation
+                r"\b(?:unacceptable|inexcusable|outrageous|shocking|appalling)\b",
+                r"\b(?:i\'?m\s+(?:very\s+)?(?:disappointed|frustrated|upset|angry))\b",
+                r"\b(?:frankly|honestly)\s+(?:disappointed|frustrated)\b",
+                # Judgmental patterns
+                r"\byour\s+child\s+(?:is\s+)?(?:always|never)\b",
+                r"\b(?:he|she)\s+(?:is|seems)\s+(?:to\s+be\s+)?(?:lazy|difficult|bad|naughty)\b",
+                # Threatening or ultimatum language
+                r"\b(?:if\s+this\s+continues|otherwise|or\s+else)\b",
+                r"\b(?:we\s+will\s+(?:have\s+to|be\s+forced\s+to))\b",
+            ]
+
+        # Count non-neutral patterns found
+        non_neutral_count = 0
+        for pattern in non_neutral_patterns:
+            if re.search(pattern, text_lower, re.IGNORECASE):
+                non_neutral_count += 1
+
+        # Consider neutral if no more than 1 minor non-neutral indicator
+        return non_neutral_count == 0
+
+    def _check_collaborative_approach(
+        self,
+        message_text: str,
+        language: Language,
+    ) -> bool:
+        """Check if message uses a collaborative, partnership-focused approach.
+
+        A collaborative approach invites dialogue, focuses on working together,
+        and emphasizes partnership between educators and parents.
+
+        Args:
+            message_text: The message text to check
+            language: Language of the message
+
+        Returns:
+            True if the message uses a collaborative approach
+        """
+        text_lower = message_text.lower()
+
+        # Patterns indicating collaborative language
+        if language == Language.FR:
+            collaborative_patterns = [
+                # Partnership language
+                r"\b(?:ensemble|travailler\s+ensemble|collaborer)\b",
+                r"\b(?:partenariat|équipe|collaboration)\b",
+                # Inviting dialogue
+                r"\b(?:n\'?hésitez\s+pas|je\s+serais\s+(?:ravi|heureux)\s+(?:de|d\'?))\b",
+                r"\b(?:discutons|parlons|échangeons)\b",
+                r"\b(?:qu\'?en\s+pensez-vous|votre\s+avis)\b",
+                # Solution-focused
+                r"\b(?:nous\s+pouvons|nous\s+pourrions)\b",
+                r"\b(?:essayons|trouvons\s+(?:une\s+)?solution)\b",
+                # Supportive language
+                r"\b(?:je\s+(?:vous\s+)?soutiens|nous\s+(?:vous\s+)?soutenons)\b",
+                r"\b(?:comment\s+(?:puis-je|pouvons-nous)\s+(?:vous\s+)?aider)\b",
+            ]
+        else:
+            collaborative_patterns = [
+                # Partnership language
+                r"\b(?:together|work\s+together|collaborate|partnership)\b",
+                r"\b(?:as\s+a\s+team|team\s+effort)\b",
+                # Inviting dialogue
+                r"\b(?:please\s+(?:feel\s+free|don\'?t\s+hesitate)\s+to)\b",
+                r"\b(?:i\'?d\s+(?:love|like)\s+to\s+(?:discuss|talk|hear))\b",
+                r"\b(?:let\'?s\s+(?:discuss|talk|chat))\b",
+                r"\b(?:what\s+do\s+you\s+think|your\s+(?:thoughts|input|feedback))\b",
+                # Solution-focused
+                r"\b(?:we\s+(?:can|could)|let\'?s\s+(?:try|find))\b",
+                r"\b(?:working\s+(?:together|with\s+you))\b",
+                # Supportive language
+                r"\b(?:i\s+(?:support|am\s+here\s+to\s+(?:help|support)))\b",
+                r"\b(?:how\s+can\s+(?:i|we)\s+(?:help|support))\b",
+            ]
+
+        # Check for collaborative patterns
+        collaborative_count = 0
+        for pattern in collaborative_patterns:
+            if re.search(pattern, text_lower, re.IGNORECASE):
+                collaborative_count += 1
+
+        # Message is collaborative if it has at least one collaborative indicator
+        # For shorter messages (< 100 chars), we're more lenient
+        if len(message_text) < 100:
+            return collaborative_count >= 0  # Always pass for very short messages
+        elif len(message_text) < 300:
+            return collaborative_count >= 1
+        else:
+            return collaborative_count >= 1
+
     def _create_structural_issue(
         self,
         issue_type: QualityIssue,
@@ -756,23 +967,174 @@ class MessageQualityService:
             suggestion=template["suggestion"],
         )
 
+    def calculate_quality_score(
+        self,
+        message_text: str,
+        language: Language = Language.EN,
+    ) -> dict:
+        """Calculate quality score with comprehensive message structure validation.
+
+        Public method that performs complete message analysis including:
+        - Single objective validation (message focuses on one main point)
+        - Factual basis validation (objective, non-emotional content)
+        - Neutral tone validation (avoids accusatory or judgmental language)
+        - Collaborative approach validation (solution-oriented, partnership-focused)
+
+        Args:
+            message_text: The message text to analyze
+            language: Language of the message (default: English)
+
+        Returns:
+            Dictionary containing:
+                - quality_score: Overall quality score (0-100)
+                - has_single_objective: Whether message has one main focus
+                - has_factual_basis: Whether message is factual
+                - has_neutral_tone: Whether message has neutral tone
+                - has_collaborative_approach: Whether message invites collaboration
+                - issues: List of detected quality issues
+                - validation_details: Detailed validation results
+
+        Raises:
+            InvalidMessageError: When the message text is invalid or empty
+        """
+        # Validate message text
+        if not message_text or not message_text.strip():
+            raise InvalidMessageError("Message text cannot be empty")
+
+        message_text = message_text.strip()
+
+        # Detect all quality issues
+        issues = self._detect_issues(message_text, language)
+
+        # Perform structure validations
+        has_single_objective = self._check_single_objective(message_text, language)
+        has_factual_basis = self._check_factual_basis(message_text, language)
+        has_neutral_tone = self._check_neutral_tone(message_text, language)
+        has_collaborative_approach = self._check_collaborative_approach(message_text, language)
+        has_positive_opening = self._check_positive_opening(message_text, language)
+        has_solution_focus = self._check_solution_closing(message_text, language)
+
+        # Add structural issues if validation fails
+        if not has_single_objective:
+            issues.append(self._create_structural_issue(
+                QualityIssue.MULTIPLE_OBJECTIVES,
+                language,
+                message_text,
+            ))
+
+        if not has_positive_opening:
+            issues.append(self._create_structural_issue(
+                QualityIssue.MISSING_POSITIVE,
+                language,
+                message_text,
+            ))
+
+        if not has_solution_focus and len(message_text) > 100:
+            issues.append(self._create_structural_issue(
+                QualityIssue.MISSING_SOLUTION,
+                language,
+                message_text,
+            ))
+
+        if not has_neutral_tone:
+            issues.append(self._create_structural_issue(
+                QualityIssue.NEGATIVE_TONE,
+                language,
+                message_text,
+            ))
+
+        # Calculate the quality score
+        quality_score = self._calculate_quality_score(
+            issues=issues,
+            has_positive_opening=has_positive_opening,
+            has_solution_focus=has_solution_focus,
+            has_factual_basis=has_factual_basis,
+            has_neutral_tone=has_neutral_tone,
+            has_collaborative_approach=has_collaborative_approach,
+            has_single_objective=has_single_objective,
+        )
+
+        return {
+            "quality_score": quality_score,
+            "has_single_objective": has_single_objective,
+            "has_factual_basis": has_factual_basis,
+            "has_neutral_tone": has_neutral_tone,
+            "has_collaborative_approach": has_collaborative_approach,
+            "has_positive_opening": has_positive_opening,
+            "has_solution_focus": has_solution_focus,
+            "issues": issues,
+            "validation_details": {
+                "single_objective": {
+                    "passed": has_single_objective,
+                    "description": (
+                        "Message focuses on one main topic" if language == Language.EN
+                        else "Le message se concentre sur un sujet principal"
+                    ) if has_single_objective else (
+                        "Message contains multiple topics - consider splitting"
+                        if language == Language.EN
+                        else "Le message contient plusieurs sujets - envisagez de le diviser"
+                    ),
+                },
+                "factual_basis": {
+                    "passed": has_factual_basis,
+                    "description": (
+                        "Message is based on factual observations" if language == Language.EN
+                        else "Le message est basé sur des observations factuelles"
+                    ) if has_factual_basis else (
+                        "Message contains emotional or subjective language"
+                        if language == Language.EN
+                        else "Le message contient un langage émotionnel ou subjectif"
+                    ),
+                },
+                "neutral_tone": {
+                    "passed": has_neutral_tone,
+                    "description": (
+                        "Message maintains a neutral, non-accusatory tone" if language == Language.EN
+                        else "Le message maintient un ton neutre et non accusateur"
+                    ) if has_neutral_tone else (
+                        "Message tone could be perceived as accusatory or negative"
+                        if language == Language.EN
+                        else "Le ton du message pourrait être perçu comme accusateur ou négatif"
+                    ),
+                },
+                "collaborative_approach": {
+                    "passed": has_collaborative_approach,
+                    "description": (
+                        "Message invites partnership and collaboration" if language == Language.EN
+                        else "Le message invite au partenariat et à la collaboration"
+                    ) if has_collaborative_approach else (
+                        "Message could be more collaborative and solution-focused"
+                        if language == Language.EN
+                        else "Le message pourrait être plus collaboratif et axé sur les solutions"
+                    ),
+                },
+            },
+        }
+
     def _calculate_quality_score(
         self,
         issues: list[QualityIssueDetail],
         has_positive_opening: bool,
         has_solution_focus: bool,
         has_factual_basis: bool,
+        has_neutral_tone: bool = True,
+        has_collaborative_approach: bool = True,
+        has_single_objective: bool = True,
     ) -> int:
         """Calculate overall quality score for the message.
 
         The score starts at 100 and is reduced based on detected issues
-        and missing structural elements.
+        and missing structural elements. Bonus points are awarded for
+        good message structure.
 
         Args:
             issues: List of detected quality issues
             has_positive_opening: Whether message has positive opening
             has_solution_focus: Whether message has solution-oriented closing
             has_factual_basis: Whether message is factual
+            has_neutral_tone: Whether message has neutral tone
+            has_collaborative_approach: Whether message invites collaboration
+            has_single_objective: Whether message has single focus
 
         Returns:
             Quality score from 0 to 100
@@ -797,6 +1159,12 @@ class MessageQualityService:
             score = min(100, score + 5)
         if has_factual_basis:
             score = min(100, score + 5)
+        if has_neutral_tone:
+            score = min(100, score + 3)
+        if has_collaborative_approach:
+            score = min(100, score + 3)
+        if has_single_objective:
+            score = min(100, score + 2)
 
         # Ensure score stays within bounds
         return max(0, min(100, score))
