@@ -20,6 +20,8 @@ from app.auth.schemas import (
     PasswordResetConfirmResponse,
 )
 from app.auth.service import AuthService
+from app.auth.dependencies import get_current_user, require_role
+from app.auth.models import UserRole
 from app.database import get_db
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
@@ -284,3 +286,120 @@ async def confirm_password_reset(
     """
     service = AuthService(db)
     return await service.confirm_password_reset(confirm_request)
+
+
+@router.get(
+    "/me",
+    summary="Get current user info",
+    description="Get information about the currently authenticated user.",
+)
+async def get_me(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Get current authenticated user information.
+
+    This endpoint returns information about the currently authenticated user
+    based on their JWT token. Any authenticated user can access this endpoint.
+
+    Args:
+        current_user: Current user from JWT token (injected)
+
+    Returns:
+        dict containing user information from the token
+
+    Example:
+        GET /api/v1/auth/me
+        Authorization: Bearer <access_token>
+
+        Response:
+        {
+            "sub": "user-uuid-here",
+            "email": "user@example.com",
+            "role": "teacher"
+        }
+    """
+    return {
+        "sub": current_user.get("sub"),
+        "email": current_user.get("email"),
+        "role": current_user.get("role"),
+    }
+
+
+@router.get(
+    "/admin/test",
+    summary="Test admin-only endpoint",
+    description="Example endpoint that requires admin role.",
+)
+async def admin_only_test(
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN)),
+) -> dict[str, str]:
+    """Test endpoint requiring admin role.
+
+    This is an example endpoint demonstrating role-based access control.
+    Only users with the ADMIN role can access this endpoint.
+
+    Args:
+        current_user: Current user from JWT token (injected, must be admin)
+
+    Returns:
+        dict with success message
+
+    Raises:
+        HTTPException: 403 Forbidden if user is not an admin
+
+    Example:
+        GET /api/v1/auth/admin/test
+        Authorization: Bearer <admin_access_token>
+
+        Response:
+        {
+            "message": "Admin access granted",
+            "user": "user@example.com"
+        }
+    """
+    return {
+        "message": "Admin access granted",
+        "user": current_user.get("email", "unknown"),
+    }
+
+
+@router.get(
+    "/financial/test",
+    summary="Test financial staff endpoint",
+    description="Example endpoint for admin or accountant roles.",
+)
+async def financial_staff_test(
+    current_user: dict[str, Any] = Depends(
+        require_role(UserRole.ADMIN, UserRole.ACCOUNTANT)
+    ),
+) -> dict[str, str]:
+    """Test endpoint requiring admin or accountant role.
+
+    This is an example endpoint demonstrating multi-role access control.
+    Only users with ADMIN or ACCOUNTANT roles can access this endpoint.
+
+    Args:
+        current_user: Current user from JWT token (injected, must be admin or accountant)
+
+    Returns:
+        dict with success message
+
+    Raises:
+        HTTPException: 403 Forbidden if user doesn't have required role
+
+    Example:
+        GET /api/v1/auth/financial/test
+        Authorization: Bearer <admin_or_accountant_access_token>
+
+        Response:
+        {
+            "message": "Financial access granted",
+            "user": "accountant@example.com",
+            "role": "accountant"
+        }
+    """
+    return {
+        "message": "Financial access granted",
+        "user": current_user.get("email", "unknown"),
+        "role": current_user.get("role", "unknown"),
+    }

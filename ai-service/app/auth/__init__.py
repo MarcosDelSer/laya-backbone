@@ -20,6 +20,7 @@ from app.auth.schemas import (
     PasswordResetConfirm,
     PasswordResetConfirmResponse,
 )
+from app.auth.dependencies import get_current_user, require_role
 
 __all__ = [
     "User",
@@ -35,4 +36,6 @@ __all__ = [
     "PasswordResetRequestResponse",
     "PasswordResetConfirm",
     "PasswordResetConfirmResponse",
+    "get_current_user",
+    "require_role",
 ]
