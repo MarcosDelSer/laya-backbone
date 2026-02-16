@@ -410,3 +410,194 @@ export interface ApiErrorResponse {
   detail: string;
   statusCode?: number;
 }
+
+// ============================================================================
+// Medical Protocol Types
+// ============================================================================
+
+/**
+ * Types of medical protocols supported.
+ * - medication: Acetaminophen protocol (FO-0647)
+ * - topical: Insect repellent protocol (FO-0646)
+ */
+export type ProtocolType = 'medication' | 'topical';
+
+/**
+ * Authorization status for a medical protocol.
+ */
+export type ProtocolAuthorizationStatus = 'active' | 'pending' | 'expired' | 'revoked';
+
+/**
+ * Acetaminophen concentration options per FO-0647.
+ */
+export type AcetaminophenConcentration = '80mg/mL' | '80mg/5mL' | '160mg/5mL';
+
+/**
+ * Medical protocol definition (Acetaminophen FO-0647, Insect Repellent FO-0646).
+ */
+export interface MedicalProtocol {
+  id: string;
+  name: string;
+  formCode: string;
+  type: ProtocolType;
+  description: string;
+  minimumAgeMonths?: number;
+  requiresWeight: boolean;
+  requiresTemperature: boolean;
+  minimumIntervalHours?: number;
+  maxDailyDoses?: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Dosing information for a specific weight and concentration.
+ */
+export interface DosingInfo {
+  protocolId: string;
+  concentration: AcetaminophenConcentration;
+  minWeightKg: number;
+  maxWeightKg: number;
+  minDoseMg: number;
+  maxDoseMg: number;
+  minDoseMl: number;
+  maxDoseMl: number;
+  displayLabel: string;
+}
+
+/**
+ * Weight record for a child (used for dosing calculations).
+ */
+export interface WeightRecord {
+  weightKg: number;
+  recordedAt: string;
+  expiresAt: string;
+  isExpired: boolean;
+}
+
+/**
+ * Parent authorization for a medical protocol.
+ */
+export interface ProtocolAuthorization {
+  id: string;
+  childId: string;
+  childName: string;
+  protocolId: string;
+  protocolName: string;
+  protocolFormCode: string;
+  protocolType: ProtocolType;
+  status: ProtocolAuthorizationStatus;
+  weightKg: number;
+  weightDate: string;
+  weightExpiryDate: string;
+  isWeightExpired: boolean;
+  signatureDate: string;
+  signatureData?: string;
+  agreementText: string;
+  expiryDate?: string;
+  revokedAt?: string;
+  revokedReason?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Administration record for a medical protocol.
+ */
+export interface ProtocolAdministration {
+  id: string;
+  childId: string;
+  childName: string;
+  protocolId: string;
+  protocolName: string;
+  protocolFormCode: string;
+  administeredAt: string;
+  administeredById: string;
+  administeredByName: string;
+  doseMg?: number;
+  doseMl?: number;
+  concentration?: AcetaminophenConcentration;
+  weightKg: number;
+  temperatureCelsius?: number;
+  temperatureMethod?: string;
+  notes?: string;
+  witnessId?: string;
+  witnessName?: string;
+  followUpTime?: string;
+  followUpCompleted?: boolean;
+  followUpCompletedAt?: string;
+  parentNotified?: boolean;
+  parentNotifiedAt?: string;
+  parentAcknowledged?: boolean;
+  parentAcknowledgedAt?: string;
+  createdAt?: string;
+}
+
+/**
+ * Request payload for creating a protocol authorization.
+ */
+export interface CreateProtocolAuthorizationRequest {
+  childId: string;
+  protocolId: string;
+  weightKg: number;
+  signatureData: string;
+  agreementText: string;
+}
+
+/**
+ * Request payload for updating a child's weight.
+ */
+export interface UpdateWeightRequest {
+  childId: string;
+  protocolId: string;
+  weightKg: number;
+}
+
+/**
+ * Dosing calculation request for acetaminophen.
+ */
+export interface DosingCalculationRequest {
+  protocolId: string;
+  weightKg: number;
+  concentration?: AcetaminophenConcentration;
+}
+
+/**
+ * Dosing calculation response with all available concentrations.
+ */
+export interface DosingCalculationResponse {
+  weightKg: number;
+  isInRange: boolean;
+  dosingOptions: DosingInfo[];
+  recommendedConcentration?: AcetaminophenConcentration;
+  warningMessage?: string;
+}
+
+/**
+ * Medical protocol summary for dashboard display.
+ */
+export interface ProtocolSummary {
+  protocolId: string;
+  protocolName: string;
+  protocolFormCode: string;
+  protocolType: ProtocolType;
+  authorizationStatus: ProtocolAuthorizationStatus | null;
+  lastAuthorizedAt?: string;
+  weightKg?: number;
+  isWeightExpired?: boolean;
+  lastAdministeredAt?: string;
+  canAdminister: boolean;
+  nextAllowedAdministrationAt?: string;
+}
+
+/**
+ * Child's medical protocol overview.
+ */
+export interface ChildProtocolOverview {
+  childId: string;
+  childName: string;
+  protocols: ProtocolSummary[];
+  pendingActions: number;
+  activeAuthorizations: number;
+}
