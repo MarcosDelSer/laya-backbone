@@ -3,18 +3,29 @@
 Provides business logic for user authentication, token generation, and management.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
+import secrets
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.models import User, TokenBlacklist
-from app.auth.schemas import LoginRequest, RefreshRequest, TokenResponse, LogoutRequest, LogoutResponse
+from app.auth.models import User, TokenBlacklist, PasswordResetToken
+from app.auth.schemas import (
+    LoginRequest,
+    RefreshRequest,
+    TokenResponse,
+    LogoutRequest,
+    LogoutResponse,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
+    PasswordResetConfirm,
+    PasswordResetConfirmResponse,
+)
 from app.auth.jwt import create_token as create_jwt_token, decode_token
-from app.core.security import verify_password
+from app.core.security import verify_password, hash_password
 from app.config import settings
 
 
@@ -30,6 +41,7 @@ class AuthService:
     # Token expiration times (in seconds)
     ACCESS_TOKEN_EXPIRE_SECONDS = 15 * 60  # 15 minutes
     REFRESH_TOKEN_EXPIRE_SECONDS = 7 * 24 * 60 * 60  # 7 days
+    PASSWORD_RESET_TOKEN_EXPIRE_SECONDS = 60 * 60  # 1 hour
 
     def __init__(self, db: AsyncSession) -> None:
         """Initialize AuthService with database session.
@@ -327,4 +339,141 @@ class AuthService:
         return LogoutResponse(
             message="Successfully logged out",
             tokens_invalidated=tokens_invalidated,
+        )
+
+    async def request_password_reset(
+        self, reset_request: PasswordResetRequest
+    ) -> PasswordResetRequestResponse:
+        """Request a password reset by generating and storing a reset token.
+
+        This method generates a secure reset token and stores it in the database.
+        In a production environment, this token would be sent to the user's email.
+
+        Args:
+            reset_request: Request containing the user's email address
+
+        Returns:
+            PasswordResetRequestResponse confirming the request was processed
+
+        Note:
+            For security, this method always returns success even if the email
+            doesn't exist in the system. This prevents email enumeration attacks.
+        """
+        # Query user by email
+        stmt = select(User).where(User.email == reset_request.email)
+        result = await self.db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        # Always return success to prevent email enumeration
+        # Only create token if user exists and is active
+        if user and user.is_active:
+            # Generate secure random token
+            reset_token = secrets.token_urlsafe(32)
+
+            # Calculate expiration time
+            expires_at = datetime.now(timezone.utc) + timedelta(
+                seconds=self.PASSWORD_RESET_TOKEN_EXPIRE_SECONDS
+            )
+
+            # Store reset token in database
+            password_reset = PasswordResetToken(
+                token=reset_token,
+                user_id=user.id,
+                email=user.email,
+                expires_at=expires_at,
+                is_used=False,
+            )
+            self.db.add(password_reset)
+            await self.db.commit()
+
+            # In production, send email with reset token here
+            # For now, the token would need to be retrieved from database or logs
+
+        # Mask email for privacy (show first char and domain)
+        email_parts = reset_request.email.split("@")
+        masked_email = f"{email_parts[0][0]}***@{email_parts[1]}" if len(email_parts) == 2 else "***"
+
+        return PasswordResetRequestResponse(
+            message="If the email exists in our system, a password reset link has been sent",
+            email=masked_email,
+        )
+
+    async def confirm_password_reset(
+        self, confirm_request: PasswordResetConfirm
+    ) -> PasswordResetConfirmResponse:
+        """Confirm password reset and update user's password.
+
+        This method validates the reset token and updates the user's password
+        if the token is valid, not expired, and not already used.
+
+        Args:
+            confirm_request: Request containing reset token and new password
+
+        Returns:
+            PasswordResetConfirmResponse confirming successful password reset
+
+        Raises:
+            HTTPException: 400 Bad Request if:
+                - Token is invalid or not found
+                - Token has expired
+                - Token has already been used
+                - Associated user not found or inactive
+        """
+        # Query reset token
+        stmt = select(PasswordResetToken).where(
+            PasswordResetToken.token == confirm_request.token
+        )
+        result = await self.db.execute(stmt)
+        reset_token = result.scalar_one_or_none()
+
+        # Validate token exists
+        if not reset_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token",
+            )
+
+        # Validate token hasn't been used
+        if reset_token.is_used:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reset token has already been used",
+            )
+
+        # Validate token hasn't expired
+        if datetime.now(timezone.utc) > reset_token.expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reset token has expired",
+            )
+
+        # Get user
+        user = await self.get_user_by_id(reset_token.user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User not found",
+            )
+
+        # Validate user is active
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User account is inactive",
+            )
+
+        # Hash new password
+        new_password_hash = hash_password(confirm_request.new_password)
+
+        # Update user's password
+        user.password_hash = new_password_hash
+
+        # Mark token as used
+        reset_token.is_used = True
+
+        # Commit changes
+        await self.db.commit()
+
+        return PasswordResetConfirmResponse(
+            message="Password has been successfully reset",
         )

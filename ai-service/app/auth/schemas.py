@@ -117,3 +117,77 @@ class LogoutResponse(BaseSchema):
         ge=0,
         description="Number of tokens invalidated",
     )
+
+
+class PasswordResetRequest(BaseSchema):
+    """Request schema for password reset.
+
+    Used to initiate a password reset by sending a reset token to the user's email.
+
+    Attributes:
+        email: User's email address to send reset token to
+    """
+
+    email: EmailStr = Field(
+        ...,
+        description="User's email address",
+    )
+
+
+class PasswordResetRequestResponse(BaseSchema):
+    """Response schema for password reset request.
+
+    Contains confirmation that reset token was sent.
+
+    Attributes:
+        message: Success message
+        email: Email address where reset token was sent (masked for security)
+    """
+
+    message: str = Field(
+        ...,
+        description="Success message",
+    )
+    email: str = Field(
+        ...,
+        description="Email address where reset token was sent",
+    )
+
+
+class PasswordResetConfirm(BaseSchema):
+    """Request schema for confirming password reset.
+
+    Used to complete the password reset process by providing the reset token
+    and new password.
+
+    Attributes:
+        token: Password reset token received via email
+        new_password: New password to set for the user account
+    """
+
+    token: str = Field(
+        ...,
+        min_length=1,
+        description="Password reset token received via email",
+    )
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=100,
+        description="New password for the user account",
+    )
+
+
+class PasswordResetConfirmResponse(BaseSchema):
+    """Response schema for password reset confirmation.
+
+    Contains confirmation of successful password reset.
+
+    Attributes:
+        message: Success message
+    """
+
+    message: str = Field(
+        ...,
+        description="Success message",
+    )

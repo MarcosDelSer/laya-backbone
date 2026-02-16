@@ -8,7 +8,17 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.schemas import LoginRequest, RefreshRequest, TokenResponse, LogoutRequest, LogoutResponse
+from app.auth.schemas import (
+    LoginRequest,
+    RefreshRequest,
+    TokenResponse,
+    LogoutRequest,
+    LogoutResponse,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
+    PasswordResetConfirm,
+    PasswordResetConfirmResponse,
+)
 from app.auth.service import AuthService
 from app.database import get_db
 
@@ -176,3 +186,101 @@ async def logout(
     """
     service = AuthService(db)
     return await service.logout(logout_request)
+
+
+@router.post(
+    "/password-reset/request",
+    response_model=PasswordResetRequestResponse,
+    summary="Request password reset",
+    description="Request a password reset token to be sent to the user's email.",
+)
+async def request_password_reset(
+    reset_request: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+) -> PasswordResetRequestResponse:
+    """Request a password reset token.
+
+    This endpoint initiates the password reset process by generating a secure
+    reset token. In production, this token would be sent to the user's email
+    address along with instructions on how to reset their password.
+
+    For security purposes, this endpoint always returns a success message
+    regardless of whether the email exists in the system. This prevents
+    attackers from using this endpoint to enumerate valid email addresses.
+
+    The reset token is valid for 1 hour from the time of generation.
+
+    Args:
+        reset_request: Request containing the user's email address
+        db: Async database session (injected)
+
+    Returns:
+        PasswordResetRequestResponse containing:
+            - message: Confirmation message about the reset request
+            - email: Masked email address (for privacy)
+
+    Example:
+        POST /api/v1/auth/password-reset/request
+        {
+            "email": "user@example.com"
+        }
+
+        Response:
+        {
+            "message": "If the email exists in our system, a password reset link has been sent",
+            "email": "u***@example.com"
+        }
+    """
+    service = AuthService(db)
+    return await service.request_password_reset(reset_request)
+
+
+@router.post(
+    "/password-reset/confirm",
+    response_model=PasswordResetConfirmResponse,
+    summary="Confirm password reset",
+    description="Complete the password reset process using a valid reset token.",
+)
+async def confirm_password_reset(
+    confirm_request: PasswordResetConfirm,
+    db: AsyncSession = Depends(get_db),
+) -> PasswordResetConfirmResponse:
+    """Confirm password reset and set new password.
+
+    This endpoint completes the password reset process by validating the
+    reset token and updating the user's password. The reset token must be
+    valid, not expired, and not previously used.
+
+    After successful password reset, the user can immediately log in with
+    their new password. All existing authentication tokens remain valid
+    until they expire or are explicitly invalidated through logout.
+
+    Args:
+        confirm_request: Request containing reset token and new password
+        db: Async database session (injected)
+
+    Returns:
+        PasswordResetConfirmResponse containing:
+            - message: Confirmation of successful password reset
+
+    Raises:
+        HTTPException: 400 Bad Request if:
+            - Reset token is invalid or not found
+            - Reset token has expired (>1 hour old)
+            - Reset token has already been used
+            - Associated user account is inactive
+
+    Example:
+        POST /api/v1/auth/password-reset/confirm
+        {
+            "token": "secure_reset_token_here",
+            "new_password": "new_secure_password"
+        }
+
+        Response:
+        {
+            "message": "Password has been successfully reset"
+        }
+    """
+    service = AuthService(db)
+    return await service.confirm_password_reset(confirm_request)

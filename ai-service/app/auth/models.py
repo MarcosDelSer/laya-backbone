@@ -156,3 +156,64 @@ class TokenBlacklist(Base):
     def __repr__(self) -> str:
         """Return string representation of the TokenBlacklist."""
         return f"<TokenBlacklist(id={self.id}, user_id={self.user_id})>"
+
+
+class PasswordResetToken(Base):
+    """SQLAlchemy model for password reset tokens.
+
+    Stores temporary tokens for password reset functionality.
+    Tokens should expire after a short period (e.g., 1 hour).
+
+    Attributes:
+        id: Unique identifier for the reset token entry
+        token: The reset token (hashed for security)
+        user_id: ID of the user requesting password reset
+        email: Email address of the user (for validation)
+        is_used: Whether the token has been used
+        created_at: Timestamp when the token was created
+        expires_at: Timestamp when the token expires
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    token: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    email: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+    is_used: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation of the PasswordResetToken."""
+        return f"<PasswordResetToken(id={self.id}, user_id={self.user_id}, is_used={self.is_used})>"

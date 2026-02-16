@@ -8,22 +8,31 @@ This package contains authentication and authorization functionality including:
 - Role-based access control
 """
 
-from app.auth.models import User, UserRole, TokenBlacklist
+from app.auth.models import User, UserRole, TokenBlacklist, PasswordResetToken
 from app.auth.schemas import (
     LoginRequest,
     RefreshRequest,
     TokenResponse,
     LogoutRequest,
     LogoutResponse,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
+    PasswordResetConfirm,
+    PasswordResetConfirmResponse,
 )
 
 __all__ = [
     "User",
     "UserRole",
     "TokenBlacklist",
+    "PasswordResetToken",
     "LoginRequest",
     "RefreshRequest",
     "TokenResponse",
     "LogoutRequest",
     "LogoutResponse",
+    "PasswordResetRequest",
+    "PasswordResetRequestResponse",
+    "PasswordResetConfirm",
+    "PasswordResetConfirmResponse",
 ]
