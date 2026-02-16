@@ -39,6 +39,13 @@ from app.models.analytics import (  # noqa: E402, F401
     ComplianceCheck,
     EnrollmentForecast,
 )
+from app.models.document import (  # noqa: E402, F401
+    Document,
+    DocumentAuditLog,
+    DocumentTemplate,
+    Signature,
+    SignatureRequest,
+)
 
 target_metadata = Base.metadata
 
