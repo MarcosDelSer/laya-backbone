@@ -9,6 +9,7 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
+    development_profile: Models for Quebec-aligned developmental tracking
 """
 
 from app.models.base import Base
@@ -37,6 +38,14 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
+from app.models.development_profile import (
+    DevelopmentProfile,
+    DevelopmentalDomain,
+    MonthlySnapshot,
+    Observation,
+    SkillAssessment,
+    SkillStatus,
+)
 
 __all__ = [
     "Base",
@@ -61,4 +70,11 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
+    # Development Profile models
+    "DevelopmentProfile",
+    "DevelopmentalDomain",
+    "SkillStatus",
+    "SkillAssessment",
+    "Observation",
+    "MonthlySnapshot",
 ]
