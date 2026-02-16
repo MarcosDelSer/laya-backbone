@@ -1,17 +1,17 @@
 {
   "active": true,
-  "spec": "032-push-notification-wiring",
+  "spec": "023-auth-gibbon-ai-bridge",
   "state": "building",
   "subtasks": {
-    "completed": 6,
-    "total": 8,
+    "completed": 5,
+    "total": 6,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
     "current": "Phase 3: Testing and Validation",
     "id": null,
-    "total": 4
+    "total": 2
   },
   "workers": {
     "active": 0,
@@ -19,7 +19,7 @@
   },
   "session": {
     "number": 4,
-    "started_at": "2026-02-16T02:44:02.995086"
+    "started_at": "2026-02-16T03:01:06.780430"
   },
-  "last_update": "2026-02-16T03:05:07.749782"
+  "last_update": "2026-02-16T03:21:53.297665"
 }

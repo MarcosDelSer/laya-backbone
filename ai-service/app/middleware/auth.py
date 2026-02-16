@@ -7,6 +7,12 @@ This module provides middleware to verify JWT tokens from multiple sources:
 Both token types are verified using the same shared secret and algorithm,
 but may have different payload structures. This middleware normalizes
 the user data regardless of the token source.
+
+Features:
+- Multi-source JWT verification
+- Comprehensive audit logging
+- IP address and user agent tracking
+- Security event monitoring
 """
 
 from __future__ import annotations
@@ -14,9 +20,15 @@ from __future__ import annotations
 from typing import Any, Literal, Optional
 
 import jwt
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.auth.audit_logger import (
+    audit_logger,
+    get_client_ip,
+    get_endpoint,
+    get_user_agent,
+)
 from app.config import settings
 
 # HTTPBearer security scheme for multi-source authentication
@@ -80,6 +92,7 @@ class MultiSourceTokenPayload:
 
 async def verify_token_from_any_source(
     credentials: HTTPAuthorizationCredentials,
+    request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """Verify and decode a JWT token from any supported source.
 
@@ -87,8 +100,11 @@ async def verify_token_from_any_source(
     using the shared secret key. It handles different payload structures
     and normalizes the user data.
 
+    Includes comprehensive audit logging for security monitoring.
+
     Args:
         credentials: HTTP Authorization credentials containing the Bearer token
+        request: Optional FastAPI Request for audit logging context
 
     Returns:
         dict[str, Any]: Decoded and normalized token payload
@@ -97,6 +113,11 @@ async def verify_token_from_any_source(
         HTTPException: 401 Unauthorized if token is invalid or expired
     """
     token = credentials.credentials
+
+    # Extract request context for audit logging
+    ip_address = get_client_ip(request) if request else None
+    user_agent = get_user_agent(request) if request else None
+    endpoint = get_endpoint(request) if request else None
 
     try:
         # Decode the token using the shared secret
@@ -108,6 +129,13 @@ async def verify_token_from_any_source(
 
         # Validate required fields
         if not payload.get("sub"):
+            audit_logger.log_missing_claims(
+                missing_claims=["sub"],
+                token_payload=payload,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                endpoint=endpoint,
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token missing required 'sub' claim",
@@ -120,6 +148,13 @@ async def verify_token_from_any_source(
         if source == TokenSource.GIBBON:
             # Validate Gibbon-specific fields
             if not payload.get("username"):
+                audit_logger.log_missing_claims(
+                    missing_claims=["username"],
+                    token_payload=payload,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    endpoint=endpoint,
+                )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Gibbon token missing required 'username' claim",
@@ -133,9 +168,45 @@ async def verify_token_from_any_source(
             # and treat it as an AI service token
             pass
 
+        # Log successful verification
+        audit_logger.log_verification_success(
+            token_payload=payload,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            endpoint=endpoint,
+        )
+
         return payload
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        # (already logged above)
+        raise
+
     except jwt.ExpiredSignatureError:
+        # Try to decode without verification to get payload for logging
+        try:
+            expired_payload = jwt.decode(
+                token,
+                settings.jwt_secret_key,
+                algorithms=[settings.jwt_algorithm],
+                options={"verify_exp": False},
+            )
+            audit_logger.log_token_expired(
+                token_payload=expired_payload,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                endpoint=endpoint,
+            )
+        except Exception:
+            # If we can't decode at all, just log the failure
+            audit_logger.log_verification_failed(
+                error_message="Token has expired (could not decode)",
+                ip_address=ip_address,
+                user_agent=user_agent,
+                endpoint=endpoint,
+            )
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
@@ -143,6 +214,12 @@ async def verify_token_from_any_source(
         )
 
     except jwt.InvalidTokenError as e:
+        audit_logger.log_invalid_token(
+            error_message=str(e),
+            ip_address=ip_address,
+            user_agent=user_agent,
+            endpoint=endpoint,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid authentication token: {str(e)}",
@@ -151,6 +228,12 @@ async def verify_token_from_any_source(
 
     except Exception as e:
         # Log unexpected errors but don't expose details to client
+        audit_logger.log_verification_failed(
+            error_message=f"Unexpected error: {str(e)}",
+            ip_address=ip_address,
+            user_agent=user_agent,
+            endpoint=endpoint,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Failed to verify authentication token",
@@ -160,14 +243,18 @@ async def verify_token_from_any_source(
 
 async def get_current_user_multi_source(
     credentials: HTTPAuthorizationCredentials = HTTPBearer(),
+    request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """FastAPI dependency to get current user from multi-source JWT token.
 
     This dependency can be used in route handlers to require authentication
     from either AI service or Gibbon JWT tokens.
 
+    Includes audit logging for all verification attempts.
+
     Args:
         credentials: HTTP Authorization credentials injected by FastAPI
+        request: Optional FastAPI Request for audit context
 
     Returns:
         dict[str, Any]: Decoded token payload containing user information
@@ -178,18 +265,20 @@ async def get_current_user_multi_source(
     Example:
         @app.get("/api/v1/profile")
         async def get_profile(
-            current_user: dict = Depends(get_current_user_multi_source)
+            current_user: dict = Depends(get_current_user_multi_source),
+            request: Request = None
         ):
             return {
                 "user_id": current_user["sub"],
                 "source": current_user.get("source", "ai-service")
             }
     """
-    return await verify_token_from_any_source(credentials)
+    return await verify_token_from_any_source(credentials, request)
 
 
 async def get_optional_user_multi_source(
     credentials: HTTPAuthorizationCredentials | None = HTTPBearer(auto_error=False),
+    request: Optional[Request] = None,
 ) -> dict[str, Any] | None:
     """FastAPI dependency to optionally get current user from multi-source token.
 
@@ -199,6 +288,7 @@ async def get_optional_user_multi_source(
 
     Args:
         credentials: Optional HTTP Authorization credentials
+        request: Optional FastAPI Request for audit context
 
     Returns:
         dict[str, Any] | None: Decoded token payload or None if not authenticated
@@ -206,7 +296,8 @@ async def get_optional_user_multi_source(
     Example:
         @app.get("/api/v1/items")
         async def get_items(
-            current_user: dict | None = Depends(get_optional_user_multi_source)
+            current_user: dict | None = Depends(get_optional_user_multi_source),
+            request: Request = None
         ):
             if current_user:
                 return {"items": get_user_items(current_user["sub"])}
@@ -215,7 +306,7 @@ async def get_optional_user_multi_source(
     if credentials is None:
         return None
 
-    return await verify_token_from_any_source(credentials)
+    return await verify_token_from_any_source(credentials, request)
 
 
 def extract_user_info(payload: dict[str, Any]) -> dict[str, Any]:
