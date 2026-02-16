@@ -304,15 +304,30 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_re
         echo '</form>';
     }
 
-    // Export button
-    $exportUrl = $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_report_collection.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&export=csv';
+    // Export buttons
+    echo '<div class="flex items-center gap-2">';
+
+    // CSV Export button
+    $csvExportUrl = $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_report_collection.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&export=csv';
     if (!empty($filterStage)) {
-        $exportUrl .= '&stage=' . urlencode($filterStage);
+        $csvExportUrl .= '&stage=' . urlencode($filterStage);
     }
-    echo '<a href="' . $exportUrl . '" class="inline-flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition">';
+    echo '<a href="' . $csvExportUrl . '" class="inline-flex items-center bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition">';
     echo '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>';
     echo __('Export to CSV');
     echo '</a>';
+
+    // Excel Export button
+    $excelExportUrl = $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_report_export.php&type=collection&gibbonSchoolYearID=' . $gibbonSchoolYearID;
+    if (!empty($filterStage)) {
+        $excelExportUrl .= '&stage=' . urlencode($filterStage);
+    }
+    echo '<a href="' . $excelExportUrl . '" class="inline-flex items-center bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition">';
+    echo '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>';
+    echo __('Export to Excel');
+    echo '</a>';
+
+    echo '</div>';
 
     echo '</div>';
 
