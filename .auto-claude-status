@@ -1,6 +1,6 @@
 {
   "active": true,
-  "spec": "033-invoice-pdf-generation",
+  "spec": "032-push-notification-wiring",
   "state": "building",
   "subtasks": {
     "completed": 6,
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 3,
-    "started_at": "2026-02-16T12:21:37.770117"
+    "number": 4,
+    "started_at": "2026-02-16T02:44:02.995086"
   },
-  "last_update": "2026-02-16T12:31:26.381926"
+  "last_update": "2026-02-16T03:05:07.749782"
 }

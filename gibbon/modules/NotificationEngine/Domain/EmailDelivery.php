@@ -57,6 +57,11 @@ class EmailDelivery
     protected $notificationGateway;
 
     /**
+     * @var DeliveryLogGateway
+     */
+    protected $deliveryLogGateway;
+
+    /**
      * @var array Last error details
      */
     protected $lastError = [];
@@ -68,17 +73,20 @@ class EmailDelivery
      * @param Session $session Gibbon Session
      * @param SettingGateway $settingGateway Settings gateway
      * @param NotificationGateway $notificationGateway Notification gateway
+     * @param DeliveryLogGateway $deliveryLogGateway Delivery log gateway
      */
     public function __construct(
         MailerInterface $mailer,
         Session $session,
         SettingGateway $settingGateway,
-        NotificationGateway $notificationGateway
+        NotificationGateway $notificationGateway,
+        DeliveryLogGateway $deliveryLogGateway = null
     ) {
         $this->mailer = $mailer;
         $this->session = $session;
         $this->settingGateway = $settingGateway;
         $this->notificationGateway = $notificationGateway;
+        $this->deliveryLogGateway = $deliveryLogGateway;
     }
 
     /**
@@ -150,12 +158,30 @@ class EmailDelivery
      *
      * @param array $notification Notification data from queue
      * @param array $recipient Recipient data
+     * @param int $attemptNumber Attempt number for logging
      * @return array Result with success/failure details
      */
-    public function send(array $notification, array $recipient)
+    public function send(array $notification, array $recipient, $attemptNumber = 1)
     {
+        $startTime = microtime(true);
+        $gibbonNotificationQueueID = $notification['gibbonNotificationQueueID'] ?? null;
+
         // Validate recipient can receive email
         if (!$this->canSendToRecipient($recipient, $notification['type'])) {
+            // Log skipped delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'email',
+                    'status' => 'skipped',
+                    'recipientIdentifier' => $recipient['recipientEmail'] ?? 'unknown',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => $this->lastError['code'] ?? 'SKIPPED',
+                    'errorMessage' => $this->lastError['message'] ?? 'Delivery skipped due to user preferences',
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'skipped' => true,
@@ -187,22 +213,66 @@ class EmailDelivery
             // Send the email
             $sent = $this->mailer->Send();
 
+            $deliveryTimeMs = (int)((microtime(true) - $startTime) * 1000);
+
             if ($sent) {
+                // Log successful delivery
+                if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                    $this->deliveryLogGateway->logDelivery([
+                        'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                        'channel' => 'email',
+                        'status' => 'success',
+                        'recipientIdentifier' => $recipient['recipientEmail'],
+                        'attemptNumber' => $attemptNumber,
+                        'deliveryTimeMs' => $deliveryTimeMs,
+                    ]);
+                }
+
                 return [
                     'success' => true,
                     'message' => 'Email sent successfully',
                     'recipient' => $recipient['recipientEmail'],
                 ];
             } else {
+                $errorMessage = $this->mailer->ErrorInfo ?? 'Unknown mailer error';
+
+                // Log failed delivery
+                if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                    $this->deliveryLogGateway->logDelivery([
+                        'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                        'channel' => 'email',
+                        'status' => 'failed',
+                        'recipientIdentifier' => $recipient['recipientEmail'],
+                        'attemptNumber' => $attemptNumber,
+                        'errorCode' => 'SEND_FAILED',
+                        'errorMessage' => $errorMessage,
+                        'deliveryTimeMs' => $deliveryTimeMs,
+                    ]);
+                }
+
                 return [
                     'success' => false,
                     'error' => [
                         'code' => 'SEND_FAILED',
-                        'message' => $this->mailer->ErrorInfo ?? 'Unknown mailer error',
+                        'message' => $errorMessage,
                     ],
                 ];
             }
         } catch (\Exception $e) {
+            // Log failed delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'email',
+                    'status' => 'failed',
+                    'recipientIdentifier' => $recipient['recipientEmail'] ?? 'unknown',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => 'EXCEPTION',
+                    'errorMessage' => $e->getMessage(),
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'error' => [

@@ -46,6 +46,11 @@ class PushDelivery
     protected $notificationGateway;
 
     /**
+     * @var DeliveryLogGateway
+     */
+    protected $deliveryLogGateway;
+
+    /**
      * @var object|null Firebase Messaging instance
      */
     protected $messaging = null;
@@ -70,13 +75,16 @@ class PushDelivery
      *
      * @param SettingGateway $settingGateway Settings gateway
      * @param NotificationGateway $notificationGateway Notification gateway
+     * @param DeliveryLogGateway $deliveryLogGateway Delivery log gateway
      */
     public function __construct(
         SettingGateway $settingGateway,
-        NotificationGateway $notificationGateway
+        NotificationGateway $notificationGateway,
+        DeliveryLogGateway $deliveryLogGateway = null
     ) {
         $this->settingGateway = $settingGateway;
         $this->notificationGateway = $notificationGateway;
+        $this->deliveryLogGateway = $deliveryLogGateway;
     }
 
     /**
@@ -208,11 +216,29 @@ class PushDelivery
      * @param string $title Notification title
      * @param string $body Notification body
      * @param array $data Additional data payload
+     * @param int|null $gibbonNotificationQueueID Notification queue ID for logging
+     * @param int $attemptNumber Attempt number for logging
      * @return array Result with success/failure details
      */
-    public function send($deviceToken, $title, $body, $data = [])
+    public function send($deviceToken, $title, $body, $data = [], $gibbonNotificationQueueID = null, $attemptNumber = 1)
     {
+        $startTime = microtime(true);
+
         if (!$this->initializeFirebase()) {
+            // Log failed delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'push',
+                    'status' => 'failed',
+                    'recipientIdentifier' => substr($deviceToken, 0, 20) . '...',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => $this->lastError['code'] ?? 'UNKNOWN',
+                    'errorMessage' => $this->lastError['message'] ?? 'Firebase initialization failed',
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'error' => $this->lastError,
@@ -240,6 +266,21 @@ class PushDelivery
             // Update token last used timestamp
             $this->notificationGateway->updateTokenLastUsed($deviceToken);
 
+            $deliveryTimeMs = (int)((microtime(true) - $startTime) * 1000);
+
+            // Log successful delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'push',
+                    'status' => 'success',
+                    'recipientIdentifier' => substr($deviceToken, 0, 20) . '...',
+                    'attemptNumber' => $attemptNumber,
+                    'responseData' => ['messageId' => $result],
+                    'deliveryTimeMs' => $deliveryTimeMs,
+                ]);
+            }
+
             return [
                 'success' => true,
                 'message' => 'Push notification sent successfully',
@@ -250,6 +291,20 @@ class PushDelivery
             $this->notificationGateway->deactivateToken($deviceToken);
             $this->invalidTokens[] = $deviceToken;
 
+            // Log failed delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'push',
+                    'status' => 'failed',
+                    'recipientIdentifier' => substr($deviceToken, 0, 20) . '...',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => 'TOKEN_NOT_FOUND',
+                    'errorMessage' => 'Device token is invalid or expired',
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'error' => [
@@ -258,6 +313,20 @@ class PushDelivery
                 ],
             ];
         } catch (\Kreait\Firebase\Exception\Messaging\InvalidMessage $e) {
+            // Log failed delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'push',
+                    'status' => 'failed',
+                    'recipientIdentifier' => substr($deviceToken, 0, 20) . '...',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => 'INVALID_MESSAGE',
+                    'errorMessage' => 'Invalid message format: ' . $e->getMessage(),
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'error' => [
@@ -266,6 +335,20 @@ class PushDelivery
                 ],
             ];
         } catch (\Exception $e) {
+            // Log failed delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'push',
+                    'status' => 'failed',
+                    'recipientIdentifier' => substr($deviceToken, 0, 20) . '...',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => 'SEND_FAILED',
+                    'errorMessage' => $e->getMessage(),
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'error' => [
@@ -284,11 +367,28 @@ class PushDelivery
      * @param string $title Notification title
      * @param string $body Notification body
      * @param array $data Additional data payload
+     * @param int|null $gibbonNotificationQueueID Notification queue ID for logging
+     * @param int $attemptNumber Attempt number for logging
      * @return array Results for each token
      */
-    public function sendMulticast(array $deviceTokens, $title, $body, $data = [])
+    public function sendMulticast(array $deviceTokens, $title, $body, $data = [], $gibbonNotificationQueueID = null, $attemptNumber = 1)
     {
+        $startTime = microtime(true);
+
         if (!$this->initializeFirebase()) {
+            // Log failed delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'push',
+                    'status' => 'failed',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => $this->lastError['code'] ?? 'UNKNOWN',
+                    'errorMessage' => $this->lastError['message'] ?? 'Firebase initialization failed',
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'error' => $this->lastError,
@@ -343,12 +443,38 @@ class PushDelivery
                     'token' => $token,
                     'error' => $error->getMessage(),
                 ];
+
+                // Log each failed delivery
+                if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                    $this->deliveryLogGateway->logDelivery([
+                        'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                        'channel' => 'push',
+                        'status' => 'failed',
+                        'recipientIdentifier' => substr($token, 0, 20) . '...',
+                        'attemptNumber' => $attemptNumber,
+                        'errorCode' => get_class($error),
+                        'errorMessage' => $error->getMessage(),
+                        'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                    ]);
+                }
             }
 
-            // Update last used timestamp for successful tokens
+            // Update last used timestamp and log successful deliveries
             foreach ($sendReport->successes()->getItems() as $success) {
                 $token = $success->target()->value();
                 $this->notificationGateway->updateTokenLastUsed($token);
+
+                // Log successful delivery
+                if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                    $this->deliveryLogGateway->logDelivery([
+                        'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                        'channel' => 'push',
+                        'status' => 'success',
+                        'recipientIdentifier' => substr($token, 0, 20) . '...',
+                        'attemptNumber' => $attemptNumber,
+                        'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                    ]);
+                }
             }
 
             return [
@@ -358,6 +484,19 @@ class PushDelivery
                 'failures' => $failures,
             ];
         } catch (\Exception $e) {
+            // Log failed delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'push',
+                    'status' => 'failed',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => 'MULTICAST_FAILED',
+                    'errorMessage' => $e->getMessage(),
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'error' => [
@@ -376,12 +515,29 @@ class PushDelivery
      * @param string $title Notification title
      * @param string $body Notification body
      * @param array $data Additional data payload
+     * @param int|null $gibbonNotificationQueueID Notification queue ID for logging
+     * @param int $attemptNumber Attempt number for logging
      * @return array Result with success/failure details
      */
-    public function sendToUser($gibbonPersonID, $type, $title, $body, $data = [])
+    public function sendToUser($gibbonPersonID, $type, $title, $body, $data = [], $gibbonNotificationQueueID = null, $attemptNumber = 1)
     {
+        $startTime = microtime(true);
+
         // Check if we can send to this user
         if (!$this->canSendToRecipient($gibbonPersonID, $type)) {
+            // Log skipped delivery
+            if ($this->deliveryLogGateway && $gibbonNotificationQueueID) {
+                $this->deliveryLogGateway->logDelivery([
+                    'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+                    'channel' => 'push',
+                    'status' => 'skipped',
+                    'attemptNumber' => $attemptNumber,
+                    'errorCode' => $this->lastError['code'] ?? 'SKIPPED',
+                    'errorMessage' => $this->lastError['message'] ?? 'Delivery skipped due to user preferences',
+                    'deliveryTimeMs' => (int)((microtime(true) - $startTime) * 1000),
+                ]);
+            }
+
             return [
                 'success' => false,
                 'skipped' => true,
@@ -395,11 +551,11 @@ class PushDelivery
 
         if (count($deviceTokens) === 1) {
             // Single device - use regular send
-            return $this->send($deviceTokens[0], $title, $body, $data);
+            return $this->send($deviceTokens[0], $title, $body, $data, $gibbonNotificationQueueID, $attemptNumber);
         }
 
         // Multiple devices - use multicast
-        return $this->sendMulticast($deviceTokens, $title, $body, $data);
+        return $this->sendMulticast($deviceTokens, $title, $body, $data, $gibbonNotificationQueueID, $attemptNumber);
     }
 
     /**
@@ -470,7 +626,9 @@ class PushDelivery
             $notification['type'],
             $title,
             $body,
-            $data
+            $data,
+            $gibbonNotificationQueueID,
+            $notification['attempts'] + 1 // Attempt number
         );
 
         return $result;
