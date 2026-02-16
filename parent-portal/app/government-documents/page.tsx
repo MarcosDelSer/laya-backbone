@@ -282,8 +282,8 @@ const mockChecklist: GovernmentDocumentChecklist = {
     },
   ],
   complianceRate: 70,
-  criticalDocumentsMissing: false,
-  missingCriticalDocuments: [],
+  criticalDocumentsMissing: true,
+  missingCriticalDocuments: ['Oliver Thompson - Immunization Record', 'Oliver Thompson - Health Insurance Card'],
 };
 
 type FilterType = 'all' | 'verified' | 'pending' | 'attention';
