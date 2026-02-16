@@ -410,3 +410,134 @@ export interface ApiErrorResponse {
   detail: string;
   statusCode?: number;
 }
+
+// ============================================================================
+// Staff Types
+// ============================================================================
+
+/**
+ * Staff employment status.
+ */
+export type StaffStatus = 'active' | 'on_leave' | 'terminated' | 'suspended';
+
+/**
+ * Staff employment type.
+ */
+export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'substitute';
+
+/**
+ * Quebec qualification levels for childcare staff.
+ */
+export type QualificationLevel =
+  | 'unqualified'
+  | 'in_training'
+  | 'qualified_assistant'
+  | 'qualified_educator'
+  | 'specialized_educator'
+  | 'director';
+
+/**
+ * Age group categories for childcare.
+ */
+export type AgeGroup = 'infant' | 'toddler' | 'preschool' | 'school_age' | 'mixed';
+
+/**
+ * Staff certification status.
+ */
+export type CertificationStatus = 'valid' | 'pending' | 'expired' | 'expiring_soon';
+
+/**
+ * Staff certification type.
+ */
+export type CertificationType =
+  | 'first_aid'
+  | 'cpr'
+  | 'early_childhood_education'
+  | 'food_handling'
+  | 'background_check'
+  | 'other';
+
+/**
+ * Individual staff certification record.
+ */
+export interface StaffCertification {
+  id: string;
+  type: CertificationType;
+  name: string;
+  issuingOrganization?: string;
+  certificateNumber?: string;
+  issueDate: string;
+  expiryDate?: string;
+  status: CertificationStatus;
+  isRequired: boolean;
+}
+
+/**
+ * Staff profile information visible to parents.
+ * Contains only parent-appropriate fields (excludes sensitive HR data).
+ */
+export interface StaffProfile {
+  id: string;
+  gibbonPersonID: string;
+  firstName: string;
+  lastName: string;
+  preferredName?: string;
+  position: string;
+  department?: string;
+  profilePhotoUrl?: string;
+  qualificationLevel: QualificationLevel;
+  status: StaffStatus;
+  bio?: string;
+  specializations?: string[];
+  certifications?: StaffCertification[];
+}
+
+/**
+ * Staff assignment to a classroom or age group.
+ */
+export interface StaffAssignment {
+  id: string;
+  staffId: string;
+  staff: StaffProfile;
+  classroomId?: string;
+  classroomName?: string;
+  ageGroup: AgeGroup;
+  roomName?: string;
+  role: string;
+  isPrimaryCaregiver: boolean;
+  startDate: string;
+  endDate?: string;
+}
+
+/**
+ * Staff currently working in a room/classroom.
+ */
+export interface StaffOnDuty {
+  staff: StaffProfile;
+  clockedInAt: string;
+  assignedRoom?: string;
+  ageGroup?: AgeGroup;
+  isOnBreak: boolean;
+}
+
+/**
+ * Staff assigned to a specific child.
+ */
+export interface ChildStaffAssignment {
+  childId: string;
+  primaryCaregivers: StaffProfile[];
+  classroomStaff: StaffProfile[];
+  specialists?: StaffProfile[];
+}
+
+/**
+ * Response for fetching staff assigned to a child.
+ */
+export interface ChildStaffResponse {
+  childId: string;
+  classroomName: string;
+  ageGroup: AgeGroup;
+  assignments: ChildStaffAssignment;
+  staffOnDuty?: StaffOnDuty[];
+  lastUpdated: string;
+}
