@@ -8,6 +8,7 @@
 import { gibbonClient, ApiError } from './api';
 import type {
   Child,
+  ChildStaffResponse,
   DailyReport,
   Document,
   Invoice,
@@ -18,6 +19,8 @@ import type {
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
+  StaffOnDuty,
+  StaffProfile,
 } from './types';
 
 // ============================================================================
@@ -50,6 +53,11 @@ const ENDPOINTS = {
   DOCUMENT: (id: string) => `/api/v1/documents/${id}`,
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
+
+  // Staff
+  CHILD_STAFF: (childId: string) => `/api/v1/children/${childId}/staff`,
+  CHILD_STAFF_ON_DUTY: (childId: string) => `/api/v1/children/${childId}/staff/on-duty`,
+  STAFF_PROFILE: (staffId: string) => `/api/v1/staff/${staffId}`,
 } as const;
 
 // ============================================================================
@@ -326,6 +334,50 @@ export function getDocumentPdfUrl(documentId: string): string {
 export async function getPendingDocumentsCount(): Promise<number> {
   const response = await getDocuments({ status: 'pending', limit: 1 });
   return response.total;
+}
+
+// ============================================================================
+// Staff API
+// ============================================================================
+
+/**
+ * Fetch all staff assigned to a specific child.
+ * Includes primary caregivers, classroom staff, and specialists.
+ */
+export async function getChildStaff(childId: string): Promise<ChildStaffResponse> {
+  return gibbonClient.get<ChildStaffResponse>(ENDPOINTS.CHILD_STAFF(childId));
+}
+
+/**
+ * Fetch staff currently on duty for a child's classroom.
+ */
+export async function getChildStaffOnDuty(childId: string): Promise<StaffOnDuty[]> {
+  return gibbonClient.get<StaffOnDuty[]>(ENDPOINTS.CHILD_STAFF_ON_DUTY(childId));
+}
+
+/**
+ * Fetch a staff member's profile by ID.
+ * Returns only parent-visible information.
+ */
+export async function getStaffProfile(staffId: string): Promise<StaffProfile> {
+  return gibbonClient.get<StaffProfile>(ENDPOINTS.STAFF_PROFILE(staffId));
+}
+
+/**
+ * Fetch all staff assigned to children for the current parent.
+ * Aggregates staff from all children.
+ */
+export async function getAllChildrenStaff(): Promise<ChildStaffResponse[]> {
+  const children = await getChildren();
+  return Promise.all(children.map((child) => getChildStaff(child.id)));
+}
+
+/**
+ * Get the primary caregiver(s) for a child.
+ */
+export async function getPrimaryCaregivers(childId: string): Promise<StaffProfile[]> {
+  const response = await getChildStaff(childId);
+  return response.assignments.primaryCaregivers;
 }
 
 // ============================================================================
