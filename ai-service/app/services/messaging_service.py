@@ -25,6 +25,12 @@ from app.schemas.messaging import (
     MessageContentType,
     MessageCreate,
     MessageResponse,
+    NotificationChannelType,
+    NotificationFrequency,
+    NotificationPreferenceListResponse,
+    NotificationPreferenceRequest,
+    NotificationPreferenceResponse,
+    NotificationType,
     SenderType,
     ThreadCreate,
     ThreadParticipant,
@@ -67,6 +73,12 @@ class UnauthorizedAccessError(MessagingServiceError):
 
 class InvalidThreadError(MessagingServiceError):
     """Raised when thread data is invalid."""
+
+    pass
+
+
+class NotificationPreferenceNotFoundError(MessagingServiceError):
+    """Raised when the specified notification preference is not found."""
 
     pass
 
@@ -1052,3 +1064,460 @@ class MessagingService:
             updated_at=base_response.updated_at,
             messages=message_responses,
         )
+
+    # =========================================================================
+    # Notification Preference Operations
+    # =========================================================================
+
+    async def get_notification_preferences(
+        self,
+        parent_id: UUID,
+    ) -> NotificationPreferenceListResponse:
+        """Get all notification preferences for a parent.
+
+        Retrieves all notification preference configurations for a parent user
+        across all notification types and channels.
+
+        Args:
+            parent_id: Unique identifier of the parent user
+
+        Returns:
+            NotificationPreferenceListResponse with all preferences
+        """
+        query = select(NotificationPreference).where(
+            cast(NotificationPreference.parent_id, String) == str(parent_id)
+        ).order_by(NotificationPreference.notification_type, NotificationPreference.channel)
+
+        result = await self.db.execute(query)
+        preferences = result.scalars().all()
+
+        # Build response list
+        preference_responses = []
+        for pref in preferences:
+            preference_responses.append(
+                NotificationPreferenceResponse(
+                    id=pref.id,
+                    parent_id=pref.parent_id,
+                    notification_type=NotificationType(pref.notification_type),
+                    channel=NotificationChannelType(pref.channel),
+                    is_enabled=pref.is_enabled,
+                    frequency=NotificationFrequency.IMMEDIATE,
+                    quiet_hours_start=pref.quiet_hours_start,
+                    quiet_hours_end=pref.quiet_hours_end,
+                    created_at=pref.created_at,
+                    updated_at=pref.updated_at,
+                )
+            )
+
+        return NotificationPreferenceListResponse(
+            parent_id=parent_id,
+            preferences=preference_responses,
+        )
+
+    async def get_notification_preference(
+        self,
+        parent_id: UUID,
+        notification_type: NotificationType,
+        channel: NotificationChannelType,
+    ) -> NotificationPreferenceResponse:
+        """Get a specific notification preference.
+
+        Retrieves a single notification preference for a specific type/channel
+        combination.
+
+        Args:
+            parent_id: Unique identifier of the parent user
+            notification_type: Type of notification to retrieve
+            channel: Notification delivery channel
+
+        Returns:
+            NotificationPreferenceResponse with the preference data
+
+        Raises:
+            NotificationPreferenceNotFoundError: When the preference is not found
+        """
+        query = select(NotificationPreference).where(
+            and_(
+                cast(NotificationPreference.parent_id, String) == str(parent_id),
+                NotificationPreference.notification_type == notification_type.value,
+                NotificationPreference.channel == channel.value,
+            )
+        )
+
+        result = await self.db.execute(query)
+        preference = result.scalar_one_or_none()
+
+        if not preference:
+            raise NotificationPreferenceNotFoundError(
+                f"Notification preference for type '{notification_type.value}' "
+                f"and channel '{channel.value}' not found for parent {parent_id}"
+            )
+
+        return NotificationPreferenceResponse(
+            id=preference.id,
+            parent_id=preference.parent_id,
+            notification_type=NotificationType(preference.notification_type),
+            channel=NotificationChannelType(preference.channel),
+            is_enabled=preference.is_enabled,
+            frequency=NotificationFrequency.IMMEDIATE,
+            quiet_hours_start=preference.quiet_hours_start,
+            quiet_hours_end=preference.quiet_hours_end,
+            created_at=preference.created_at,
+            updated_at=preference.updated_at,
+        )
+
+    async def create_notification_preference(
+        self,
+        request: NotificationPreferenceRequest,
+    ) -> NotificationPreferenceResponse:
+        """Create a new notification preference.
+
+        Creates a new notification preference for a parent. If a preference
+        already exists for the same type/channel combination, it will be updated.
+
+        Args:
+            request: The notification preference creation request
+
+        Returns:
+            NotificationPreferenceResponse with the created preference data
+        """
+        # Check if preference already exists
+        existing_query = select(NotificationPreference).where(
+            and_(
+                cast(NotificationPreference.parent_id, String) == str(request.parent_id),
+                NotificationPreference.notification_type == request.notification_type.value,
+                NotificationPreference.channel == request.channel.value,
+            )
+        )
+        existing_result = await self.db.execute(existing_query)
+        existing = existing_result.scalar_one_or_none()
+
+        if existing:
+            # Update existing preference
+            existing.is_enabled = request.is_enabled
+            existing.quiet_hours_start = request.quiet_hours_start
+            existing.quiet_hours_end = request.quiet_hours_end
+            existing.updated_at = datetime.utcnow()
+
+            await self.db.commit()
+            await self.db.refresh(existing)
+
+            return NotificationPreferenceResponse(
+                id=existing.id,
+                parent_id=existing.parent_id,
+                notification_type=NotificationType(existing.notification_type),
+                channel=NotificationChannelType(existing.channel),
+                is_enabled=existing.is_enabled,
+                frequency=request.frequency,
+                quiet_hours_start=existing.quiet_hours_start,
+                quiet_hours_end=existing.quiet_hours_end,
+                created_at=existing.created_at,
+                updated_at=existing.updated_at,
+            )
+
+        # Create new preference
+        preference = NotificationPreference(
+            parent_id=request.parent_id,
+            notification_type=request.notification_type.value,
+            channel=request.channel.value,
+            is_enabled=request.is_enabled,
+            quiet_hours_start=request.quiet_hours_start,
+            quiet_hours_end=request.quiet_hours_end,
+        )
+
+        self.db.add(preference)
+        await self.db.commit()
+        await self.db.refresh(preference)
+
+        return NotificationPreferenceResponse(
+            id=preference.id,
+            parent_id=preference.parent_id,
+            notification_type=NotificationType(preference.notification_type),
+            channel=NotificationChannelType(preference.channel),
+            is_enabled=preference.is_enabled,
+            frequency=request.frequency,
+            quiet_hours_start=preference.quiet_hours_start,
+            quiet_hours_end=preference.quiet_hours_end,
+            created_at=preference.created_at,
+            updated_at=preference.updated_at,
+        )
+
+    async def update_notification_preference(
+        self,
+        parent_id: UUID,
+        notification_type: NotificationType,
+        channel: NotificationChannelType,
+        is_enabled: Optional[bool] = None,
+        frequency: Optional[NotificationFrequency] = None,
+        quiet_hours_start: Optional[str] = None,
+        quiet_hours_end: Optional[str] = None,
+    ) -> NotificationPreferenceResponse:
+        """Update a notification preference.
+
+        Updates an existing notification preference. Only provided fields
+        will be updated.
+
+        Args:
+            parent_id: Unique identifier of the parent user
+            notification_type: Type of notification to update
+            channel: Notification delivery channel
+            is_enabled: Whether notifications are enabled for this type/channel
+            frequency: How often notifications should be delivered
+            quiet_hours_start: Start of quiet hours (HH:MM format)
+            quiet_hours_end: End of quiet hours (HH:MM format)
+
+        Returns:
+            NotificationPreferenceResponse with the updated preference data
+
+        Raises:
+            NotificationPreferenceNotFoundError: When the preference is not found
+        """
+        query = select(NotificationPreference).where(
+            and_(
+                cast(NotificationPreference.parent_id, String) == str(parent_id),
+                NotificationPreference.notification_type == notification_type.value,
+                NotificationPreference.channel == channel.value,
+            )
+        )
+
+        result = await self.db.execute(query)
+        preference = result.scalar_one_or_none()
+
+        if not preference:
+            raise NotificationPreferenceNotFoundError(
+                f"Notification preference for type '{notification_type.value}' "
+                f"and channel '{channel.value}' not found for parent {parent_id}"
+            )
+
+        # Apply updates only for provided values
+        if is_enabled is not None:
+            preference.is_enabled = is_enabled
+
+        if quiet_hours_start is not None:
+            preference.quiet_hours_start = quiet_hours_start
+
+        if quiet_hours_end is not None:
+            preference.quiet_hours_end = quiet_hours_end
+
+        preference.updated_at = datetime.utcnow()
+
+        await self.db.commit()
+        await self.db.refresh(preference)
+
+        return NotificationPreferenceResponse(
+            id=preference.id,
+            parent_id=preference.parent_id,
+            notification_type=NotificationType(preference.notification_type),
+            channel=NotificationChannelType(preference.channel),
+            is_enabled=preference.is_enabled,
+            frequency=frequency or NotificationFrequency.IMMEDIATE,
+            quiet_hours_start=preference.quiet_hours_start,
+            quiet_hours_end=preference.quiet_hours_end,
+            created_at=preference.created_at,
+            updated_at=preference.updated_at,
+        )
+
+    async def delete_notification_preference(
+        self,
+        parent_id: UUID,
+        notification_type: NotificationType,
+        channel: NotificationChannelType,
+    ) -> bool:
+        """Delete a notification preference.
+
+        Removes a notification preference for a specific type/channel combination.
+
+        Args:
+            parent_id: Unique identifier of the parent user
+            notification_type: Type of notification to delete
+            channel: Notification delivery channel
+
+        Returns:
+            True if the preference was deleted
+
+        Raises:
+            NotificationPreferenceNotFoundError: When the preference is not found
+        """
+        query = select(NotificationPreference).where(
+            and_(
+                cast(NotificationPreference.parent_id, String) == str(parent_id),
+                NotificationPreference.notification_type == notification_type.value,
+                NotificationPreference.channel == channel.value,
+            )
+        )
+
+        result = await self.db.execute(query)
+        preference = result.scalar_one_or_none()
+
+        if not preference:
+            raise NotificationPreferenceNotFoundError(
+                f"Notification preference for type '{notification_type.value}' "
+                f"and channel '{channel.value}' not found for parent {parent_id}"
+            )
+
+        await self.db.delete(preference)
+        await self.db.commit()
+
+        return True
+
+    async def get_or_create_default_preferences(
+        self,
+        parent_id: UUID,
+    ) -> NotificationPreferenceListResponse:
+        """Get existing or create default notification preferences for a parent.
+
+        If preferences exist for the parent, returns them. Otherwise, creates
+        default preferences for all notification types and channels with
+        sensible defaults.
+
+        Args:
+            parent_id: Unique identifier of the parent user
+
+        Returns:
+            NotificationPreferenceListResponse with all preferences
+        """
+        # Check if any preferences exist
+        existing_query = select(NotificationPreference).where(
+            cast(NotificationPreference.parent_id, String) == str(parent_id)
+        )
+        existing_result = await self.db.execute(existing_query)
+        existing_preferences = existing_result.scalars().all()
+
+        if existing_preferences:
+            # Return existing preferences
+            return await self.get_notification_preferences(parent_id)
+
+        # Create default preferences for all type/channel combinations
+        default_preferences = []
+
+        # Default settings: enable email and push for all types, SMS only for urgent
+        default_config = {
+            NotificationType.MESSAGE: {
+                NotificationChannelType.EMAIL: True,
+                NotificationChannelType.PUSH: True,
+                NotificationChannelType.SMS: False,
+            },
+            NotificationType.DAILY_LOG: {
+                NotificationChannelType.EMAIL: True,
+                NotificationChannelType.PUSH: True,
+                NotificationChannelType.SMS: False,
+            },
+            NotificationType.URGENT: {
+                NotificationChannelType.EMAIL: True,
+                NotificationChannelType.PUSH: True,
+                NotificationChannelType.SMS: True,
+            },
+            NotificationType.ADMIN: {
+                NotificationChannelType.EMAIL: True,
+                NotificationChannelType.PUSH: True,
+                NotificationChannelType.SMS: False,
+            },
+        }
+
+        for notification_type, channels in default_config.items():
+            for channel, is_enabled in channels.items():
+                preference = NotificationPreference(
+                    parent_id=parent_id,
+                    notification_type=notification_type.value,
+                    channel=channel.value,
+                    is_enabled=is_enabled,
+                    quiet_hours_start=None,
+                    quiet_hours_end=None,
+                )
+                self.db.add(preference)
+                default_preferences.append(preference)
+
+        await self.db.commit()
+
+        # Refresh all preferences to get IDs
+        for pref in default_preferences:
+            await self.db.refresh(pref)
+
+        # Build response
+        preference_responses = []
+        for pref in default_preferences:
+            preference_responses.append(
+                NotificationPreferenceResponse(
+                    id=pref.id,
+                    parent_id=pref.parent_id,
+                    notification_type=NotificationType(pref.notification_type),
+                    channel=NotificationChannelType(pref.channel),
+                    is_enabled=pref.is_enabled,
+                    frequency=NotificationFrequency.IMMEDIATE,
+                    quiet_hours_start=pref.quiet_hours_start,
+                    quiet_hours_end=pref.quiet_hours_end,
+                    created_at=pref.created_at,
+                    updated_at=pref.updated_at,
+                )
+            )
+
+        return NotificationPreferenceListResponse(
+            parent_id=parent_id,
+            preferences=preference_responses,
+        )
+
+    async def set_quiet_hours(
+        self,
+        parent_id: UUID,
+        quiet_hours_start: Optional[str],
+        quiet_hours_end: Optional[str],
+    ) -> int:
+        """Set quiet hours for all notification preferences.
+
+        Updates quiet hours across all notification preferences for a parent.
+        During quiet hours, notifications may be delayed or silenced.
+
+        Args:
+            parent_id: Unique identifier of the parent user
+            quiet_hours_start: Start of quiet hours (HH:MM format, e.g., "22:00")
+            quiet_hours_end: End of quiet hours (HH:MM format, e.g., "07:00")
+
+        Returns:
+            Number of preferences updated
+        """
+        stmt = (
+            update(NotificationPreference)
+            .where(
+                cast(NotificationPreference.parent_id, String) == str(parent_id)
+            )
+            .values(
+                quiet_hours_start=quiet_hours_start,
+                quiet_hours_end=quiet_hours_end,
+                updated_at=datetime.utcnow(),
+            )
+        )
+
+        result = await self.db.execute(stmt)
+        await self.db.commit()
+
+        return result.rowcount
+
+    async def is_notification_enabled(
+        self,
+        parent_id: UUID,
+        notification_type: NotificationType,
+        channel: NotificationChannelType,
+    ) -> bool:
+        """Check if a specific notification type/channel is enabled.
+
+        Utility method to quickly check if notifications should be sent
+        for a specific type and channel combination.
+
+        Args:
+            parent_id: Unique identifier of the parent user
+            notification_type: Type of notification to check
+            channel: Notification delivery channel
+
+        Returns:
+            True if notifications are enabled, False otherwise
+        """
+        try:
+            preference = await self.get_notification_preference(
+                parent_id=parent_id,
+                notification_type=notification_type,
+                channel=channel,
+            )
+            return preference.is_enabled
+        except NotificationPreferenceNotFoundError:
+            # Default to enabled if no preference exists
+            return True
