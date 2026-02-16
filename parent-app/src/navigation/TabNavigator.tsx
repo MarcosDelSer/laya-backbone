@@ -13,6 +13,8 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import type {RootTabParamList} from './types';
 import DailyFeedScreen from '../screens/DailyFeedScreen';
 import MessagingScreen from '../screens/MessagingScreen';
+import InvoicesScreen from '../screens/InvoicesScreen';
+import PhotoGalleryScreen from '../screens/PhotoGalleryScreen';
 
 /**
  * Tab icon properties
@@ -92,34 +94,14 @@ function PlaceholderScreen({
 
 /**
  * Temporary placeholder screens
- * TODO: Replace with actual screen imports once created in phase 6 & 7:
- * - PhotoGalleryScreen (subtask-6-2) - needs import
- * - InvoicesScreen (subtask-6-3) - needs import
+ * TODO: Replace with actual screen imports once created in phase 7:
  * - DocumentsScreen (subtask-7-2)
  *
  * COMPLETED:
  * - MessagingScreen (subtask-7-1) - imported above
+ * - PhotoGalleryScreen (subtask-6-2) - imported above
+ * - InvoicesScreen (subtask-6-3) - imported above
  */
-
-function PhotoGalleryScreen(): React.JSX.Element {
-  return (
-    <PlaceholderScreen
-      title="Photo Gallery"
-      description="Browse and download photos of your child"
-    />
-  );
-}
-
-function InvoicesScreen(): React.JSX.Element {
-  return (
-    <PlaceholderScreen
-      title="Invoices"
-      description="View and manage your invoices"
-    />
-  );
-}
-
-// MessagingScreen is imported from screens - placeholder removed
 
 function SignaturesScreen(): React.JSX.Element {
   return (

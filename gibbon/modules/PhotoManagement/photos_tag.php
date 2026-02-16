@@ -24,6 +24,8 @@ use Gibbon\Services\Format;
 use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Module\PhotoManagement\Domain\PhotoGateway;
 use Gibbon\Module\PhotoManagement\Domain\PhotoTagGateway;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -58,6 +60,14 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos.php
         ->add(__('Photo Gallery'), 'photos.php')
         ->add(__('Tag Children'));
 
+    // Get AI Sync service for webhook notifications
+    try {
+        $settingGateway = $container->get(SettingGateway::class);
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
+
     // Handle form submission
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $URL = $session->get('absoluteURL') . '/index.php?q=/modules/PhotoManagement/photos_tag.php&gibbonPhotoUploadID=' . $gibbonPhotoUploadID;
@@ -87,6 +97,22 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos.php
 
         // Add new children
         $photoTagGateway->tagChildren($gibbonPhotoUploadID, $childrenToAdd, $gibbonPersonID);
+
+        // Trigger webhook for AI sync
+        if ($aiSyncService !== null) {
+            try {
+                $tagData = [
+                    'gibbonPhotoUploadID' => $gibbonPhotoUploadID,
+                    'taggedChildren' => $selectedChildren,
+                    'childrenAdded' => array_values($childrenToAdd),
+                    'childrenRemoved' => array_values($childrenToRemove),
+                    'taggedByID' => $gibbonPersonID,
+                ];
+                $aiSyncService->syncPhotoTag($gibbonPhotoUploadID, $tagData);
+            } catch (Exception $e) {
+                // Silently fail - don't break UX if webhook fails
+            }
+        }
 
         $URL .= '&return=success0';
         header("Location: {$URL}");

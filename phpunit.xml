@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.5/phpunit.xsd"
+         bootstrap="gibbon/modules/AISync/tests/bootstrap.php"
+         colors="true"
+         verbose="true"
+         beStrictAboutOutputDuringTests="true"
+         beStrictAboutTodoAnnotatedTests="true"
+         failOnRisky="true"
+         failOnWarning="true">
+    <testsuites>
+        <testsuite name="AISync Unit Tests">
+            <directory>gibbon/modules/AISync/tests/Unit</directory>
+        </testsuite>
+        <testsuite name="AISync Integration Tests">
+            <directory>gibbon/modules/AISync/tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+
+    <coverage processUncoveredFiles="true">
+        <include>
+            <directory suffix=".php">gibbon/modules/AISync</directory>
+        </include>
+        <exclude>
+            <directory>gibbon/modules/AISync/tests</directory>
+            <directory>gibbon/modules/AISync/cli</directory>
+            <file>gibbon/modules/AISync/manifest.php</file>
+            <file>gibbon/modules/AISync/moduleFunctions.php</file>
+        </exclude>
+        <report>
+            <html outputDirectory="coverage/html"/>
+            <text outputFile="coverage/coverage.txt"/>
+            <clover outputFile="coverage/clover.xml"/>
+        </report>
+    </coverage>
+
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="JWT_SECRET_KEY" value="test-secret-key-for-phpunit-testing-only"/>
+        <env name="JWT_ALGORITHM" value="HS256"/>
+        <env name="AI_SERVICE_URL" value="http://localhost:8000"/>
+    </php>
+</phpunit>

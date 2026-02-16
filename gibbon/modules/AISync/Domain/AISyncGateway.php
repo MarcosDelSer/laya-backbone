@@ -409,6 +409,118 @@ class AISyncGateway extends QueryableGateway
     }
 
     /**
+     * Get webhook health metrics for monitoring and diagnostics.
+     * Returns comprehensive health information including success rates,
+     * failure counts, retry statistics, and performance metrics.
+     *
+     * @param string|null $dateFrom Start date filter (Y-m-d format)
+     * @param string|null $dateTo End date filter (Y-m-d format)
+     * @return array Health metrics
+     */
+    public function getWebhookHealth($dateFrom = null, $dateTo = null)
+    {
+        $data = [];
+        $whereClause = '';
+
+        if ($dateFrom) {
+            $whereClause .= ' AND DATE(timestampCreated) >= :dateFrom';
+            $data['dateFrom'] = $dateFrom;
+        }
+
+        if ($dateTo) {
+            $whereClause .= ' AND DATE(timestampCreated) <= :dateTo';
+            $data['dateTo'] = $dateTo;
+        }
+
+        // Get overall statistics
+        $sql = "SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) as success,
+                    SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) as failed,
+                    SUM(CASE WHEN status='failed' AND retryCount >= 3 THEN 1 ELSE 0 END) as permanentlyFailed,
+                    AVG(CASE WHEN status='success' THEN retryCount ELSE NULL END) as avgRetriesUntilSuccess,
+                    MAX(retryCount) as maxRetryCount,
+                    MIN(timestampCreated) as oldestSync,
+                    MAX(timestampCreated) as newestSync
+                FROM gibbonAISyncLog
+                WHERE 1=1{$whereClause}";
+
+        $stats = $this->db()->selectOne($sql, $data);
+
+        // Calculate success rate
+        $total = (int)($stats['total'] ?? 0);
+        $success = (int)($stats['success'] ?? 0);
+        $failed = (int)($stats['failed'] ?? 0);
+        $pending = (int)($stats['pending'] ?? 0);
+
+        $successRate = $total > 0 ? round(($success / $total) * 100, 2) : 0;
+        $failureRate = $total > 0 ? round(($failed / $total) * 100, 2) : 0;
+
+        // Get pending syncs older than 5 minutes (likely stale)
+        $stalePendingSQL = "SELECT COUNT(*) as count
+                            FROM gibbonAISyncLog
+                            WHERE status='pending'
+                            AND timestampCreated < DATE_SUB(NOW(), INTERVAL 5 MINUTE)";
+        $stalePending = $this->db()->selectOne($stalePendingSQL);
+
+        // Get recent failures (last hour)
+        $recentFailuresSQL = "SELECT COUNT(*) as count
+                              FROM gibbonAISyncLog
+                              WHERE status='failed'
+                              AND timestampCreated >= DATE_SUB(NOW(), INTERVAL 1 HOUR)";
+        $recentFailures = $this->db()->selectOne($recentFailuresSQL);
+
+        // Determine overall health status
+        $healthStatus = 'healthy';
+        $healthIssues = [];
+
+        if ($failureRate > 50) {
+            $healthStatus = 'critical';
+            $healthIssues[] = "High failure rate: {$failureRate}%";
+        } elseif ($failureRate > 25) {
+            $healthStatus = 'warning';
+            $healthIssues[] = "Elevated failure rate: {$failureRate}%";
+        }
+
+        if (($stalePending['count'] ?? 0) > 10) {
+            $healthStatus = $healthStatus === 'critical' ? 'critical' : 'warning';
+            $healthIssues[] = "Stale pending syncs detected: {$stalePending['count']}";
+        }
+
+        if (($recentFailures['count'] ?? 0) > 20) {
+            $healthStatus = $healthStatus === 'critical' ? 'critical' : 'warning';
+            $healthIssues[] = "High recent failure rate: {$recentFailures['count']} in last hour";
+        }
+
+        return [
+            'overall' => [
+                'status' => $healthStatus,
+                'issues' => $healthIssues,
+                'total' => $total,
+                'pending' => $pending,
+                'success' => $success,
+                'failed' => $failed,
+                'permanentlyFailed' => (int)($stats['permanentlyFailed'] ?? 0),
+                'successRate' => $successRate,
+                'failureRate' => $failureRate,
+            ],
+            'performance' => [
+                'avgRetriesUntilSuccess' => round((float)($stats['avgRetriesUntilSuccess'] ?? 0), 2),
+                'maxRetryCount' => (int)($stats['maxRetryCount'] ?? 0),
+                'stalePending' => (int)($stalePending['count'] ?? 0),
+                'recentFailures' => (int)($recentFailures['count'] ?? 0),
+            ],
+            'timeline' => [
+                'oldestSync' => $stats['oldestSync'] ?? null,
+                'newestSync' => $stats['newestSync'] ?? null,
+                'dateFrom' => $dateFrom,
+                'dateTo' => $dateTo,
+            ],
+        ];
+    }
+
+    /**
      * Check if an entity has a pending sync.
      *
      * @param string $entityType Entity type

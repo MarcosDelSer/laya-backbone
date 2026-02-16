@@ -13,6 +13,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.auth import security, verify_token
+from app.auth.dependencies import get_current_user as _get_current_user
 from app.middleware.auth import (
     get_current_user_multi_source as _get_current_user_multi_source,
     get_optional_user_multi_source as _get_optional_user_multi_source,
@@ -20,6 +21,7 @@ from app.middleware.auth import (
 )
 
 
+# Re-export get_current_user from auth.dependencies for backward compatibility
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict[str, Any]:
@@ -45,7 +47,7 @@ async def get_current_user(
         async def protected_route(current_user: dict = Depends(get_current_user)):
             return {"user": current_user["sub"]}
     """
-    return await verify_token(credentials)
+    return await _get_current_user(credentials)
 
 
 async def get_optional_user(

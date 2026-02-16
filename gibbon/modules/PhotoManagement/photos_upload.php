@@ -23,6 +23,8 @@ use Gibbon\Forms\Form;
 use Gibbon\FileUploader;
 use Gibbon\Services\Format;
 use Gibbon\Module\PhotoManagement\Domain\PhotoGateway;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -41,6 +43,14 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_upl
     $maxSizeMB = $settingGateway->getSettingByScope('Photo Management', 'photoMaxSizeMB') ?? 10;
     $allowedTypes = $settingGateway->getSettingByScope('Photo Management', 'photoAllowedTypes') ?? 'jpg,jpeg,png,gif';
     $defaultShareWithParent = $settingGateway->getSettingByScope('Photo Management', 'photoDefaultShareWithParent') ?? 'Y';
+
+    // Get AI Sync service for webhook notifications
+    try {
+        $settingGateway = $container->get(SettingGateway::class);
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
 
     // Handle form submission
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -132,6 +142,26 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_upl
             $URL .= '&return=error2';
             header("Location: {$URL}");
             exit;
+        }
+
+        // Trigger webhook for AI sync
+        if ($aiSyncService !== null) {
+            try {
+                $photoData = [
+                    'gibbonPhotoUploadID' => $photoID,
+                    'gibbonSchoolYearID' => $gibbonSchoolYearID,
+                    'filename' => $filename,
+                    'filePath' => $filePath,
+                    'caption' => $caption,
+                    'mimeType' => $mimeType,
+                    'fileSize' => $fileSize,
+                    'uploadedByID' => $gibbonPersonID,
+                    'sharedWithParent' => $sharedWithParent,
+                ];
+                $aiSyncService->syncPhotoUpload($photoID, $photoData);
+            } catch (Exception $e) {
+                // Silently fail - don't break UX if webhook fails
+            }
         }
 
         // Success - redirect to tagging page
