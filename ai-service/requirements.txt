@@ -10,6 +10,7 @@ alembic>=1.13.0
 
 # Authentication
 PyJWT>=2.8.0
+passlib[bcrypt]>=1.7.4
 
 # HTTP client
 httpx>=0.26.0
