@@ -391,6 +391,168 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
+// Message Quality Types
+// ============================================================================
+
+/**
+ * Types of quality issues detected in messages.
+ * Based on Quebec 'Bonne Message' communication standards.
+ */
+export type QualityIssue =
+  | 'accusatory_you'
+  | 'judgmental_label'
+  | 'blame_shame'
+  | 'exaggeration'
+  | 'alarmist'
+  | 'comparison'
+  | 'negative_tone'
+  | 'missing_positive'
+  | 'missing_solution'
+  | 'multiple_objectives';
+
+/**
+ * Severity levels for quality issues.
+ */
+export type IssueSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * Context types for messages being analyzed.
+ */
+export type MessageContext =
+  | 'daily_report'
+  | 'incident_report'
+  | 'milestone_update'
+  | 'general_update'
+  | 'behavior_concern'
+  | 'health_update';
+
+/**
+ * Supported languages for message analysis.
+ * Quebec compliance requires both English and French support.
+ */
+export type MessageLanguage = 'en' | 'fr';
+
+/**
+ * Categories for message templates.
+ */
+export type TemplateCategory =
+  | 'positive_opening'
+  | 'factual_observation'
+  | 'solution_oriented'
+  | 'full_message'
+  | 'behavior_concern'
+  | 'milestone_celebration';
+
+/**
+ * Detailed information about a detected quality issue.
+ */
+export interface QualityIssueDetail {
+  issueType: QualityIssue;
+  severity: IssueSeverity;
+  description: string;
+  originalText: string;
+  positionStart: number;
+  positionEnd: number;
+  suggestion?: string;
+}
+
+/**
+ * A suggested rewrite for improving message quality.
+ * Implements 'I' language transformation and sandwich method.
+ */
+export interface RewriteSuggestion {
+  originalText: string;
+  suggestedText: string;
+  explanation: string;
+  usesILanguage: boolean;
+  hasSandwichStructure: boolean;
+  confidenceScore: number;
+}
+
+/**
+ * Request payload for analyzing message quality.
+ */
+export interface MessageAnalysisRequest {
+  messageText: string;
+  language?: MessageLanguage;
+  context?: MessageContext;
+  childId?: string;
+  includeRewrites?: boolean;
+}
+
+/**
+ * Response payload for message quality analysis.
+ */
+export interface MessageAnalysisResponse {
+  id: string;
+  messageText: string;
+  language: MessageLanguage;
+  qualityScore: number;
+  isAcceptable: boolean;
+  issues: QualityIssueDetail[];
+  rewriteSuggestions: RewriteSuggestion[];
+  hasPositiveOpening: boolean;
+  hasFactualBasis: boolean;
+  hasSolutionFocus: boolean;
+  analysisNotes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Request payload for creating a message template.
+ */
+export interface MessageTemplateRequest {
+  title: string;
+  content: string;
+  category: TemplateCategory;
+  language?: MessageLanguage;
+  description?: string;
+}
+
+/**
+ * Message template response.
+ */
+export interface MessageTemplateResponse {
+  id: string;
+  title: string;
+  content: string;
+  category: TemplateCategory;
+  language: MessageLanguage;
+  description?: string;
+  isSystem: boolean;
+  usageCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Request payload for creating a training example.
+ */
+export interface TrainingExampleRequest {
+  originalMessage: string;
+  improvedMessage: string;
+  issuesDemonstrated: QualityIssue[];
+  explanation: string;
+  language?: MessageLanguage;
+}
+
+/**
+ * Training example response.
+ */
+export interface TrainingExampleResponse {
+  id: string;
+  originalMessage: string;
+  improvedMessage: string;
+  issuesDemonstrated: QualityIssue[];
+  explanation: string;
+  language: MessageLanguage;
+  difficultyLevel: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ============================================================================
 // API Response Types
 // ============================================================================
 
