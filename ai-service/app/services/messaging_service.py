@@ -20,8 +20,10 @@ from app.models.messaging import (
     NotificationPreference,
 )
 from app.schemas.messaging import (
+    AttachmentCreate,
     AttachmentResponse,
     MessageContentType,
+    MessageCreate,
     MessageResponse,
     SenderType,
     ThreadCreate,
@@ -367,6 +369,449 @@ class MessagingService:
         return await self.update_thread(thread_id, update_request, user_id)
 
     # =========================================================================
+    # Message Operations
+    # =========================================================================
+
+    async def send_message(
+        self,
+        thread_id: UUID,
+        request: MessageCreate,
+        sender_id: UUID,
+        sender_type: SenderType,
+    ) -> MessageResponse:
+        """Send a new message in a thread.
+
+        Creates a new message within an existing thread. Validates that the
+        sender has permission to post in the thread and creates any attachments.
+
+        Args:
+            thread_id: Unique identifier of the thread
+            request: The message creation request with content and attachments
+            sender_id: ID of the user sending the message
+            sender_type: Type of the user sending the message
+
+        Returns:
+            MessageResponse with the created message data
+
+        Raises:
+            ThreadNotFoundError: When the thread is not found
+            UnauthorizedAccessError: When the user doesn't have access
+            InvalidThreadError: When the thread is archived
+        """
+        # Get the thread
+        query = select(MessageThread).where(
+            cast(MessageThread.id, String) == str(thread_id)
+        )
+        result = await self.db.execute(query)
+        thread = result.scalar_one_or_none()
+
+        if not thread:
+            raise ThreadNotFoundError(f"Thread with ID {thread_id} not found")
+
+        # Verify user has access to the thread
+        if not self._user_has_thread_access(thread, sender_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to post in this thread"
+            )
+
+        # Check thread is active
+        if not thread.is_active:
+            raise InvalidThreadError("Cannot send message to archived thread")
+
+        # Create the message
+        message = Message(
+            thread_id=thread_id,
+            sender_id=sender_id,
+            sender_type=sender_type.value,
+            content=request.content,
+            content_type=request.content_type.value,
+            is_read=False,
+        )
+
+        self.db.add(message)
+        await self.db.commit()
+        await self.db.refresh(message)
+
+        # Create attachments if provided
+        if request.attachments:
+            for attachment_data in request.attachments:
+                attachment = MessageAttachment(
+                    message_id=message.id,
+                    file_url=attachment_data.file_url,
+                    file_type=attachment_data.file_type,
+                    file_name=attachment_data.file_name,
+                    file_size=attachment_data.file_size,
+                )
+                self.db.add(attachment)
+
+            await self.db.commit()
+
+        # Update thread's updated_at timestamp
+        thread.updated_at = datetime.utcnow()
+        await self.db.commit()
+
+        return await self._build_message_response(message, thread)
+
+    async def get_message(
+        self,
+        message_id: UUID,
+        user_id: UUID,
+    ) -> MessageResponse:
+        """Get a message by ID.
+
+        Retrieves a single message and validates user access.
+
+        Args:
+            message_id: Unique identifier of the message
+            user_id: ID of the user requesting the message
+
+        Returns:
+            MessageResponse with the message data
+
+        Raises:
+            MessageNotFoundError: When the message is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        # Query the message with its thread
+        message_query = select(Message).options(
+            selectinload(Message.attachments)
+        ).where(
+            cast(Message.id, String) == str(message_id)
+        )
+        result = await self.db.execute(message_query)
+        message = result.scalar_one_or_none()
+
+        if not message:
+            raise MessageNotFoundError(f"Message with ID {message_id} not found")
+
+        # Get the thread to verify access
+        thread_query = select(MessageThread).where(
+            cast(MessageThread.id, String) == str(message.thread_id)
+        )
+        thread_result = await self.db.execute(thread_query)
+        thread = thread_result.scalar_one_or_none()
+
+        if not thread:
+            raise ThreadNotFoundError(
+                f"Thread for message {message_id} not found"
+            )
+
+        # Verify user has access
+        if not self._user_has_thread_access(thread, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to view this message"
+            )
+
+        return await self._build_message_response(message, thread)
+
+    async def list_messages(
+        self,
+        thread_id: UUID,
+        user_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+        before: Optional[datetime] = None,
+        after: Optional[datetime] = None,
+    ) -> list[MessageResponse]:
+        """List messages in a thread.
+
+        Retrieves messages in a thread with optional filtering and pagination.
+        Messages are returned in chronological order (oldest first).
+
+        Args:
+            thread_id: Unique identifier of the thread
+            user_id: ID of the user requesting messages
+            limit: Maximum number of messages to return
+            offset: Number of messages to skip for pagination
+            before: Filter messages before this timestamp
+            after: Filter messages after this timestamp
+
+        Returns:
+            List of MessageResponse objects
+
+        Raises:
+            ThreadNotFoundError: When the thread is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        # Get the thread to verify access
+        thread_query = select(MessageThread).where(
+            cast(MessageThread.id, String) == str(thread_id)
+        )
+        thread_result = await self.db.execute(thread_query)
+        thread = thread_result.scalar_one_or_none()
+
+        if not thread:
+            raise ThreadNotFoundError(f"Thread with ID {thread_id} not found")
+
+        # Verify user has access
+        if not self._user_has_thread_access(thread, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to view messages in this thread"
+            )
+
+        # Build query
+        conditions = [cast(Message.thread_id, String) == str(thread_id)]
+
+        if before:
+            conditions.append(Message.created_at < before)
+        if after:
+            conditions.append(Message.created_at > after)
+
+        query = (
+            select(Message)
+            .options(selectinload(Message.attachments))
+            .where(and_(*conditions))
+            .order_by(Message.created_at.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+
+        result = await self.db.execute(query)
+        messages = result.scalars().all()
+
+        # Build responses
+        responses = []
+        for message in messages:
+            response = await self._build_message_response(message, thread)
+            responses.append(response)
+
+        return responses
+
+    async def mark_messages_as_read(
+        self,
+        message_ids: list[UUID],
+        user_id: UUID,
+    ) -> int:
+        """Mark messages as read.
+
+        Updates the is_read flag for the specified messages. Only marks
+        messages that the user has access to and that were not sent by them.
+
+        Args:
+            message_ids: List of message IDs to mark as read
+            user_id: ID of the user marking messages as read
+
+        Returns:
+            Number of messages marked as read
+        """
+        if not message_ids:
+            return 0
+
+        # Convert UUIDs to strings for comparison
+        message_id_strings = [str(mid) for mid in message_ids]
+
+        # Get messages the user has access to
+        messages_query = (
+            select(Message)
+            .where(
+                and_(
+                    cast(Message.id, String).in_(message_id_strings),
+                    Message.is_read == False,  # noqa: E712
+                    cast(Message.sender_id, String) != str(user_id),
+                )
+            )
+        )
+        result = await self.db.execute(messages_query)
+        messages = result.scalars().all()
+
+        # Verify access for each message
+        marked_count = 0
+        for message in messages:
+            # Get the thread
+            thread_query = select(MessageThread).where(
+                cast(MessageThread.id, String) == str(message.thread_id)
+            )
+            thread_result = await self.db.execute(thread_query)
+            thread = thread_result.scalar_one_or_none()
+
+            if thread and self._user_has_thread_access(thread, user_id):
+                message.is_read = True
+                marked_count += 1
+
+        if marked_count > 0:
+            await self.db.commit()
+
+        return marked_count
+
+    async def mark_thread_as_read(
+        self,
+        thread_id: UUID,
+        user_id: UUID,
+    ) -> int:
+        """Mark all messages in a thread as read.
+
+        Updates the is_read flag for all unread messages in a thread
+        that were not sent by the user.
+
+        Args:
+            thread_id: Unique identifier of the thread
+            user_id: ID of the user marking messages as read
+
+        Returns:
+            Number of messages marked as read
+
+        Raises:
+            ThreadNotFoundError: When the thread is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        # Get the thread to verify access
+        thread_query = select(MessageThread).where(
+            cast(MessageThread.id, String) == str(thread_id)
+        )
+        thread_result = await self.db.execute(thread_query)
+        thread = thread_result.scalar_one_or_none()
+
+        if not thread:
+            raise ThreadNotFoundError(f"Thread with ID {thread_id} not found")
+
+        if not self._user_has_thread_access(thread, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this thread"
+            )
+
+        # Update all unread messages not sent by the user
+        stmt = (
+            update(Message)
+            .where(
+                and_(
+                    cast(Message.thread_id, String) == str(thread_id),
+                    Message.is_read == False,  # noqa: E712
+                    cast(Message.sender_id, String) != str(user_id),
+                )
+            )
+            .values(is_read=True)
+        )
+
+        result = await self.db.execute(stmt)
+        await self.db.commit()
+
+        return result.rowcount
+
+    async def delete_message(
+        self,
+        message_id: UUID,
+        user_id: UUID,
+    ) -> bool:
+        """Delete a message.
+
+        Removes a message from a thread. Only the sender can delete their
+        own messages.
+
+        Args:
+            message_id: Unique identifier of the message
+            user_id: ID of the user deleting the message
+
+        Returns:
+            True if the message was deleted
+
+        Raises:
+            MessageNotFoundError: When the message is not found
+            UnauthorizedAccessError: When the user is not the sender
+        """
+        # Query the message
+        message_query = select(Message).where(
+            cast(Message.id, String) == str(message_id)
+        )
+        result = await self.db.execute(message_query)
+        message = result.scalar_one_or_none()
+
+        if not message:
+            raise MessageNotFoundError(f"Message with ID {message_id} not found")
+
+        # Verify user is the sender
+        if str(message.sender_id) != str(user_id):
+            raise UnauthorizedAccessError(
+                "Only the message sender can delete the message"
+            )
+
+        # Delete attachments first
+        attachments_query = select(MessageAttachment).where(
+            cast(MessageAttachment.message_id, String) == str(message_id)
+        )
+        attachments_result = await self.db.execute(attachments_query)
+        attachments = attachments_result.scalars().all()
+
+        for attachment in attachments:
+            await self.db.delete(attachment)
+
+        # Delete the message
+        await self.db.delete(message)
+        await self.db.commit()
+
+        return True
+
+    async def get_unread_count(
+        self,
+        user_id: UUID,
+        child_id: Optional[UUID] = None,
+    ) -> UnreadCountResponse:
+        """Get unread message count for a user.
+
+        Returns the total number of unread messages and the number of
+        threads with unread messages.
+
+        Args:
+            user_id: ID of the user to get unread count for
+            child_id: Optional filter by child ID
+
+        Returns:
+            UnreadCountResponse with unread counts
+        """
+        # Get all threads the user participates in
+        thread_conditions = [
+            or_(
+                cast(MessageThread.created_by, String) == str(user_id),
+                MessageThread.participants.contains([{"user_id": str(user_id)}]),
+            ),
+            MessageThread.is_active == True,  # noqa: E712
+        ]
+
+        if child_id:
+            thread_conditions.append(
+                cast(MessageThread.child_id, String) == str(child_id)
+            )
+
+        threads_query = select(MessageThread.id).where(and_(*thread_conditions))
+        threads_result = await self.db.execute(threads_query)
+        thread_ids = [str(t[0]) for t in threads_result.fetchall()]
+
+        if not thread_ids:
+            return UnreadCountResponse(
+                total_unread=0,
+                threads_with_unread=0,
+            )
+
+        # Count total unread messages
+        total_unread_query = select(func.count(Message.id)).where(
+            and_(
+                cast(Message.thread_id, String).in_(thread_ids),
+                Message.is_read == False,  # noqa: E712
+                cast(Message.sender_id, String) != str(user_id),
+            )
+        )
+        total_result = await self.db.execute(total_unread_query)
+        total_unread = total_result.scalar() or 0
+
+        # Count threads with unread messages
+        threads_with_unread_query = (
+            select(func.count(func.distinct(Message.thread_id)))
+            .where(
+                and_(
+                    cast(Message.thread_id, String).in_(thread_ids),
+                    Message.is_read == False,  # noqa: E712
+                    cast(Message.sender_id, String) != str(user_id),
+                )
+            )
+        )
+        threads_result = await self.db.execute(threads_with_unread_query)
+        threads_with_unread = threads_result.scalar() or 0
+
+        return UnreadCountResponse(
+            total_unread=total_unread,
+            threads_with_unread=threads_with_unread,
+        )
+
+    # =========================================================================
     # Helper Methods
     # =========================================================================
 
@@ -397,6 +842,68 @@ class MessagingService:
                     return True
 
         return False
+
+    async def _build_message_response(
+        self,
+        message: Message,
+        thread: MessageThread,
+    ) -> MessageResponse:
+        """Build a MessageResponse from a Message model.
+
+        Args:
+            message: The message model
+            thread: The thread the message belongs to
+
+        Returns:
+            MessageResponse with all message data
+        """
+        # Load attachments if not already loaded
+        if not hasattr(message, 'attachments') or message.attachments is None:
+            attachments_query = select(MessageAttachment).where(
+                cast(MessageAttachment.message_id, String) == str(message.id)
+            )
+            attachments_result = await self.db.execute(attachments_query)
+            attachments = attachments_result.scalars().all()
+        else:
+            attachments = message.attachments
+
+        # Build attachment responses
+        attachment_responses = []
+        for attachment in attachments:
+            attachment_responses.append(
+                AttachmentResponse(
+                    id=attachment.id,
+                    message_id=attachment.message_id,
+                    file_url=attachment.file_url,
+                    file_type=attachment.file_type,
+                    file_name=attachment.file_name,
+                    file_size=attachment.file_size,
+                    created_at=attachment.created_at,
+                    updated_at=None,
+                )
+            )
+
+        # Find sender display name from thread participants
+        sender_name = None
+        if thread.participants:
+            for p in thread.participants:
+                if p.get("user_id") == str(message.sender_id):
+                    sender_name = p.get("display_name")
+                    break
+
+        return MessageResponse(
+            id=message.id,
+            thread_id=message.thread_id,
+            sender_id=message.sender_id,
+            sender_type=SenderType(message.sender_type),
+            sender_name=sender_name,
+            content=message.content,
+            content_type=MessageContentType(message.content_type),
+            is_read=message.is_read,
+            attachments=attachment_responses,
+            created_at=message.created_at,
+            updated_at=message.updated_at,
+        )
 
     async def _build_thread_response(
         self,
