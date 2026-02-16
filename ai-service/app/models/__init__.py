@@ -9,6 +9,7 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
+    portfolio: Models for educational portfolio and documentation
 """
 
 from app.models.base import Base
@@ -37,6 +38,18 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
+from app.models.portfolio import (
+    Milestone,
+    MilestoneCategory,
+    MilestoneStatus,
+    Observation,
+    ObservationType,
+    PortfolioItem,
+    PortfolioItemType,
+    PrivacyLevel,
+    WorkSample,
+    WorkSampleType,
+)
 
 __all__ = [
     "Base",
@@ -61,4 +74,15 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
+    # Portfolio models
+    "PortfolioItem",
+    "PortfolioItemType",
+    "PrivacyLevel",
+    "Observation",
+    "ObservationType",
+    "Milestone",
+    "MilestoneCategory",
+    "MilestoneStatus",
+    "WorkSample",
+    "WorkSampleType",
 ]
