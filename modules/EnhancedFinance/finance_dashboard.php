@@ -33,6 +33,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
  * - YTD (Year-to-Date) revenue with monthly breakdown
  * - Outstanding balances by family
  * - Payment method breakdown with percentages
+ * - Aging summary widget (30/60/90+ day overdue totals with drill-down links)
  *
  * @package    Gibbon\Module\EnhancedFinance
  * @author     LAYA
@@ -111,6 +112,9 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
     // Get outstanding balances by family
     $outstandingByFamily = $invoiceGateway->selectOutstandingByFamily($gibbonSchoolYearID, 10)->fetchAll();
     $outstandingFamilySummary = $invoiceGateway->selectOutstandingByFamilySummary($gibbonSchoolYearID);
+
+    // Get aging summary for overdue invoices (30/60/90+ days)
+    $agingSummary = $invoiceGateway->selectAgingSummaryByYear($gibbonSchoolYearID);
 
     // Check if it's tax season (January-February for previous year's RL-24)
     $currentMonth = (int) date('m');
@@ -301,6 +305,131 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
         echo '</a>';
         echo '</div>';
         echo '</div>';
+    }
+
+    // Aging Summary Widget
+    $totalOverdueCount = (int) ($agingSummary['total_overdue_count'] ?? 0);
+    if ($totalOverdueCount > 0) {
+        $count1_30 = (int) ($agingSummary['count_1_30'] ?? 0);
+        $count31_60 = (int) ($agingSummary['count_31_60'] ?? 0);
+        $count61_90 = (int) ($agingSummary['count_61_90'] ?? 0);
+        $count90Plus = (int) ($agingSummary['count_90_plus'] ?? 0);
+        $amount1_30 = (float) ($agingSummary['amount_1_30'] ?? 0);
+        $amount31_60 = (float) ($agingSummary['amount_31_60'] ?? 0);
+        $amount61_90 = (float) ($agingSummary['amount_61_90'] ?? 0);
+        $amount90Plus = (float) ($agingSummary['amount_90_plus'] ?? 0);
+        $totalOverdueAmount = (float) ($agingSummary['total_overdue_amount'] ?? 0);
+
+        echo '<div class="bg-white rounded-lg shadow mb-6">';
+        echo '<div class="px-5 py-4 border-b flex justify-between items-center">';
+        echo '<h3 class="text-lg font-semibold">';
+        echo '<span class="text-red-600 mr-2">⏰</span>';
+        echo __('Aging Summary');
+        echo '</h3>';
+        echo '<span class="bg-red-100 text-red-800 text-sm px-3 py-1 rounded-full font-semibold">' . Format::currency($totalOverdueAmount) . '</span>';
+        echo '</div>';
+        echo '<div class="p-5">';
+
+        // Aging buckets grid
+        echo '<div class="grid grid-cols-2 md:grid-cols-4 gap-4">';
+
+        // 1-30 Days
+        $bgColor1_30 = $count1_30 > 0 ? 'bg-yellow-50' : 'bg-gray-50';
+        $textColor1_30 = $count1_30 > 0 ? 'text-yellow-700' : 'text-gray-400';
+        $labelColor1_30 = $count1_30 > 0 ? 'text-yellow-600' : 'text-gray-400';
+        echo '<div class="' . $bgColor1_30 . ' rounded-lg p-4 text-center">';
+        echo '<div class="text-sm font-medium ' . $labelColor1_30 . ' mb-1">' . __('1-30 Days') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $textColor1_30 . '">' . Format::currency($amount1_30) . '</div>';
+        echo '<div class="text-xs ' . $labelColor1_30 . ' mt-1">' . sprintf(__('%d invoice(s)'), $count1_30) . '</div>';
+        if ($count1_30 > 0) {
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Overdue&agingMin=1&agingMax=30" class="text-xs text-yellow-700 hover:underline mt-2 inline-block">' . __('View') . ' &rarr;</a>';
+        }
+        echo '</div>';
+
+        // 31-60 Days
+        $bgColor31_60 = $count31_60 > 0 ? 'bg-orange-50' : 'bg-gray-50';
+        $textColor31_60 = $count31_60 > 0 ? 'text-orange-700' : 'text-gray-400';
+        $labelColor31_60 = $count31_60 > 0 ? 'text-orange-600' : 'text-gray-400';
+        echo '<div class="' . $bgColor31_60 . ' rounded-lg p-4 text-center">';
+        echo '<div class="text-sm font-medium ' . $labelColor31_60 . ' mb-1">' . __('31-60 Days') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $textColor31_60 . '">' . Format::currency($amount31_60) . '</div>';
+        echo '<div class="text-xs ' . $labelColor31_60 . ' mt-1">' . sprintf(__('%d invoice(s)'), $count31_60) . '</div>';
+        if ($count31_60 > 0) {
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Overdue&agingMin=31&agingMax=60" class="text-xs text-orange-700 hover:underline mt-2 inline-block">' . __('View') . ' &rarr;</a>';
+        }
+        echo '</div>';
+
+        // 61-90 Days
+        $bgColor61_90 = $count61_90 > 0 ? 'bg-red-50' : 'bg-gray-50';
+        $textColor61_90 = $count61_90 > 0 ? 'text-red-700' : 'text-gray-400';
+        $labelColor61_90 = $count61_90 > 0 ? 'text-red-600' : 'text-gray-400';
+        echo '<div class="' . $bgColor61_90 . ' rounded-lg p-4 text-center">';
+        echo '<div class="text-sm font-medium ' . $labelColor61_90 . ' mb-1">' . __('61-90 Days') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $textColor61_90 . '">' . Format::currency($amount61_90) . '</div>';
+        echo '<div class="text-xs ' . $labelColor61_90 . ' mt-1">' . sprintf(__('%d invoice(s)'), $count61_90) . '</div>';
+        if ($count61_90 > 0) {
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Overdue&agingMin=61&agingMax=90" class="text-xs text-red-700 hover:underline mt-2 inline-block">' . __('View') . ' &rarr;</a>';
+        }
+        echo '</div>';
+
+        // 90+ Days
+        $bgColor90Plus = $count90Plus > 0 ? 'bg-red-100' : 'bg-gray-50';
+        $textColor90Plus = $count90Plus > 0 ? 'text-red-800' : 'text-gray-400';
+        $labelColor90Plus = $count90Plus > 0 ? 'text-red-700' : 'text-gray-400';
+        echo '<div class="' . $bgColor90Plus . ' rounded-lg p-4 text-center">';
+        echo '<div class="text-sm font-medium ' . $labelColor90Plus . ' mb-1">' . __('90+ Days') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $textColor90Plus . '">' . Format::currency($amount90Plus) . '</div>';
+        echo '<div class="text-xs ' . $labelColor90Plus . ' mt-1">' . sprintf(__('%d invoice(s)'), $count90Plus) . '</div>';
+        if ($count90Plus > 0) {
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Overdue&agingMin=91" class="text-xs text-red-800 hover:underline mt-2 inline-block">' . __('View') . ' &rarr;</a>';
+        }
+        echo '</div>';
+
+        echo '</div>'; // End aging buckets grid
+
+        // Visual aging bar
+        if ($totalOverdueAmount > 0) {
+            $pct1_30 = round(($amount1_30 / $totalOverdueAmount) * 100, 1);
+            $pct31_60 = round(($amount31_60 / $totalOverdueAmount) * 100, 1);
+            $pct61_90 = round(($amount61_90 / $totalOverdueAmount) * 100, 1);
+            $pct90Plus = round(($amount90Plus / $totalOverdueAmount) * 100, 1);
+
+            echo '<div class="mt-4 pt-4 border-t">';
+            echo '<div class="text-sm text-gray-600 mb-2">' . __('Aging Distribution') . '</div>';
+            echo '<div class="flex h-4 rounded-full overflow-hidden">';
+            if ($pct1_30 > 0) {
+                echo '<div class="bg-yellow-400" style="width: ' . $pct1_30 . '%" title="' . __('1-30 Days') . ': ' . $pct1_30 . '%"></div>';
+            }
+            if ($pct31_60 > 0) {
+                echo '<div class="bg-orange-400" style="width: ' . $pct31_60 . '%" title="' . __('31-60 Days') . ': ' . $pct31_60 . '%"></div>';
+            }
+            if ($pct61_90 > 0) {
+                echo '<div class="bg-red-400" style="width: ' . $pct61_90 . '%" title="' . __('61-90 Days') . ': ' . $pct61_90 . '%"></div>';
+            }
+            if ($pct90Plus > 0) {
+                echo '<div class="bg-red-600" style="width: ' . $pct90Plus . '%" title="' . __('90+ Days') . ': ' . $pct90Plus . '%"></div>';
+            }
+            echo '</div>';
+
+            // Legend
+            echo '<div class="flex flex-wrap justify-center gap-4 mt-2 text-xs">';
+            echo '<span class="flex items-center"><span class="w-3 h-3 bg-yellow-400 rounded mr-1"></span>' . __('1-30 Days') . '</span>';
+            echo '<span class="flex items-center"><span class="w-3 h-3 bg-orange-400 rounded mr-1"></span>' . __('31-60 Days') . '</span>';
+            echo '<span class="flex items-center"><span class="w-3 h-3 bg-red-400 rounded mr-1"></span>' . __('61-90 Days') . '</span>';
+            echo '<span class="flex items-center"><span class="w-3 h-3 bg-red-600 rounded mr-1"></span>' . __('90+ Days') . '</span>';
+            echo '</div>';
+            echo '</div>';
+        }
+
+        // Link to full aging report
+        echo '<div class="mt-4 text-center">';
+        echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_report_aging.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '" class="text-blue-600 hover:underline text-sm font-medium">';
+        echo __('View Full Aging Report') . ' &rarr;';
+        echo '</a>';
+        echo '</div>';
+
+        echo '</div>'; // End p-5
+        echo '</div>'; // End card
     }
 
     // Main content grid

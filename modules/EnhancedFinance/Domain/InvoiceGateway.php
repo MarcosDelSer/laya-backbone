@@ -424,6 +424,38 @@ class InvoiceGateway extends QueryableGateway
     }
 
     /**
+     * Get aging summary for overdue invoices by school year.
+     * Returns counts and amounts grouped by 30, 60, 90+ day aging buckets.
+     *
+     * @param int $gibbonSchoolYearID
+     * @return array
+     */
+    public function selectAgingSummaryByYear($gibbonSchoolYearID)
+    {
+        $data = [
+            'gibbonSchoolYearID' => $gibbonSchoolYearID,
+            'today' => date('Y-m-d')
+        ];
+        $sql = "SELECT
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_1_30,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 1 AND 30 THEN (totalAmount - paidAmount) ELSE 0 END) AS amount_1_30,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 31 AND 60 THEN 1 ELSE 0 END) AS count_31_60,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 31 AND 60 THEN (totalAmount - paidAmount) ELSE 0 END) AS amount_31_60,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_61_90,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 61 AND 90 THEN (totalAmount - paidAmount) ELSE 0 END) AS amount_61_90,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) > 90 THEN 1 ELSE 0 END) AS count_90_plus,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) > 90 THEN (totalAmount - paidAmount) ELSE 0 END) AS amount_90_plus,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) > 0 THEN 1 ELSE 0 END) AS total_overdue_count,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) > 0 THEN (totalAmount - paidAmount) ELSE 0 END) AS total_overdue_amount
+            FROM gibbonEnhancedFinanceInvoice
+            WHERE gibbonSchoolYearID = :gibbonSchoolYearID
+            AND status IN ('Issued', 'Partial')
+            AND dueDate < :today";
+
+        return $this->db()->selectOne($sql, $data);
+    }
+
+    /**
      * Get filter rules for invoice queries.
      *
      * @return array
