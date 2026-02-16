@@ -19,11 +19,31 @@ from uuid import UUID, uuid4
 import boto3
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
+from PIL import Image
 from sqlalchemy import cast, func, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+
+
+# Thumbnail size presets in pixels
+THUMBNAIL_SIZE_PIXELS = {
+    "small": 64,
+    "medium": 128,
+    "large": 256,
+}
+
+# Image MIME types that support thumbnail generation
+IMAGE_MIME_TYPES = frozenset({
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+})
+
+# Thread pool for running sync image processing operations
+_image_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="image_")
 from app.models.storage import (
     File,
     FileThumbnail,
@@ -482,6 +502,226 @@ class StorageService:
         await self.db.refresh(file_record)
 
         return file_record
+
+    async def generate_thumbnail(
+        self,
+        file_id: UUID,
+        size: ThumbnailSize,
+        owner_id: Optional[UUID] = None,
+    ) -> FileThumbnail:
+        """Generate a thumbnail for an image file.
+
+        Creates a resized version of the image and stores it alongside
+        the original file. Thumbnails maintain aspect ratio.
+
+        Args:
+            file_id: UUID of the file to generate thumbnail for.
+            size: Thumbnail size preset (small, medium, large).
+            owner_id: Optional owner ID for access control.
+
+        Returns:
+            The created FileThumbnail record.
+
+        Raises:
+            FileNotFoundError: If the file does not exist or is not accessible.
+            InvalidFileTypeError: If the file is not an image.
+            StorageServiceError: If thumbnail generation fails.
+        """
+        # Get the file record
+        file_record = await self.get_file_by_id(file_id)
+
+        if file_record is None:
+            raise FileNotFoundError(f"File with ID {file_id} not found")
+
+        # Check access permissions
+        if owner_id is not None and not file_record.is_public:
+            if file_record.owner_id != owner_id:
+                raise FileNotFoundError(f"File with ID {file_id} not found")
+
+        # Verify file is an image
+        if file_record.content_type not in IMAGE_MIME_TYPES:
+            raise InvalidFileTypeError(
+                f"Cannot generate thumbnail for non-image file type: "
+                f"{file_record.content_type}"
+            )
+
+        # Check if thumbnail already exists for this size
+        for thumb in file_record.thumbnails:
+            if thumb.size == size:
+                return thumb
+
+        # Get thumbnail dimensions
+        target_size = THUMBNAIL_SIZE_PIXELS.get(size.value, 128)
+
+        # Download the original file
+        if file_record.storage_backend == StorageBackend.LOCAL:
+            file_content = await self._download_from_local(file_record.storage_path)
+        else:
+            file_content = await self._download_from_s3(file_record.storage_path)
+
+        # Generate thumbnail in thread pool (PIL is synchronous)
+        loop = asyncio.get_event_loop()
+        thumbnail_content, width, height = await loop.run_in_executor(
+            _image_executor,
+            partial(
+                self._create_thumbnail_sync,
+                file_content,
+                target_size,
+                file_record.content_type,
+            ),
+        )
+
+        # Generate thumbnail filename and path
+        base_filename = file_record.filename.rsplit(".", 1)[0]
+        thumb_extension = self._get_thumbnail_extension(file_record.content_type)
+        thumb_filename = f"{base_filename}_thumb_{size.value}{thumb_extension}"
+
+        # Store thumbnail
+        if self._storage_backend == StorageBackend.LOCAL:
+            thumb_storage_path = await self._upload_to_local(
+                thumbnail_content, thumb_filename, file_record.owner_id
+            )
+        else:
+            thumb_storage_path = await self._upload_to_s3(
+                thumbnail_content,
+                thumb_filename,
+                file_record.owner_id,
+                file_record.content_type,
+            )
+
+        # Create thumbnail record
+        thumbnail = FileThumbnail(
+            file_id=file_id,
+            size=size,
+            width=width,
+            height=height,
+            storage_path=thumb_storage_path,
+        )
+        self.db.add(thumbnail)
+        await self.db.commit()
+        await self.db.refresh(thumbnail)
+
+        return thumbnail
+
+    async def generate_all_thumbnails(
+        self,
+        file_id: UUID,
+        owner_id: Optional[UUID] = None,
+    ) -> list[FileThumbnail]:
+        """Generate all thumbnail sizes for an image file.
+
+        Convenience method to generate small, medium, and large thumbnails
+        for a single image file.
+
+        Args:
+            file_id: UUID of the file to generate thumbnails for.
+            owner_id: Optional owner ID for access control.
+
+        Returns:
+            List of created FileThumbnail records.
+
+        Raises:
+            FileNotFoundError: If the file does not exist or is not accessible.
+            InvalidFileTypeError: If the file is not an image.
+        """
+        thumbnails = []
+        for size in ThumbnailSize:
+            thumb = await self.generate_thumbnail(file_id, size, owner_id)
+            thumbnails.append(thumb)
+        return thumbnails
+
+    def is_image_file(self, content_type: str) -> bool:
+        """Check if a content type is a supported image type.
+
+        Args:
+            content_type: MIME type to check.
+
+        Returns:
+            True if the content type supports thumbnail generation.
+        """
+        return content_type in IMAGE_MIME_TYPES
+
+    def _create_thumbnail_sync(
+        self,
+        image_content: bytes,
+        max_size: int,
+        content_type: str,
+    ) -> tuple[bytes, int, int]:
+        """Create a thumbnail from image content (synchronous).
+
+        This method runs in a thread pool to avoid blocking the event loop.
+
+        Args:
+            image_content: Original image as bytes.
+            max_size: Maximum dimension (width or height) for thumbnail.
+            content_type: MIME type of the original image.
+
+        Returns:
+            Tuple of (thumbnail_bytes, width, height).
+
+        Raises:
+            StorageServiceError: If image processing fails.
+        """
+        try:
+            # Open image from bytes
+            with Image.open(io.BytesIO(image_content)) as img:
+                # Convert RGBA to RGB for JPEG output if needed
+                if img.mode in ("RGBA", "P") and content_type == "image/jpeg":
+                    img = img.convert("RGB")
+
+                # Calculate new dimensions maintaining aspect ratio
+                original_width, original_height = img.size
+                ratio = min(max_size / original_width, max_size / original_height)
+                new_width = int(original_width * ratio)
+                new_height = int(original_height * ratio)
+
+                # Resize using high-quality resampling
+                thumbnail = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                # Save to bytes
+                output = io.BytesIO()
+                format_map = {
+                    "image/jpeg": "JPEG",
+                    "image/png": "PNG",
+                    "image/gif": "GIF",
+                    "image/webp": "WEBP",
+                }
+                img_format = format_map.get(content_type, "PNG")
+
+                # Set quality for lossy formats
+                save_kwargs = {}
+                if img_format in ("JPEG", "WEBP"):
+                    save_kwargs["quality"] = 85
+                    save_kwargs["optimize"] = True
+                elif img_format == "PNG":
+                    save_kwargs["optimize"] = True
+
+                thumbnail.save(output, format=img_format, **save_kwargs)
+                thumbnail_bytes = output.getvalue()
+
+                return thumbnail_bytes, new_width, new_height
+
+        except Exception as e:
+            raise StorageServiceError(
+                f"Failed to generate thumbnail: {str(e)}"
+            ) from e
+
+    def _get_thumbnail_extension(self, content_type: str) -> str:
+        """Get file extension for a thumbnail based on content type.
+
+        Args:
+            content_type: MIME type of the image.
+
+        Returns:
+            File extension including the dot (e.g., '.jpg').
+        """
+        extension_map = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+        }
+        return extension_map.get(content_type, ".png")
 
     def file_to_response(
         self,
