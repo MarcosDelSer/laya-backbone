@@ -9,6 +9,9 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
+
+Note: LLM models (LLMUsageLog, LLMCacheEntry) are located in app.llm.models
+to avoid circular imports. Import them directly from that module.
 """
 
 from app.models.base import Base
