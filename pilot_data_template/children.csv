@@ -1,0 +1,5 @@
+first_name,last_name,date_of_birth,gender,family_email,age_group,allergies,medical_notes,start_date
+Emma,Johnson,2022-03-15,Female,sarah.johnson@email.com,Toddlers,"Peanuts, Dairy",,2024-09-01
+Lucas,Dubois,2023-06-20,Male,marie.dubois@email.com,Infants,,Asthma - has inhaler,2024-09-01
+Sophie,Chen,2021-11-08,Female,lisa.chen@email.com,Preschool,,,2024-09-01
+Olivia,Garcia,2022-08-12,Female,anna.garcia@email.com,Toddlers,Eggs,,2024-09-01

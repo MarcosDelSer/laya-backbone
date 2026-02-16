@@ -16,7 +16,7 @@ import NapTrackingScreen from '../screens/NapTrackingScreen';
 import DiaperTrackingScreen from '../screens/DiaperTrackingScreen';
 import PhotoCaptureScreen from '../screens/PhotoCaptureScreen';
 
-import type {RootStackParamList} from '../types';
+import type {MainTabParamList} from './types';
 
 /**
  * Tab icon properties
@@ -75,7 +75,7 @@ const TAB_ICONS = {
   PhotoCapture: '\u25CB', // Circle (camera)
 };
 
-const Tab = createBottomTabNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 /**
  * TabNavigator provides the main navigation structure for the teacher app.

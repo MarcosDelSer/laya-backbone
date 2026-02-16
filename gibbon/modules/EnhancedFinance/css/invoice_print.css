@@ -1,0 +1,678 @@
+/**
+ * Print-Friendly CSS for Invoice PDF Generation
+ * LAYA Kindergarten Platform - EnhancedFinance Module
+ *
+ * This stylesheet provides optimized print styles for invoice documents,
+ * ensuring professional appearance when printed from browsers.
+ *
+ * Features:
+ * - Optimized page layout and margins for print
+ * - Proper page break handling
+ * - Color preservation for branding elements
+ * - Print-specific element visibility control
+ * - Font and spacing optimization
+ * - Table styling for clean itemized lists
+ *
+ * Usage:
+ * Include this CSS in invoice pages or link it in the HTML head:
+ * <link rel="stylesheet" href="css/invoice_print.css" media="print">
+ *
+ * @version v1.0.00
+ * @since   v1.0.00
+ */
+
+/* =============================================
+   Print Page Setup
+   ============================================= */
+
+@media print {
+    /* Page configuration */
+    @page {
+        size: letter portrait; /* US Letter: 8.5" x 11" */
+        margin: 0.75in 0.5in; /* Top/Bottom: 0.75", Left/Right: 0.5" */
+    }
+
+    /* Reset and base styles */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+
+    body {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 10pt;
+        line-height: 1.5;
+        color: #000;
+        background: #fff;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* Container adjustments */
+    .page-container {
+        max-width: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* =============================================
+       Page Break Control
+       ============================================= */
+
+    /* Force page break before these elements */
+    .page-break,
+    .page-break-before {
+        page-break-before: always;
+        break-before: page;
+    }
+
+    /* Force page break after these elements */
+    .page-break-after {
+        page-break-after: always;
+        break-after: page;
+    }
+
+    /* Prevent page breaks inside these elements */
+    .invoice-header,
+    .invoice-title-section,
+    .customer-box,
+    .info-group,
+    .totals-section,
+    .payment-methods,
+    .notes-section,
+    table.items-table thead,
+    table.items-table tbody tr,
+    .no-break {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    /* Allow page breaks before these if needed */
+    .items-section,
+    .payment-section {
+        page-break-inside: auto;
+    }
+
+    /* Keep table rows together */
+    table.items-table tr {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    /* =============================================
+       Element Visibility Control
+       ============================================= */
+
+    /* Hide elements that shouldn't print */
+    .no-print,
+    .screen-only,
+    nav,
+    .navigation,
+    .sidebar,
+    button,
+    .btn,
+    .action-buttons,
+    .toolbar,
+    input[type="button"],
+    input[type="submit"],
+    .back-button,
+    .edit-button,
+    .delete-button {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* Show print-only elements */
+    .print-only {
+        display: block !important;
+        visibility: visible !important;
+    }
+
+    /* =============================================
+       Header and Branding
+       ============================================= */
+
+    .invoice-header {
+        display: table;
+        width: 100%;
+        margin-bottom: 24pt;
+        border-bottom: 2pt solid #4A90A4;
+        padding-bottom: 16pt;
+    }
+
+    .header-left,
+    .header-right {
+        display: table-cell;
+        vertical-align: top;
+    }
+
+    .header-left {
+        width: 50%;
+    }
+
+    .header-right {
+        width: 50%;
+        text-align: right;
+    }
+
+    /* Logo optimization */
+    .logo {
+        max-width: 150pt;
+        max-height: 80pt;
+        height: auto;
+        margin-bottom: 8pt;
+    }
+
+    .organization-name {
+        font-size: 16pt;
+        font-weight: bold;
+        color: #4A90A4;
+        margin-bottom: 4pt;
+    }
+
+    .organization-info {
+        font-size: 9pt;
+        color: #333;
+        line-height: 1.4;
+    }
+
+    /* =============================================
+       Invoice Title and Details
+       ============================================= */
+
+    .invoice-title-section {
+        margin: 20pt 0 16pt 0;
+    }
+
+    .invoice-title {
+        font-size: 24pt;
+        font-weight: bold;
+        color: #4A90A4;
+        letter-spacing: 0.5pt;
+        text-transform: uppercase;
+    }
+
+    .invoice-details {
+        display: table;
+        width: 100%;
+        margin-bottom: 24pt;
+    }
+
+    .details-left {
+        display: table-cell;
+        width: 60%;
+        vertical-align: top;
+        padding-right: 16pt;
+    }
+
+    .details-right {
+        display: table-cell;
+        width: 40%;
+        vertical-align: top;
+    }
+
+    .info-row {
+        margin-bottom: 6pt;
+        line-height: 1.4;
+    }
+
+    .info-row-label {
+        display: inline-block;
+        width: 100pt;
+        font-weight: bold;
+        color: #333;
+    }
+
+    /* =============================================
+       Customer Information Box
+       ============================================= */
+
+    .customer-box {
+        background-color: #f5f5f5 !important;
+        border: 1pt solid #ccc;
+        border-left: 3pt solid #4A90A4;
+        padding: 12pt;
+        margin-bottom: 24pt;
+        page-break-inside: avoid;
+    }
+
+    .customer-title {
+        font-weight: bold;
+        font-size: 11pt;
+        color: #4A90A4;
+        margin-bottom: 8pt;
+        text-transform: uppercase;
+    }
+
+    .customer-details {
+        font-size: 10pt;
+        line-height: 1.6;
+        color: #333;
+    }
+
+    /* =============================================
+       Itemized Services Table
+       ============================================= */
+
+    .items-section {
+        margin: 24pt 0;
+    }
+
+    .section-title {
+        font-size: 12pt;
+        font-weight: bold;
+        color: #4A90A4;
+        margin-bottom: 12pt;
+        text-transform: uppercase;
+        letter-spacing: 0.5pt;
+    }
+
+    table.items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 16pt;
+    }
+
+    /* Table header with background color */
+    table.items-table thead {
+        background-color: #4A90A4 !important;
+        color: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    table.items-table thead th {
+        padding: 10pt 8pt;
+        text-align: left;
+        font-weight: bold;
+        font-size: 9pt;
+        text-transform: uppercase;
+        letter-spacing: 0.5pt;
+        color: #fff !important;
+        background-color: #4A90A4 !important;
+    }
+
+    table.items-table th.align-center {
+        text-align: center;
+    }
+
+    table.items-table th.align-right {
+        text-align: right;
+    }
+
+    /* Table body rows */
+    table.items-table tbody tr {
+        border-bottom: 1pt solid #ddd;
+        page-break-inside: avoid;
+    }
+
+    /* Alternate row coloring for readability */
+    table.items-table tbody tr:nth-child(even) {
+        background-color: #f9f9f9 !important;
+    }
+
+    table.items-table tbody td {
+        padding: 8pt 8pt;
+        font-size: 10pt;
+        vertical-align: top;
+        color: #000;
+    }
+
+    table.items-table td.item-description {
+        width: 50%;
+    }
+
+    table.items-table td.item-quantity {
+        width: 15%;
+        text-align: center;
+    }
+
+    table.items-table td.item-unit-price {
+        width: 17.5%;
+        text-align: right;
+    }
+
+    table.items-table td.item-total {
+        width: 17.5%;
+        text-align: right;
+        font-weight: bold;
+    }
+
+    .item-description-text {
+        font-weight: 500;
+        color: #000;
+    }
+
+    /* =============================================
+       Totals Section
+       ============================================= */
+
+    .totals-section {
+        float: right;
+        width: 300pt;
+        margin-top: 16pt;
+        page-break-inside: avoid;
+    }
+
+    .totals-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .totals-table tr {
+        border-bottom: 1pt solid #ddd;
+    }
+
+    .totals-table td {
+        padding: 8pt;
+        font-size: 10pt;
+    }
+
+    .totals-label {
+        font-weight: bold;
+        color: #333;
+        text-align: left;
+    }
+
+    .totals-amount {
+        text-align: right;
+        font-weight: 500;
+        color: #000;
+    }
+
+    .tax-details {
+        font-size: 8pt;
+        color: #666;
+    }
+
+    /* Total row with background color */
+    .total-final-row {
+        background-color: #4A90A4 !important;
+        color: #fff !important;
+        font-size: 12pt;
+        font-weight: bold;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .total-final-row td {
+        padding: 12pt 8pt;
+        color: #fff !important;
+        background-color: #4A90A4 !important;
+    }
+
+    .spacer-row {
+        height: 8pt;
+        border: none;
+    }
+
+    /* =============================================
+       Payment Information
+       ============================================= */
+
+    .payment-section {
+        clear: both;
+        margin-top: 48pt;
+        padding-top: 24pt;
+        border-top: 1pt solid #ddd;
+        page-break-inside: auto;
+    }
+
+    .payment-title {
+        font-size: 12pt;
+        font-weight: bold;
+        color: #4A90A4;
+        margin-bottom: 12pt;
+        text-transform: uppercase;
+    }
+
+    .payment-content {
+        font-size: 10pt;
+        line-height: 1.6;
+        color: #333;
+        margin-bottom: 12pt;
+    }
+
+    .payment-methods {
+        background-color: #f5f5f5 !important;
+        padding: 12pt;
+        border-radius: 2pt;
+        margin-top: 12pt;
+        page-break-inside: avoid;
+    }
+
+    .payment-methods-title {
+        font-weight: bold;
+        color: #4A90A4;
+        margin-bottom: 6pt;
+    }
+
+    /* =============================================
+       Notes Section
+       ============================================= */
+
+    .notes-section {
+        margin-top: 16pt;
+        padding: 12pt;
+        background-color: #fffaed !important;
+        border-left: 3pt solid #ffc107;
+        page-break-inside: avoid;
+    }
+
+    .notes-title {
+        font-weight: bold;
+        color: #856404;
+        margin-bottom: 6pt;
+    }
+
+    .notes-content {
+        font-size: 9pt;
+        color: #856404;
+        white-space: pre-wrap;
+        line-height: 1.5;
+    }
+
+    /* =============================================
+       Footer
+       ============================================= */
+
+    .invoice-footer {
+        margin-top: 40pt;
+        padding-top: 16pt;
+        border-top: 1pt solid #ddd;
+        text-align: center;
+        font-size: 8pt;
+        color: #666;
+    }
+
+    .footer-thank-you {
+        font-size: 11pt;
+        font-weight: bold;
+        color: #4A90A4;
+        margin-bottom: 8pt;
+    }
+
+    /* =============================================
+       Link and Text Adjustments
+       ============================================= */
+
+    /* Show URLs for links (optional) */
+    a[href]:after {
+        content: " (" attr(href) ")";
+        font-size: 8pt;
+        color: #666;
+    }
+
+    /* Don't show URL for internal links */
+    a[href^="#"]:after,
+    a[href^="javascript:"]:after {
+        content: "";
+    }
+
+    /* Ensure text is black for readability */
+    p, div, span, td, th, li {
+        color: #000;
+    }
+
+    /* Bold text optimization */
+    strong, b {
+        font-weight: bold;
+        color: #000;
+    }
+
+    /* =============================================
+       Layout Optimization
+       ============================================= */
+
+    /* Remove shadows and transitions */
+    * {
+        box-shadow: none !important;
+        text-shadow: none !important;
+        transition: none !important;
+        animation: none !important;
+    }
+
+    /* Optimize borders */
+    * {
+        border-radius: 0 !important;
+    }
+
+    /* Keep essential rounded corners */
+    .customer-box,
+    .payment-methods,
+    .notes-section {
+        border-radius: 2pt !important;
+    }
+
+    /* =============================================
+       Image Optimization
+       ============================================= */
+
+    img {
+        max-width: 100%;
+        height: auto;
+        page-break-inside: avoid;
+    }
+
+    /* =============================================
+       Utility Classes
+       ============================================= */
+
+    .text-bold {
+        font-weight: bold;
+    }
+
+    .text-right {
+        text-align: right;
+    }
+
+    .text-center {
+        text-align: center;
+    }
+
+    .text-left {
+        text-align: left;
+    }
+
+    /* Hide hover effects */
+    *:hover {
+        background-color: inherit !important;
+    }
+
+    /* Keep table hover effects disabled */
+    table.items-table tbody tr:hover {
+        background-color: inherit !important;
+    }
+
+    /* Preserve alternating rows */
+    table.items-table tbody tr:nth-child(even):hover {
+        background-color: #f9f9f9 !important;
+    }
+
+    /* =============================================
+       Batch Invoice Styles
+       ============================================= */
+
+    /* For batch-generated invoices with multiple pages */
+    .invoice-page {
+        page-break-after: always;
+    }
+
+    .invoice-page:last-child {
+        page-break-after: auto;
+    }
+
+    /* Invoice separator for consecutive invoices */
+    .invoice-separator {
+        page-break-before: always;
+        margin-top: 0;
+    }
+
+    /* =============================================
+       Accessibility and Legibility
+       ============================================= */
+
+    /* Ensure sufficient contrast */
+    .text-muted {
+        color: #666 !important;
+    }
+
+    /* Optimize line height for readability */
+    p {
+        line-height: 1.6;
+        margin-bottom: 8pt;
+    }
+
+    /* List styling */
+    ul, ol {
+        margin-left: 16pt;
+        margin-bottom: 8pt;
+    }
+
+    li {
+        margin-bottom: 4pt;
+        line-height: 1.5;
+    }
+
+    /* =============================================
+       Error Prevention
+       ============================================= */
+
+    /* Ensure backgrounds print correctly */
+    thead,
+    .total-final-row,
+    .customer-box,
+    .payment-methods,
+    .notes-section {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+
+    /* Fix table borders */
+    table {
+        border-collapse: collapse;
+    }
+
+    /* Ensure all borders are visible */
+    table td,
+    table th {
+        border-color: #000 !important;
+    }
+}
+
+/* =============================================
+   Screen Preview Styles (optional)
+   ============================================= */
+
+/* Apply print styles for print preview */
+@media screen and (prefers-color-scheme: light) {
+    .print-preview-mode {
+        background: #fff;
+        max-width: 8.5in;
+        margin: 0 auto;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+}
