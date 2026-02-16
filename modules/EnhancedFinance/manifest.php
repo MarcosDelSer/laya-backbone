@@ -413,3 +413,22 @@ $actionRows[7]['categoryPermissionStaff']  = 'Y';
 $actionRows[7]['categoryPermissionStudent']= 'N';
 $actionRows[7]['categoryPermissionParent'] = 'N';
 $actionRows[7]['categoryPermissionOther']  = 'N';
+
+// Row 8 - Aging Report
+$actionRows[8]['name']                      = 'Aging Report';
+$actionRows[8]['precedence']                = '0';
+$actionRows[8]['category']                  = 'Reports';
+$actionRows[8]['description']               = 'Accounts receivable aging report with 30/60/90+ day buckets showing overdue invoices by age. Includes export to CSV functionality.';
+$actionRows[8]['URLList']                   = 'finance_report_aging.php';
+$actionRows[8]['entryURL']                  = 'finance_report_aging.php';
+$actionRows[8]['entrySidebar']              = 'Y';
+$actionRows[8]['menuShow']                  = 'Y';
+$actionRows[8]['defaultPermissionAdmin']   = 'Y';
+$actionRows[8]['defaultPermissionTeacher'] = 'N';
+$actionRows[8]['defaultPermissionStudent'] = 'N';
+$actionRows[8]['defaultPermissionParent']  = 'N';
+$actionRows[8]['defaultPermissionSupport'] = 'Y';
+$actionRows[8]['categoryPermissionStaff']  = 'Y';
+$actionRows[8]['categoryPermissionStudent']= 'N';
+$actionRows[8]['categoryPermissionParent'] = 'N';
+$actionRows[8]['categoryPermissionOther']  = 'N';
