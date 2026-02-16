@@ -502,4 +502,133 @@ class IncidentGateway extends QueryableGateway
 
         return $this->runSelect($query);
     }
+
+    /**
+     * Get incident count for a specific child within a date range.
+     *
+     * @param int $gibbonPersonID
+     * @param string $dateStart
+     * @param string $dateEnd
+     * @param string|null $type Optional incident type filter
+     * @return int
+     */
+    public function getIncidentCountByChild($gibbonPersonID, $dateStart, $dateEnd, $type = null)
+    {
+        $data = [
+            'gibbonPersonID' => $gibbonPersonID,
+            'dateStart' => $dateStart,
+            'dateEnd' => $dateEnd,
+        ];
+
+        $sql = "SELECT COUNT(*) as count
+                FROM gibbonCareIncident
+                WHERE gibbonPersonID=:gibbonPersonID
+                AND date >= :dateStart
+                AND date <= :dateEnd";
+
+        if ($type !== null) {
+            $sql .= " AND type=:type";
+            $data['type'] = $type;
+        }
+
+        $result = $this->db()->selectOne($sql, $data);
+        return (int) ($result['count'] ?? 0);
+    }
+
+    /**
+     * Detect incident patterns for children within a date range.
+     *
+     * Returns aggregated incident data by child and type to identify
+     * recurring patterns that may need attention.
+     *
+     * @param int $gibbonSchoolYearID
+     * @param string $dateStart
+     * @param string $dateEnd
+     * @param int $minIncidents Minimum incidents to be considered a pattern (default 3)
+     * @return array Array of pattern data with child info, type, and counts
+     */
+    public function detectPatterns($gibbonSchoolYearID, $dateStart, $dateEnd, $minIncidents = 3)
+    {
+        $data = [
+            'gibbonSchoolYearID' => $gibbonSchoolYearID,
+            'dateStart' => $dateStart,
+            'dateEnd' => $dateEnd,
+            'minIncidents' => $minIncidents,
+        ];
+
+        $sql = "SELECT
+                    gibbonCareIncident.gibbonPersonID,
+                    gibbonPerson.preferredName,
+                    gibbonPerson.surname,
+                    gibbonPerson.image_240,
+                    gibbonCareIncident.type,
+                    COUNT(*) as incidentCount,
+                    SUM(CASE WHEN severity='Critical' THEN 1 ELSE 0 END) as criticalCount,
+                    SUM(CASE WHEN severity='High' THEN 1 ELSE 0 END) as highCount,
+                    MIN(gibbonCareIncident.date) as firstIncident,
+                    MAX(gibbonCareIncident.date) as lastIncident
+                FROM gibbonCareIncident
+                INNER JOIN gibbonPerson ON gibbonCareIncident.gibbonPersonID=gibbonPerson.gibbonPersonID
+                WHERE gibbonCareIncident.gibbonSchoolYearID=:gibbonSchoolYearID
+                AND gibbonCareIncident.date >= :dateStart
+                AND gibbonCareIncident.date <= :dateEnd
+                GROUP BY gibbonCareIncident.gibbonPersonID, gibbonCareIncident.type
+                HAVING COUNT(*) >= :minIncidents
+                ORDER BY incidentCount DESC, criticalCount DESC, highCount DESC";
+
+        return $this->db()->select($sql, $data)->fetchAll();
+    }
+
+    /**
+     * Select children needing review based on incident patterns.
+     *
+     * Identifies children with concerning incident patterns based on:
+     * - High total incident count within the period
+     * - Multiple severe (Critical/High) incidents
+     * - Recurring incidents of the same type
+     *
+     * @param int $gibbonSchoolYearID
+     * @param string $dateStart
+     * @param string $dateEnd
+     * @param int $totalThreshold Minimum total incidents to flag (default 5)
+     * @param int $severeThreshold Minimum severe incidents to flag (default 2)
+     * @return \Gibbon\Database\Result
+     */
+    public function selectChildrenNeedingReview($gibbonSchoolYearID, $dateStart, $dateEnd, $totalThreshold = 5, $severeThreshold = 2)
+    {
+        $query = $this
+            ->newSelect()
+            ->from($this->getTableName())
+            ->cols([
+                'gibbonCareIncident.gibbonPersonID',
+                'gibbonPerson.preferredName',
+                'gibbonPerson.surname',
+                'gibbonPerson.image_240',
+                'gibbonPerson.dob',
+                'COUNT(*) as totalIncidents',
+                "SUM(CASE WHEN gibbonCareIncident.severity='Critical' THEN 1 ELSE 0 END) as criticalCount",
+                "SUM(CASE WHEN gibbonCareIncident.severity='High' THEN 1 ELSE 0 END) as highCount",
+                "SUM(CASE WHEN gibbonCareIncident.severity IN ('Critical', 'High') THEN 1 ELSE 0 END) as severeCount",
+                "SUM(CASE WHEN gibbonCareIncident.type='Minor Injury' THEN 1 ELSE 0 END) as minorInjuryCount",
+                "SUM(CASE WHEN gibbonCareIncident.type='Major Injury' THEN 1 ELSE 0 END) as majorInjuryCount",
+                "SUM(CASE WHEN gibbonCareIncident.type='Illness' THEN 1 ELSE 0 END) as illnessCount",
+                "SUM(CASE WHEN gibbonCareIncident.type='Behavioral' THEN 1 ELSE 0 END) as behavioralCount",
+                'MIN(gibbonCareIncident.date) as firstIncidentDate',
+                'MAX(gibbonCareIncident.date) as lastIncidentDate',
+            ])
+            ->innerJoin('gibbonPerson', 'gibbonCareIncident.gibbonPersonID=gibbonPerson.gibbonPersonID')
+            ->where('gibbonCareIncident.gibbonSchoolYearID=:gibbonSchoolYearID')
+            ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID)
+            ->where('gibbonCareIncident.date >= :dateStart')
+            ->bindValue('dateStart', $dateStart)
+            ->where('gibbonCareIncident.date <= :dateEnd')
+            ->bindValue('dateEnd', $dateEnd)
+            ->groupBy(['gibbonCareIncident.gibbonPersonID'])
+            ->having("COUNT(*) >= :totalThreshold OR SUM(CASE WHEN gibbonCareIncident.severity IN ('Critical', 'High') THEN 1 ELSE 0 END) >= :severeThreshold")
+            ->bindValue('totalThreshold', $totalThreshold)
+            ->bindValue('severeThreshold', $severeThreshold)
+            ->orderBy(['severeCount DESC', 'totalIncidents DESC']);
+
+        return $this->runSelect($query);
+    }
 }
