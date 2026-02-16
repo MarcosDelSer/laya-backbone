@@ -5,16 +5,19 @@ models. Supports multiple providers (OpenAI, Anthropic) with consistent
 types, caching, fallback strategies, and token tracking.
 
 Usage:
-    from app.llm import BaseLLMProvider, LLMMessage, LLMResponse, LLMRole
+    from app.llm import OpenAIProvider, LLMMessage, LLMResponse, LLMRole
 
     # Create a message
     message = LLMMessage(role=LLMRole.USER, content="Hello!")
 
-    # Provider implementations will be available after they are created
-    # from app.llm.providers import OpenAIProvider
+    # Use a provider
+    provider = OpenAIProvider()
+    if provider.is_available():
+        response = await provider.complete([message])
 """
 
 from app.llm.base import BaseLLMProvider
+from app.llm.providers import OpenAIProvider
 from app.llm.types import LLMConfig, LLMMessage, LLMResponse, LLMRole, LLMUsage
 
 __all__ = [
@@ -24,4 +27,5 @@ __all__ = [
     "LLMResponse",
     "LLMRole",
     "LLMUsage",
+    "OpenAIProvider",
 ]
