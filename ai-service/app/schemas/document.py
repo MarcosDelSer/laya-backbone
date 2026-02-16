@@ -325,3 +325,97 @@ class SignatureResponse(SignatureBase, BaseResponse):
         ...,
         description="Date and time when the signature was created",
     )
+
+
+class SignatureRequestCreate(BaseSchema):
+    """Request schema for creating a signature request.
+
+    Attributes:
+        document_id: ID of the document requiring signature
+        signer_id: User ID of the person who should sign
+        message: Optional message from requester to signer
+        expires_in_days: Number of days until request expires (default: 7)
+    """
+
+    document_id: UUID = Field(
+        ...,
+        description="ID of the document requiring signature",
+    )
+    signer_id: UUID = Field(
+        ...,
+        description="User ID of the person who should sign",
+    )
+    message: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+        description="Optional message from requester to signer",
+    )
+    expires_in_days: int = Field(
+        default=7,
+        ge=1,
+        le=30,
+        description="Number of days until request expires",
+    )
+
+
+class SignatureRequestResponse(BaseResponse):
+    """Response schema for signature request data.
+
+    Attributes:
+        document_id: ID of the document requiring signature
+        requester_id: User ID of the person requesting the signature
+        signer_id: User ID of the person who should sign
+        status: Current status of the request
+        sent_at: Timestamp when the request was sent
+        viewed_at: Timestamp when the document was viewed by signer
+        completed_at: Timestamp when the signature was completed
+        expires_at: Timestamp when the request expires
+        notification_sent: Whether notification was successfully sent
+        notification_method: Method used for notification
+        message: Optional message from requester to signer
+    """
+
+    document_id: UUID = Field(
+        ...,
+        description="ID of the document requiring signature",
+    )
+    requester_id: UUID = Field(
+        ...,
+        description="User ID of the person requesting the signature",
+    )
+    signer_id: UUID = Field(
+        ...,
+        description="User ID of the person who should sign",
+    )
+    status: str = Field(
+        ...,
+        description="Current status of the request",
+    )
+    sent_at: datetime = Field(
+        ...,
+        description="Timestamp when the request was sent",
+    )
+    viewed_at: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp when the document was viewed by signer",
+    )
+    completed_at: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp when the signature was completed",
+    )
+    expires_at: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp when the request expires",
+    )
+    notification_sent: bool = Field(
+        ...,
+        description="Whether notification was successfully sent",
+    )
+    notification_method: Optional[str] = Field(
+        default=None,
+        description="Method used for notification",
+    )
+    message: Optional[str] = Field(
+        default=None,
+        description="Optional message from requester to signer",
+    )

@@ -289,3 +289,131 @@ class Signature(Base):
     def __repr__(self) -> str:
         """Return string representation of the Signature."""
         return f"<Signature(id={self.id}, document_id={self.document_id}, signer_id={self.signer_id})>"
+
+
+class SignatureRequestStatus(str, PyEnum):
+    """Status values for signature requests.
+
+    Attributes:
+        SENT: Request has been sent to the signer
+        VIEWED: Signer has viewed the document
+        COMPLETED: Signer has completed signing
+        CANCELLED: Request was cancelled
+        EXPIRED: Request has expired
+    """
+
+    SENT = "sent"
+    VIEWED = "viewed"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class SignatureRequest(Base):
+    """SQLAlchemy model for signature requests.
+
+    Represents a request sent to a parent/guardian to sign a document.
+    Tracks the signature request workflow from creation through completion.
+
+    Attributes:
+        id: Unique identifier for the signature request
+        document_id: ID of the document requiring signature
+        requester_id: User ID of the person requesting the signature
+        signer_id: User ID of the person who should sign
+        status: Current status of the request (sent/viewed/completed/cancelled/expired)
+        sent_at: Timestamp when the request was sent
+        viewed_at: Timestamp when the document was viewed by signer
+        completed_at: Timestamp when the signature was completed
+        expires_at: Timestamp when the request expires
+        notification_sent: Whether notification was successfully sent
+        notification_method: Method used for notification (email, push, etc.)
+        message: Optional message from requester to signer
+        created_at: Timestamp when the record was created
+        updated_at: Timestamp when the record was last updated
+    """
+
+    __tablename__ = "signature_requests"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    requester_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    signer_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[SignatureRequestStatus] = mapped_column(
+        Enum(
+            SignatureRequestStatus,
+            name="signature_request_status_enum",
+            create_constraint=True,
+        ),
+        nullable=False,
+        default=SignatureRequestStatus.SENT,
+        index=True,
+    )
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
+    viewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    notification_sent: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+    )
+    notification_method: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+    message: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # Relationships
+    document: Mapped["Document"] = relationship(
+        "Document",
+        foreign_keys=[document_id],
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation of the SignatureRequest."""
+        return f"<SignatureRequest(id={self.id}, document_id={self.document_id}, signer_id={self.signer_id}, status={self.status.value})>"

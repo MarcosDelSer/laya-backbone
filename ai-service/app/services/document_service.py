@@ -5,10 +5,12 @@ and signature workflows. Implements CRUD operations and document lifecycle manag
 """
 
 import json
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, cast, func, or_, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import (
@@ -17,6 +19,8 @@ from app.models.document import (
     DocumentTemplate,
     DocumentType,
     Signature,
+    SignatureRequest,
+    SignatureRequestStatus,
 )
 from app.schemas.document import (
     DocumentCreate,
@@ -26,8 +30,12 @@ from app.schemas.document import (
     DocumentTemplateUpdate,
     DocumentUpdate,
     SignatureCreate,
+    SignatureRequestCreate,
+    SignatureRequestResponse,
     SignatureResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentService:
@@ -475,4 +483,327 @@ class DocumentService:
             timestamp=signature.timestamp,
             created_at=signature.created_at,
             updated_at=signature.updated_at,
+        )
+
+    # Signature Request Workflow Methods
+
+    async def send_signature_request(
+        self,
+        request_data: SignatureRequestCreate,
+        requester_id: UUID,
+    ) -> Optional[SignatureRequest]:
+        """Send a signature request for a document.
+
+        This initiates the signature request workflow:
+        1. Validates document exists and is in DRAFT status
+        2. Updates document status to PENDING
+        3. Creates a signature request record
+        4. Sends notification to signer (placeholder for integration)
+        5. Returns the signature request
+
+        Args:
+            request_data: Signature request creation data.
+            requester_id: User ID of the person requesting the signature.
+
+        Returns:
+            Created SignatureRequest if successful, None if document not found.
+        """
+        # Verify document exists and is in DRAFT status
+        document = await self.get_document_by_id(request_data.document_id)
+        if not document:
+            logger.warning(
+                f"Cannot send signature request: Document {request_data.document_id} not found"
+            )
+            return None
+
+        if document.status != DocumentStatus.DRAFT:
+            logger.warning(
+                f"Cannot send signature request: Document {request_data.document_id} "
+                f"is in {document.status.value} status, expected DRAFT"
+            )
+            return None
+
+        # Calculate expiration date
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            days=request_data.expires_in_days
+        )
+
+        # Create signature request
+        signature_request = SignatureRequest(
+            document_id=request_data.document_id,
+            requester_id=requester_id,
+            signer_id=request_data.signer_id,
+            status=SignatureRequestStatus.SENT,
+            expires_at=expires_at,
+            message=request_data.message,
+        )
+
+        # Send notification (placeholder for integration with notification service)
+        notification_success = await self._send_signature_notification(
+            document=document,
+            signer_id=request_data.signer_id,
+            requester_id=requester_id,
+            message=request_data.message,
+        )
+
+        signature_request.notification_sent = notification_success
+        signature_request.notification_method = "email" if notification_success else None
+
+        # Update document status to PENDING
+        document.status = DocumentStatus.PENDING
+
+        self.db.add(signature_request)
+        await self.db.commit()
+        await self.db.refresh(signature_request)
+
+        logger.info(
+            f"Signature request {signature_request.id} created for document "
+            f"{document.id} by requester {requester_id} to signer {request_data.signer_id}"
+        )
+
+        return signature_request
+
+    async def mark_request_viewed(
+        self, request_id: UUID
+    ) -> Optional[SignatureRequest]:
+        """Mark a signature request as viewed.
+
+        Updates the signature request status and records the viewed timestamp.
+
+        Args:
+            request_id: ID of the signature request.
+
+        Returns:
+            Updated SignatureRequest if found, None otherwise.
+        """
+        query = select(SignatureRequest).where(
+            cast(SignatureRequest.id, String) == str(request_id)
+        )
+        result = await self.db.execute(query)
+        signature_request = result.scalar_one_or_none()
+
+        if not signature_request:
+            return None
+
+        # Only update if not already viewed
+        if signature_request.status == SignatureRequestStatus.SENT:
+            signature_request.status = SignatureRequestStatus.VIEWED
+            signature_request.viewed_at = datetime.now(timezone.utc)
+
+            await self.db.commit()
+            await self.db.refresh(signature_request)
+
+            logger.info(f"Signature request {request_id} marked as viewed")
+
+        return signature_request
+
+    async def complete_signature_request(
+        self,
+        request_id: UUID,
+        signature: Signature,
+    ) -> Optional[SignatureRequest]:
+        """Complete a signature request after signature is created.
+
+        Updates the signature request status to completed and records completion timestamp.
+        This is called automatically after a signature is created.
+
+        Args:
+            request_id: ID of the signature request.
+            signature: The created Signature instance.
+
+        Returns:
+            Updated SignatureRequest if found, None otherwise.
+        """
+        query = select(SignatureRequest).where(
+            cast(SignatureRequest.id, String) == str(request_id)
+        )
+        result = await self.db.execute(query)
+        signature_request = result.scalar_one_or_none()
+
+        if not signature_request:
+            return None
+
+        signature_request.status = SignatureRequestStatus.COMPLETED
+        signature_request.completed_at = datetime.now(timezone.utc)
+
+        await self.db.commit()
+        await self.db.refresh(signature_request)
+
+        # Send completion notification (placeholder)
+        await self._send_completion_notification(
+            signature_request=signature_request,
+            signature=signature,
+        )
+
+        logger.info(f"Signature request {request_id} marked as completed")
+
+        return signature_request
+
+    async def get_signature_request_by_id(
+        self, request_id: UUID
+    ) -> Optional[SignatureRequest]:
+        """Retrieve a signature request by ID.
+
+        Args:
+            request_id: Unique identifier of the signature request.
+
+        Returns:
+            SignatureRequest if found, None otherwise.
+        """
+        query = select(SignatureRequest).where(
+            cast(SignatureRequest.id, String) == str(request_id)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_signature_request_by_document(
+        self, document_id: UUID
+    ) -> Optional[SignatureRequest]:
+        """Retrieve the most recent signature request for a document.
+
+        Args:
+            document_id: ID of the document.
+
+        Returns:
+            Most recent SignatureRequest if found, None otherwise.
+        """
+        query = (
+            select(SignatureRequest)
+            .where(cast(SignatureRequest.document_id, String) == str(document_id))
+            .order_by(SignatureRequest.created_at.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def list_signature_requests_for_signer(
+        self,
+        signer_id: UUID,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[SignatureRequest], int]:
+        """List signature requests for a specific signer.
+
+        Args:
+            signer_id: User ID of the signer.
+            status: Optional filter by request status.
+            skip: Number of records to skip.
+            limit: Maximum number of records to return.
+
+        Returns:
+            Tuple of (list of signature requests, total count).
+        """
+        query = select(SignatureRequest).where(
+            cast(SignatureRequest.signer_id, String) == str(signer_id)
+        )
+
+        if status:
+            query = query.where(
+                SignatureRequest.status == SignatureRequestStatus(status)
+            )
+
+        # Get total count
+        count_query = select(func.count()).select_from(query.subquery())
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Apply pagination
+        query = (
+            query.offset(skip)
+            .limit(limit)
+            .order_by(SignatureRequest.created_at.desc())
+        )
+
+        result = await self.db.execute(query)
+        requests = list(result.scalars().all())
+
+        return requests, total
+
+    async def _send_signature_notification(
+        self,
+        document: Document,
+        signer_id: UUID,
+        requester_id: UUID,
+        message: Optional[str],
+    ) -> bool:
+        """Send notification to signer about signature request.
+
+        This is a placeholder for integration with notification service (task 032).
+        Currently logs the notification event.
+
+        Args:
+            document: The document requiring signature.
+            signer_id: User ID of the person who should sign.
+            requester_id: User ID of the person requesting the signature.
+            message: Optional message from requester.
+
+        Returns:
+            True if notification sent successfully, False otherwise.
+        """
+        # TODO: Integrate with notification service (task 032)
+        logger.info(
+            f"[NOTIFICATION PLACEHOLDER] Signature request for document {document.id} "
+            f"sent to signer {signer_id} by requester {requester_id}. "
+            f"Document: {document.title}, Message: {message}"
+        )
+
+        # For now, always return True (placeholder)
+        # In production, this would call the notification service
+        return True
+
+    async def _send_completion_notification(
+        self,
+        signature_request: SignatureRequest,
+        signature: Signature,
+    ) -> bool:
+        """Send notification about completed signature.
+
+        This is a placeholder for integration with notification service (task 032).
+        Currently logs the notification event.
+
+        Args:
+            signature_request: The completed signature request.
+            signature: The created signature.
+
+        Returns:
+            True if notification sent successfully, False otherwise.
+        """
+        # TODO: Integrate with notification service (task 032)
+        logger.info(
+            f"[NOTIFICATION PLACEHOLDER] Signature request {signature_request.id} "
+            f"completed. Document {signature_request.document_id} signed by "
+            f"{signature.signer_id}. Notifying requester {signature_request.requester_id}."
+        )
+
+        # For now, always return True (placeholder)
+        # In production, this would call the notification service
+        return True
+
+    def _signature_request_to_response(
+        self, signature_request: SignatureRequest
+    ) -> SignatureRequestResponse:
+        """Convert SignatureRequest model to SignatureRequestResponse schema.
+
+        Args:
+            signature_request: The SignatureRequest model instance.
+
+        Returns:
+            SignatureRequestResponse schema instance.
+        """
+        return SignatureRequestResponse(
+            id=signature_request.id,
+            document_id=signature_request.document_id,
+            requester_id=signature_request.requester_id,
+            signer_id=signature_request.signer_id,
+            status=signature_request.status.value,
+            sent_at=signature_request.sent_at,
+            viewed_at=signature_request.viewed_at,
+            completed_at=signature_request.completed_at,
+            expires_at=signature_request.expires_at,
+            notification_sent=signature_request.notification_sent,
+            notification_method=signature_request.notification_method,
+            message=signature_request.message,
+            created_at=signature_request.created_at,
+            updated_at=signature_request.updated_at,
         )

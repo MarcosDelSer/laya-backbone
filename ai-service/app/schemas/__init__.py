@@ -86,6 +86,8 @@ from app.schemas.document import (
     DocumentTemplateUpdate,
     SignatureBase,
     SignatureCreate,
+    SignatureRequestCreate,
+    SignatureRequestResponse,
     SignatureResponse,
 )
 
@@ -160,4 +162,6 @@ __all__ = [
     "SignatureBase",
     "SignatureCreate",
     "SignatureResponse",
+    "SignatureRequestCreate",
+    "SignatureRequestResponse",
 ]

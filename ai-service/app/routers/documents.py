@@ -22,6 +22,8 @@ from app.schemas.document import (
     DocumentTemplateUpdate,
     DocumentUpdate,
     SignatureCreate,
+    SignatureRequestCreate,
+    SignatureRequestResponse,
     SignatureResponse,
 )
 from app.services.document_service import DocumentService
@@ -517,3 +519,234 @@ async def get_document_signatures(
     signatures = await service.get_signatures_for_document(document_id)
 
     return [service._signature_to_response(sig) for sig in signatures]
+
+
+# Signature Request Workflow Endpoints
+
+
+@router.post(
+    "/signature-requests",
+    response_model=SignatureRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Send a signature request",
+    description="Create and send a signature request for a document. Updates document "
+    "status to PENDING and sends notification to signer.",
+)
+async def send_signature_request(
+    request_data: SignatureRequestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> SignatureRequestResponse:
+    """Send a signature request for a document.
+
+    This initiates the signature request workflow:
+    1. Validates document exists and is in DRAFT status
+    2. Updates document status to PENDING
+    3. Creates a signature request record
+    4. Sends notification to signer
+    5. Returns the signature request
+
+    Args:
+        request_data: Signature request creation data.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        SignatureRequestResponse with the created signature request.
+
+    Raises:
+        HTTPException: 404 if document not found.
+        HTTPException: 400 if document is not in DRAFT status.
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+
+    # Extract requester_id from current_user
+    requester_id = UUID(current_user.get("id") or current_user.get("sub"))
+
+    signature_request = await service.send_signature_request(
+        request_data=request_data,
+        requester_id=requester_id,
+    )
+
+    if signature_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot send signature request. Document not found or not in DRAFT status.",
+        )
+
+    return service._signature_request_to_response(signature_request)
+
+
+@router.get(
+    "/signature-requests/{request_id}",
+    response_model=SignatureRequestResponse,
+    summary="Get signature request by ID",
+    description="Retrieve a specific signature request by its unique identifier.",
+)
+async def get_signature_request(
+    request_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> SignatureRequestResponse:
+    """Get a signature request by ID.
+
+    Args:
+        request_id: Unique identifier of the signature request.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        SignatureRequestResponse with signature request details.
+
+    Raises:
+        HTTPException: 404 if signature request not found.
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+    signature_request = await service.get_signature_request_by_id(request_id)
+
+    if signature_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Signature request with id {request_id} not found",
+        )
+
+    return service._signature_request_to_response(signature_request)
+
+
+@router.patch(
+    "/signature-requests/{request_id}/viewed",
+    response_model=SignatureRequestResponse,
+    summary="Mark signature request as viewed",
+    description="Mark a signature request as viewed by the signer. Updates status to VIEWED.",
+)
+async def mark_signature_request_viewed(
+    request_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> SignatureRequestResponse:
+    """Mark a signature request as viewed.
+
+    Updates the signature request status to VIEWED and records the viewed timestamp.
+    This is typically called when the signer opens the document for the first time.
+
+    Args:
+        request_id: ID of the signature request.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        SignatureRequestResponse with updated signature request.
+
+    Raises:
+        HTTPException: 404 if signature request not found.
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+    signature_request = await service.mark_request_viewed(request_id)
+
+    if signature_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Signature request with id {request_id} not found",
+        )
+
+    return service._signature_request_to_response(signature_request)
+
+
+@router.get(
+    "/signature-requests",
+    response_model=list[SignatureRequestResponse],
+    summary="List signature requests for current user",
+    description="List all signature requests for the authenticated user (as signer). "
+    "Supports filtering by status and pagination.",
+)
+async def list_my_signature_requests(
+    status_filter: Optional[str] = Query(
+        default=None,
+        alias="status",
+        description="Filter by request status (sent/viewed/completed/cancelled/expired)",
+    ),
+    skip: int = Query(
+        default=0,
+        ge=0,
+        description="Number of records to skip for pagination",
+    ),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of records to return",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> list[SignatureRequestResponse]:
+    """List signature requests for the current user.
+
+    Returns all signature requests where the current user is the signer.
+    Useful for showing a user their pending signature requests.
+
+    Args:
+        status_filter: Optional filter by request status.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        List of SignatureRequestResponse for the current user.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+
+    # Extract user_id from current_user
+    user_id = UUID(current_user.get("id") or current_user.get("sub"))
+
+    requests, total = await service.list_signature_requests_for_signer(
+        signer_id=user_id,
+        status=status_filter,
+        skip=skip,
+        limit=limit,
+    )
+
+    return [service._signature_request_to_response(req) for req in requests]
+
+
+@router.get(
+    "/{document_id}/signature-request",
+    response_model=SignatureRequestResponse,
+    summary="Get signature request for document",
+    description="Retrieve the most recent signature request for a specific document.",
+)
+async def get_document_signature_request(
+    document_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> SignatureRequestResponse:
+    """Get the most recent signature request for a document.
+
+    Args:
+        document_id: ID of the document.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        SignatureRequestResponse with the most recent signature request.
+
+    Raises:
+        HTTPException: 404 if no signature request found for document.
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+    signature_request = await service.get_signature_request_by_document(document_id)
+
+    if signature_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No signature request found for document {document_id}",
+        )
+
+    return service._signature_request_to_response(signature_request)
