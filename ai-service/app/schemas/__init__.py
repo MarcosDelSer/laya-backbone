@@ -9,6 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
+    portfolio: Educational portfolio schemas
 """
 
 from app.schemas.activity import (
@@ -72,6 +73,35 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
+from app.schemas.portfolio import (
+    MilestoneBase,
+    MilestoneCategory,
+    MilestoneCreate,
+    MilestoneListResponse,
+    MilestoneResponse,
+    MilestoneStatus,
+    MilestoneUpdate,
+    ObservationBase,
+    ObservationCreate,
+    ObservationListResponse,
+    ObservationResponse,
+    ObservationType,
+    ObservationUpdate,
+    PortfolioItemBase,
+    PortfolioItemCreate,
+    PortfolioItemListResponse,
+    PortfolioItemResponse,
+    PortfolioItemType,
+    PortfolioItemUpdate,
+    PortfolioSummary,
+    PrivacyLevel,
+    WorkSampleBase,
+    WorkSampleCreate,
+    WorkSampleListResponse,
+    WorkSampleResponse,
+    WorkSampleType,
+    WorkSampleUpdate,
+)
 
 __all__ = [
     # Base schemas
@@ -130,4 +160,32 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
+    # Portfolio schemas
+    "PortfolioItemType",
+    "PrivacyLevel",
+    "MilestoneCategory",
+    "MilestoneStatus",
+    "ObservationType",
+    "WorkSampleType",
+    "PortfolioItemBase",
+    "PortfolioItemCreate",
+    "PortfolioItemUpdate",
+    "PortfolioItemResponse",
+    "PortfolioItemListResponse",
+    "ObservationBase",
+    "ObservationCreate",
+    "ObservationUpdate",
+    "ObservationResponse",
+    "ObservationListResponse",
+    "MilestoneBase",
+    "MilestoneCreate",
+    "MilestoneUpdate",
+    "MilestoneResponse",
+    "MilestoneListResponse",
+    "WorkSampleBase",
+    "WorkSampleCreate",
+    "WorkSampleUpdate",
+    "WorkSampleResponse",
+    "WorkSampleListResponse",
+    "PortfolioSummary",
 ]
