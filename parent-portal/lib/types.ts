@@ -147,16 +147,90 @@ export interface Invoice {
 // ============================================================================
 
 /**
+ * Types of message senders.
+ * Identifies the role of the user sending a message.
+ */
+export type SenderType = 'parent' | 'educator' | 'director' | 'admin';
+
+/**
+ * Types of message threads.
+ * Categorizes conversation threads by their purpose.
+ */
+export type ThreadType = 'daily_log' | 'urgent' | 'serious' | 'admin';
+
+/**
+ * Content types for messages.
+ * Defines the format of message content for proper rendering.
+ */
+export type MessageContentType = 'text' | 'rich_text';
+
+/**
+ * Types of notifications that can be sent to parents.
+ */
+export type NotificationType = 'message' | 'daily_log' | 'urgent' | 'admin';
+
+/**
+ * Channels through which notifications can be delivered.
+ */
+export type NotificationChannelType = 'email' | 'push' | 'sms';
+
+/**
+ * Frequency options for notification delivery.
+ */
+export type NotificationFrequency = 'immediate' | 'hourly' | 'daily' | 'weekly';
+
+/**
+ * Participant in a message thread.
+ */
+export interface ThreadParticipant {
+  userId: string;
+  userType: SenderType;
+  displayName?: string;
+}
+
+/**
+ * Attachment included with a message.
+ */
+export interface MessageAttachment {
+  id: string;
+  messageId: string;
+  fileUrl: string;
+  fileType: string;
+  fileName: string;
+  fileSize?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Request payload for creating an attachment.
+ */
+export interface AttachmentCreate {
+  fileUrl: string;
+  fileType: string;
+  fileName: string;
+  fileSize?: number;
+}
+
+/**
  * Individual message in a conversation thread.
  */
 export interface Message {
   id: string;
   threadId: string;
   senderId: string;
-  senderName: string;
+  senderType: SenderType;
+  senderName?: string;
   content: string;
-  timestamp: string;
-  read: boolean;
+  contentType: MessageContentType;
+  isRead: boolean;
+  attachments: MessageAttachment[];
+  createdAt?: string;
+  updatedAt?: string;
+  /** @deprecated Use isRead instead */
+  read?: boolean;
+  /** @deprecated Use createdAt instead */
+  timestamp?: string;
 }
 
 /**
@@ -165,17 +239,60 @@ export interface Message {
 export interface MessageThread {
   id: string;
   subject: string;
-  participants: string[];
-  lastMessage: Message;
+  threadType: ThreadType;
+  childId?: string;
+  createdBy: string;
+  participants: ThreadParticipant[];
+  isActive: boolean;
   unreadCount: number;
+  lastMessage?: string;
+  lastMessageAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Thread with full list of messages.
+ */
+export interface ThreadWithMessages extends MessageThread {
+  messages: Message[];
+}
+
+/**
+ * Response for listing threads with pagination.
+ */
+export interface ThreadListResponse {
+  threads: MessageThread[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+/**
+ * Response for listing messages with pagination.
+ */
+export interface MessageListResponse {
+  messages: Message[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+/**
+ * Response for unread message count.
+ */
+export interface UnreadCountResponse {
+  totalUnread: number;
+  threadsWithUnread: number;
 }
 
 /**
  * Request payload for sending a message.
  */
 export interface SendMessageRequest {
-  threadId: string;
   content: string;
+  contentType?: MessageContentType;
+  attachments?: AttachmentCreate[];
 }
 
 /**
@@ -183,8 +300,62 @@ export interface SendMessageRequest {
  */
 export interface CreateThreadRequest {
   subject: string;
-  recipientIds: string[];
-  initialMessage: string;
+  threadType?: ThreadType;
+  childId?: string;
+  participants: ThreadParticipant[];
+  initialMessage?: string;
+}
+
+/**
+ * Request payload for updating a thread.
+ */
+export interface UpdateThreadRequest {
+  subject?: string;
+  isActive?: boolean;
+}
+
+/**
+ * Request payload for marking messages as read.
+ */
+export interface MarkAsReadRequest {
+  messageIds: string[];
+}
+
+/**
+ * Notification preference configuration.
+ */
+export interface NotificationPreference {
+  id: string;
+  parentId: string;
+  notificationType: NotificationType;
+  channel: NotificationChannelType;
+  isEnabled: boolean;
+  frequency: NotificationFrequency;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Request payload for creating/updating notification preferences.
+ */
+export interface NotificationPreferenceRequest {
+  parentId: string;
+  notificationType: NotificationType;
+  channel: NotificationChannelType;
+  isEnabled?: boolean;
+  frequency?: NotificationFrequency;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+}
+
+/**
+ * Response for listing notification preferences.
+ */
+export interface NotificationPreferenceListResponse {
+  parentId: string;
+  preferences: NotificationPreference[];
 }
 
 // ============================================================================
