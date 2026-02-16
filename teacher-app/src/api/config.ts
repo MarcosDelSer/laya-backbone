@@ -16,6 +16,12 @@ export const API_CONFIG = {
   baseUrl: API_BASE_URL,
   timeout: 30000, // 30 seconds
   endpoints: {
+    // Authentication endpoints
+    auth: {
+      login: '/modules/TeacherPortal/api/auth/login',
+      logout: '/modules/TeacherPortal/api/auth/logout',
+      refreshToken: '/modules/TeacherPortal/api/auth/refresh',
+    },
     // Attendance endpoints
     attendance: {
       list: '/modules/CareTracking/api/attendance',
