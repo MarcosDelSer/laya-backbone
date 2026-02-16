@@ -85,6 +85,14 @@ class EnrollmentFormGateway extends QueryableGateway
             ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID);
 
         $criteria->addFilterRules([
+            'search' => function ($query, $search) {
+                return $query
+                    ->where("(gibbonChildEnrollmentForm.childFirstName LIKE :search
+                        OR gibbonChildEnrollmentForm.childLastName LIKE :search
+                        OR gibbonChildEnrollmentForm.formNumber LIKE :search
+                        OR CONCAT(gibbonChildEnrollmentForm.childFirstName, ' ', gibbonChildEnrollmentForm.childLastName) LIKE :search)")
+                    ->bindValue('search', '%' . $search . '%');
+            },
             'status' => function ($query, $status) {
                 return $query
                     ->where('gibbonChildEnrollmentForm.status=:status')
