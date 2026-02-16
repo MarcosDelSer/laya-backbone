@@ -78,24 +78,43 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/releve24_p
             return;
         }
 
-        // Limit batch size for performance (configurable)
-        $maxBatchSize = 500;
+        // Limit batch size for performance (using constant from generator class)
+        $maxBatchSize = Releve24PDFGenerator::MAX_BATCH_SIZE;
         if (count($validIds) > $maxBatchSize) {
             $page->addError(sprintf(__('Batch size exceeds maximum limit of %d documents. Please select fewer documents.'), $maxBatchSize));
+            error_log(sprintf(
+                'RL-24 Batch PDF: Rejected batch of %d documents (max: %d)',
+                count($validIds),
+                $maxBatchSize
+            ));
             return;
         }
 
         try {
             // Set extended execution time for large batches
             $originalTimeout = ini_get('max_execution_time');
-            if (count($validIds) > 50) {
+            $documentCount = count($validIds);
+            $largeThreshold = Releve24PDFGenerator::LARGE_BATCH_THRESHOLD;
+
+            if ($documentCount > 50) {
                 // Allow 3 seconds per document plus 30 seconds overhead
-                set_time_limit(30 + (count($validIds) * 3));
+                $newTimeout = 30 + ($documentCount * 3);
+                set_time_limit($newTimeout);
+                error_log(sprintf(
+                    'RL-24 Batch PDF: Extended timeout to %d seconds for %d documents',
+                    $newTimeout,
+                    $documentCount
+                ));
             }
 
             // Increase memory limit for large batches
-            if (count($validIds) > 100) {
-                ini_set('memory_limit', '512M');
+            if ($documentCount > $largeThreshold) {
+                ini_set('memory_limit', Releve24PDFGenerator::LARGE_BATCH_MEMORY_LIMIT);
+                error_log(sprintf(
+                    'RL-24 Batch PDF: Increased memory limit to %s for %d documents',
+                    Releve24PDFGenerator::LARGE_BATCH_MEMORY_LIMIT,
+                    $documentCount
+                ));
             }
 
             // Initialize PDF generator
@@ -131,19 +150,44 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/releve24_p
         } catch (\InvalidArgumentException $e) {
             // Handle invalid input
             $page->addError(__('Invalid RL-24 documents selected. Please verify your selection.'));
-            error_log('RL-24 Batch PDF Error (InvalidArgumentException): ' . $e->getMessage());
+            error_log(sprintf(
+                'RL-24 Batch PDF Error (InvalidArgumentException): Count=%d, Error=%s',
+                count($validIds),
+                $e->getMessage()
+            ));
             return;
 
         } catch (\RuntimeException $e) {
             // Handle ZIP creation or PDF generation failure
-            $page->addError(__('Error generating batch PDF. Please try again with fewer documents or contact support.'));
-            error_log('RL-24 Batch PDF Error (RuntimeException): ' . $e->getMessage());
+            $errorMessage = $e->getMessage();
+
+            // Provide more specific error message based on the type of failure
+            if (strpos($errorMessage, 'Failed to generate any PDFs') !== false) {
+                $page->addError(__('Failed to generate any PDFs. The selected documents may be corrupted or have missing data.'));
+            } elseif (strpos($errorMessage, 'memory') !== false || strpos($errorMessage, 'Memory') !== false) {
+                $page->addError(__('Out of memory while generating batch PDF. Please try with fewer documents.'));
+            } else {
+                $page->addError(__('Error generating batch PDF. Please try again with fewer documents or contact support.'));
+            }
+
+            error_log(sprintf(
+                'RL-24 Batch PDF Error (RuntimeException): Count=%d, Error=%s, Memory=%s',
+                count($validIds),
+                $e->getMessage(),
+                ini_get('memory_limit')
+            ));
             return;
 
         } catch (\Exception $e) {
             // Handle unexpected errors
             $page->addError(__('An unexpected error occurred while generating the batch PDF.'));
-            error_log('RL-24 Batch PDF Error (Exception): ' . $e->getMessage());
+            error_log(sprintf(
+                'RL-24 Batch PDF Error (Unexpected %s): Count=%d, Error=%s, Trace=%s',
+                get_class($e),
+                count($validIds),
+                $e->getMessage(),
+                $e->getTraceAsString()
+            ));
             return;
         }
     }

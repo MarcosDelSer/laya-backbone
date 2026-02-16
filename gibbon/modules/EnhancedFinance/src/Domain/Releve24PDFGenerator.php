@@ -41,6 +41,21 @@ use ZipArchive;
 class Releve24PDFGenerator
 {
     /**
+     * Maximum number of documents allowed in a single batch operation.
+     */
+    public const MAX_BATCH_SIZE = 500;
+
+    /**
+     * Memory limit to use for large batch operations (in bytes).
+     */
+    public const LARGE_BATCH_MEMORY_LIMIT = '512M';
+
+    /**
+     * Threshold for considering a batch as "large" (affects memory/timeout settings).
+     */
+    public const LARGE_BATCH_THRESHOLD = 100;
+
+    /**
      * @var Connection
      */
     protected $connection;
@@ -78,23 +93,51 @@ class Releve24PDFGenerator
      *
      * @param string $releve24Id UUID of the RL-24 document
      * @return string Binary PDF content
-     * @throws InvalidArgumentException If the RL-24 document ID is invalid
+     * @throws InvalidArgumentException If the RL-24 document ID is invalid or data validation fails
      * @throws RuntimeException If PDF generation fails
      */
     public function generatePDF(string $releve24Id): string
     {
         // Validate UUID format
+        if (empty($releve24Id)) {
+            throw new InvalidArgumentException('RL-24 document ID is required');
+        }
+
         if (!$this->isValidUuid($releve24Id)) {
-            throw new InvalidArgumentException('Invalid RL-24 document ID format');
+            $this->lastError = [
+                'code' => 'INVALID_UUID_FORMAT',
+                'message' => 'Invalid RL-24 document ID format',
+                'document_id' => $releve24Id,
+            ];
+            throw new InvalidArgumentException('Invalid RL-24 document ID format: ' . substr($releve24Id, 0, 50));
         }
 
         // Get RL-24 document data
         $releve24 = $this->getReleve24Data($releve24Id);
         if (!$releve24) {
+            $this->lastError = [
+                'code' => 'DOCUMENT_NOT_FOUND',
+                'message' => 'RL-24 document not found',
+                'document_id' => $releve24Id,
+            ];
             throw new InvalidArgumentException('RL-24 document not found: ' . $releve24Id);
         }
 
-        // Get related data
+        // Validate required data fields
+        $validationErrors = $this->validateReleve24Data($releve24);
+        if (!empty($validationErrors)) {
+            $this->lastError = [
+                'code' => 'DATA_VALIDATION_FAILED',
+                'message' => 'RL-24 document data validation failed',
+                'document_id' => $releve24Id,
+                'errors' => $validationErrors,
+            ];
+            throw new InvalidArgumentException(
+                'RL-24 document data validation failed: ' . implode('; ', $validationErrors)
+            );
+        }
+
+        // Get related data (with fallback to placeholders for missing data)
         $familyData = $this->getFamilyData($releve24['gibbonFamilyID'] ?? null);
         $childData = $this->getChildData($releve24['gibbonPersonID'] ?? null);
         $schoolData = $this->getSchoolData();
@@ -111,8 +154,9 @@ class Releve24PDFGenerator
             $this->lastError = [
                 'code' => 'PDF_GENERATION_FAILED',
                 'message' => $e->getMessage(),
+                'document_id' => $releve24Id,
             ];
-            throw new RuntimeException('Failed to generate PDF: ' . $e->getMessage(), 0, $e);
+            throw new RuntimeException('Failed to generate PDF for document ' . $releve24Id . ': ' . $e->getMessage(), 0, $e);
         }
     }
 
@@ -121,38 +165,90 @@ class Releve24PDFGenerator
      *
      * @param array $releve24Ids Array of RL-24 document UUIDs
      * @return string Binary ZIP content containing all PDFs
-     * @throws InvalidArgumentException If no valid document IDs provided
+     * @throws InvalidArgumentException If no valid document IDs provided or batch size exceeded
      * @throws RuntimeException If ZIP creation or PDF generation fails
      */
     public function generateBatchPDF(array $releve24Ids): string
     {
+        // Clear previous errors
+        $this->lastError = [];
+
         if (empty($releve24Ids)) {
+            $this->lastError = [
+                'code' => 'EMPTY_BATCH',
+                'message' => 'No RL-24 document IDs provided',
+            ];
             throw new InvalidArgumentException('No RL-24 document IDs provided');
         }
 
-        // Filter valid UUIDs
-        $validIds = array_filter($releve24Ids, [$this, 'isValidUuid']);
+        // Filter valid UUIDs and track invalid ones
+        $validIds = [];
+        $invalidIds = [];
+        foreach ($releve24Ids as $id) {
+            if ($this->isValidUuid($id)) {
+                $validIds[] = $id;
+            } else {
+                $invalidIds[] = $id;
+            }
+        }
+
+        // Log invalid UUIDs if any
+        if (!empty($invalidIds)) {
+            error_log(sprintf(
+                'RL-24 Batch PDF: Skipping %d invalid document IDs: %s',
+                count($invalidIds),
+                implode(', ', array_slice($invalidIds, 0, 5)) . (count($invalidIds) > 5 ? '...' : '')
+            ));
+        }
+
         if (empty($validIds)) {
+            $this->lastError = [
+                'code' => 'NO_VALID_IDS',
+                'message' => 'No valid RL-24 document IDs provided',
+                'invalid_count' => count($invalidIds),
+            ];
             throw new InvalidArgumentException('No valid RL-24 document IDs provided');
         }
+
+        // Validate batch size
+        $this->validateBatchSize(count($validIds));
+
+        // Log batch operation start
+        error_log(sprintf(
+            'RL-24 Batch PDF: Starting generation for %d documents (memory: %s)',
+            count($validIds),
+            $this->formatBytes(memory_get_usage(true))
+        ));
 
         // Create temporary ZIP file
         $zipFile = tempnam(sys_get_temp_dir(), 'rl24_batch_');
         if ($zipFile === false) {
+            $this->lastError = [
+                'code' => 'TEMP_FILE_FAILED',
+                'message' => 'Failed to create temporary file for ZIP archive',
+            ];
             throw new RuntimeException('Failed to create temporary file for ZIP archive');
         }
 
         $zip = new ZipArchive();
         $openResult = $zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
         if ($openResult !== true) {
-            unlink($zipFile);
-            throw new RuntimeException('Failed to create ZIP archive');
+            @unlink($zipFile);
+            $this->lastError = [
+                'code' => 'ZIP_CREATE_FAILED',
+                'message' => 'Failed to create ZIP archive',
+                'zip_error_code' => $openResult,
+            ];
+            throw new RuntimeException('Failed to create ZIP archive (error code: ' . $openResult . ')');
         }
 
         $errors = [];
         $successCount = 0;
+        $processedCount = 0;
 
         foreach ($validIds as $releve24Id) {
+            $processedCount++;
+
             try {
                 $pdfContent = $this->generatePDF($releve24Id);
                 $releve24Data = $this->getReleve24Data($releve24Id);
@@ -161,8 +257,23 @@ class Releve24PDFGenerator
                 $filename = $this->generatePdfFilename($releve24Data);
                 $zip->addFromString($filename, $pdfContent);
                 $successCount++;
+
+                // Log progress for large batches
+                if ($processedCount % 50 === 0) {
+                    error_log(sprintf(
+                        'RL-24 Batch PDF: Progress %d/%d (success: %d, errors: %d, memory: %s)',
+                        $processedCount,
+                        count($validIds),
+                        $successCount,
+                        count($errors),
+                        $this->formatBytes(memory_get_usage(true))
+                    ));
+                }
             } catch (\Exception $e) {
-                $errors[$releve24Id] = $e->getMessage();
+                $errors[$releve24Id] = [
+                    'message' => $e->getMessage(),
+                    'type' => get_class($e),
+                ];
             }
         }
 
@@ -170,29 +281,68 @@ class Releve24PDFGenerator
 
         // If all documents failed, throw exception
         if ($successCount === 0) {
-            unlink($zipFile);
-            throw new RuntimeException('Failed to generate any PDFs: ' . json_encode($errors));
+            @unlink($zipFile);
+            $this->lastError = [
+                'code' => 'ALL_FAILED',
+                'message' => 'Failed to generate any PDFs',
+                'total_requested' => count($validIds),
+                'errors' => $errors,
+            ];
+            throw new RuntimeException(
+                'Failed to generate any PDFs. ' . count($errors) . ' document(s) failed. ' .
+                'First error: ' . ($errors[array_key_first($errors)]['message'] ?? 'Unknown error')
+            );
         }
 
         // Read and clean up ZIP file
         $zipContent = file_get_contents($zipFile);
-        unlink($zipFile);
+        @unlink($zipFile);
 
         if ($zipContent === false) {
+            $this->lastError = [
+                'code' => 'ZIP_READ_FAILED',
+                'message' => 'Failed to read generated ZIP archive',
+            ];
             throw new RuntimeException('Failed to read generated ZIP archive');
         }
 
-        // Store partial errors if any
-        if (!empty($errors)) {
-            $this->lastError = [
-                'code' => 'PARTIAL_FAILURE',
-                'message' => 'Some documents failed to generate',
-                'details' => $errors,
-                'success_count' => $successCount,
-            ];
-        }
+        // Store results (including partial errors if any)
+        $this->lastError = [
+            'code' => !empty($errors) ? 'PARTIAL_FAILURE' : 'SUCCESS',
+            'message' => !empty($errors) ? 'Some documents failed to generate' : 'All documents generated successfully',
+            'details' => $errors,
+            'success_count' => $successCount,
+            'total_requested' => count($validIds),
+            'invalid_ids_skipped' => count($invalidIds),
+        ];
+
+        // Log completion
+        error_log(sprintf(
+            'RL-24 Batch PDF: Completed. Success: %d, Failed: %d, Skipped invalid: %d, ZIP size: %s',
+            $successCount,
+            count($errors),
+            count($invalidIds),
+            $this->formatBytes(strlen($zipContent))
+        ));
 
         return $zipContent;
+    }
+
+    /**
+     * Format bytes to human-readable format.
+     *
+     * @param int $bytes
+     * @return string
+     */
+    protected function formatBytes(int $bytes): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $i = 0;
+        while ($bytes >= 1024 && $i < count($units) - 1) {
+            $bytes /= 1024;
+            $i++;
+        }
+        return round($bytes, 2) . ' ' . $units[$i];
     }
 
     /**
@@ -522,6 +672,74 @@ class Releve24PDFGenerator
     {
         $pattern = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
         return (bool) preg_match($pattern, $uuid);
+    }
+
+    /**
+     * Validate that required RL-24 data fields are present.
+     *
+     * @param array $releve24Data The RL-24 document data
+     * @return array List of validation errors (empty if valid)
+     */
+    protected function validateReleve24Data(array $releve24Data): array
+    {
+        $errors = [];
+
+        // Required fields for RL-24 document
+        $requiredFields = [
+            'id' => 'Document ID',
+            'document_year' => 'Document Year',
+        ];
+
+        foreach ($requiredFields as $field => $label) {
+            if (!isset($releve24Data[$field]) || $releve24Data[$field] === '' || $releve24Data[$field] === null) {
+                $errors[] = sprintf('Missing required field: %s', $label);
+            }
+        }
+
+        // Validate document_year format (must be a valid year)
+        if (isset($releve24Data['document_year'])) {
+            $year = (int) $releve24Data['document_year'];
+            if ($year < 2000 || $year > 2100) {
+                $errors[] = sprintf('Invalid document year: %s', $releve24Data['document_year']);
+            }
+        }
+
+        // Validate total_eligible is non-negative if present
+        if (isset($releve24Data['total_eligible']) && (float) $releve24Data['total_eligible'] < 0) {
+            $errors[] = 'Total eligible amount cannot be negative';
+        }
+
+        // Warn if no family or person is associated (data will be placeholder)
+        if (empty($releve24Data['gibbonFamilyID']) && empty($releve24Data['gibbonPersonID'])) {
+            // This is a warning, not an error - we can still generate with placeholders
+            error_log(sprintf(
+                'RL-24 document %s has no associated family or person - using placeholder data',
+                $releve24Data['id'] ?? 'unknown'
+            ));
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate batch size and throw exception if exceeded.
+     *
+     * @param int $count Number of documents in batch
+     * @throws InvalidArgumentException If batch size exceeds maximum
+     */
+    protected function validateBatchSize(int $count): void
+    {
+        if ($count > self::MAX_BATCH_SIZE) {
+            throw new InvalidArgumentException(sprintf(
+                'Batch size (%d) exceeds maximum allowed (%d). Please reduce the number of documents.',
+                $count,
+                self::MAX_BATCH_SIZE
+            ));
+        }
+
+        if ($count === 0) {
+            throw new InvalidArgumentException('No documents provided for batch generation');
+        }
     }
 
     /**

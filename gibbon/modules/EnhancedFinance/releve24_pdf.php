@@ -145,22 +145,40 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/releve24_p
     } catch (\InvalidArgumentException $e) {
         // Handle invalid UUID or document not found
         $page->addError(__('RL-24 document not found or invalid ID provided.'));
+
+        // Log detailed error for administrators
+        error_log(sprintf(
+            'RL-24 PDF Generation Error (InvalidArgumentException): Document ID=%s, Error=%s',
+            $releve24Id,
+            $e->getMessage()
+        ));
         return;
 
     } catch (\RuntimeException $e) {
         // Handle PDF generation failure
         $page->addError(__('Error generating PDF. Please try again later.'));
 
-        // Log error for administrators
-        error_log('RL-24 PDF Generation Error: ' . $e->getMessage());
+        // Log detailed error for administrators
+        error_log(sprintf(
+            'RL-24 PDF Generation Error (RuntimeException): Document ID=%s, Error=%s, Trace=%s',
+            $releve24Id,
+            $e->getMessage(),
+            $e->getTraceAsString()
+        ));
         return;
 
     } catch (\Exception $e) {
         // Handle unexpected errors
         $page->addError(__('An unexpected error occurred while generating the PDF.'));
 
-        // Log error for administrators
-        error_log('RL-24 PDF Generation Unexpected Error: ' . $e->getMessage());
+        // Log detailed error for administrators
+        error_log(sprintf(
+            'RL-24 PDF Generation Error (Unexpected %s): Document ID=%s, Error=%s, Trace=%s',
+            get_class($e),
+            $releve24Id,
+            $e->getMessage(),
+            $e->getTraceAsString()
+        ));
         return;
     }
 }
