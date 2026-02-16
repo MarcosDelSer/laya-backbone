@@ -9,7 +9,10 @@ Tests cover:
 - Schema validation for all response types
 """
 
+from __future__ import annotations
+
 from datetime import date, datetime, timedelta, timezone
+from typing import Optional
 from uuid import UUID, uuid4
 
 import pytest
