@@ -67,6 +67,58 @@ class MessageContentType(str, Enum):
     RICH_TEXT = "rich_text"
 
 
+class NotificationType(str, Enum):
+    """Types of notifications that can be sent to parents.
+
+    Categorizes notifications by the type of event that triggered them.
+
+    Attributes:
+        MESSAGE: New message in a conversation thread
+        DAILY_LOG: Daily activity and progress updates
+        URGENT: Time-sensitive communications requiring immediate attention
+        ADMIN: Administrative communications from center management
+    """
+
+    MESSAGE = "message"
+    DAILY_LOG = "daily_log"
+    URGENT = "urgent"
+    ADMIN = "admin"
+
+
+class NotificationChannelType(str, Enum):
+    """Channels through which notifications can be delivered.
+
+    Defines the different delivery methods available for notifications.
+
+    Attributes:
+        EMAIL: Email notifications
+        PUSH: Push notifications (mobile/web)
+        SMS: SMS text message notifications
+    """
+
+    EMAIL = "email"
+    PUSH = "push"
+    SMS = "sms"
+
+
+class NotificationFrequency(str, Enum):
+    """Frequency options for notification delivery.
+
+    Controls how often notifications are batched and delivered.
+
+    Attributes:
+        IMMEDIATE: Notifications sent immediately as events occur
+        HOURLY: Notifications batched and sent hourly
+        DAILY: Notifications batched and sent once per day
+        WEEKLY: Notifications batched and sent once per week
+    """
+
+    IMMEDIATE = "immediate"
+    HOURLY = "hourly"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+
+
 # =============================================================================
 # Participant Schemas
 # =============================================================================
@@ -269,6 +321,56 @@ class MarkAsReadRequest(BaseSchema):
     )
 
 
+class NotificationPreferenceRequest(BaseSchema):
+    """Request schema for creating or updating notification preferences.
+
+    Used to configure how a parent receives notifications for different
+    event types across various delivery channels.
+
+    Attributes:
+        parent_id: Unique identifier of the parent user
+        notification_type: Type of notification to configure
+        channel: Notification delivery channel
+        is_enabled: Whether notifications are enabled for this type/channel
+        frequency: How often notifications should be delivered
+        quiet_hours_start: Start of quiet hours (HH:MM format, e.g., "22:00")
+        quiet_hours_end: End of quiet hours (HH:MM format, e.g., "07:00")
+    """
+
+    parent_id: UUID = Field(
+        ...,
+        description="Unique identifier of the parent user",
+    )
+    notification_type: NotificationType = Field(
+        ...,
+        description="Type of notification to configure",
+    )
+    channel: NotificationChannelType = Field(
+        ...,
+        description="Notification delivery channel",
+    )
+    is_enabled: bool = Field(
+        default=True,
+        description="Whether notifications are enabled for this type/channel",
+    )
+    frequency: NotificationFrequency = Field(
+        default=NotificationFrequency.IMMEDIATE,
+        description="How often notifications should be delivered",
+    )
+    quiet_hours_start: Optional[str] = Field(
+        default=None,
+        max_length=5,
+        pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$",
+        description="Start of quiet hours (HH:MM format, e.g., '22:00')",
+    )
+    quiet_hours_end: Optional[str] = Field(
+        default=None,
+        max_length=5,
+        pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$",
+        description="End of quiet hours (HH:MM format, e.g., '07:00')",
+    )
+
+
 # =============================================================================
 # Response Schemas
 # =============================================================================
@@ -448,4 +550,72 @@ class UnreadCountResponse(BaseSchema):
         ...,
         ge=0,
         description="Number of threads with unread messages",
+    )
+
+
+class NotificationPreferenceResponse(BaseResponse):
+    """Response schema for notification preferences.
+
+    Contains the parent's notification preferences for a specific
+    notification type and channel combination.
+
+    Attributes:
+        parent_id: Unique identifier of the parent user
+        notification_type: Type of notification configured
+        channel: Notification delivery channel
+        is_enabled: Whether notifications are enabled for this type/channel
+        frequency: How often notifications are delivered
+        quiet_hours_start: Start of quiet hours (HH:MM format)
+        quiet_hours_end: End of quiet hours (HH:MM format)
+    """
+
+    parent_id: UUID = Field(
+        ...,
+        description="Unique identifier of the parent user",
+    )
+    notification_type: NotificationType = Field(
+        ...,
+        description="Type of notification configured",
+    )
+    channel: NotificationChannelType = Field(
+        ...,
+        description="Notification delivery channel",
+    )
+    is_enabled: bool = Field(
+        ...,
+        description="Whether notifications are enabled for this type/channel",
+    )
+    frequency: NotificationFrequency = Field(
+        default=NotificationFrequency.IMMEDIATE,
+        description="How often notifications are delivered",
+    )
+    quiet_hours_start: Optional[str] = Field(
+        default=None,
+        max_length=5,
+        description="Start of quiet hours (HH:MM format)",
+    )
+    quiet_hours_end: Optional[str] = Field(
+        default=None,
+        max_length=5,
+        description="End of quiet hours (HH:MM format)",
+    )
+
+
+class NotificationPreferenceListResponse(BaseSchema):
+    """Response schema for a list of notification preferences.
+
+    Contains all notification preferences for a parent user.
+
+    Attributes:
+        parent_id: Unique identifier of the parent user
+        preferences: List of notification preference configurations
+    """
+
+    parent_id: UUID = Field(
+        ...,
+        description="Unique identifier of the parent user",
+    )
+    preferences: list[NotificationPreferenceResponse] = Field(
+        default_factory=list,
+        description="List of notification preference configurations",
     )
