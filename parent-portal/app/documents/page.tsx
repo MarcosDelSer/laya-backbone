@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { DocumentCard } from '@/components/DocumentCard';
 import { DocumentSignature } from '@/components/DocumentSignature';
+import {
+  getDocuments,
+  createSignature,
+  type Document as ApiDocument,
+  type DocumentStatus,
+} from '@/lib/ai-client';
 
-// Type definitions
+// Type definitions - Internal document representation for UI
 interface Document {
   id: string;
   title: string;
@@ -15,6 +21,20 @@ interface Document {
   signedAt?: string;
   signatureUrl?: string;
   pdfUrl: string;
+}
+
+/**
+ * Convert API document to UI document format.
+ */
+function apiDocumentToUIDocument(apiDoc: ApiDocument): Document {
+  return {
+    id: apiDoc.id,
+    title: apiDoc.title,
+    type: apiDoc.type,
+    uploadDate: apiDoc.created_at,
+    status: apiDoc.status === 'signed' ? 'signed' : 'pending',
+    pdfUrl: apiDoc.content_url,
+  };
 }
 
 // Mock data - will be replaced with API calls
@@ -82,6 +102,37 @@ export default function DocumentsPage() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [signingDocument, setSigningDocument] = useState<Document | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [useRealAPI, setUseRealAPI] = useState(false);
+
+  // Fetch documents from API
+  const fetchDocuments = useCallback(async () => {
+    if (!useRealAPI) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await getDocuments({ limit: 100 });
+      const uiDocuments = response.items.map(apiDocumentToUIDocument);
+      setDocuments(uiDocuments);
+    } catch (err) {
+      console.error('Failed to fetch documents:', err);
+      setError('Failed to load documents. Please try again later.');
+      // Fall back to mock data on error
+      setDocuments(mockDocuments);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [useRealAPI]);
+
+  // Load documents on mount
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
 
   // Filter documents based on selected filter
   const filteredDocuments = documents.filter((doc) => {
@@ -109,20 +160,48 @@ export default function DocumentsPage() {
   };
 
   // Handle signature submission
-  const handleSignDocument = (documentId: string, signatureDataUrl: string) => {
-    setDocuments((prev) =>
-      prev.map((doc) =>
-        doc.id === documentId
-          ? {
-              ...doc,
-              status: 'signed' as const,
-              signedAt: new Date().toISOString(),
-              signatureUrl: signatureDataUrl,
-            }
-          : doc
-      )
-    );
-    handleCloseModal();
+  const handleSignDocument = async (documentId: string, signatureDataUrl: string) => {
+    if (useRealAPI) {
+      try {
+        // Get user info (in a real app, this would come from auth context)
+        const userId = 'current-user-id'; // TODO: Get from auth context
+
+        // Get client IP and device info
+        const ipAddress = 'client-ip'; // TODO: Get actual IP from request or browser
+        const deviceInfo = navigator.userAgent;
+
+        // Submit signature to API
+        await createSignature(documentId, {
+          document_id: documentId,
+          signer_id: userId,
+          signature_image_url: signatureDataUrl,
+          ip_address: ipAddress,
+          device_info: deviceInfo,
+        });
+
+        // Refresh documents list from API
+        await fetchDocuments();
+        handleCloseModal();
+      } catch (err) {
+        console.error('Failed to submit signature:', err);
+        setError('Failed to submit signature. Please try again.');
+      }
+    } else {
+      // Mock implementation - update local state
+      setDocuments((prev) =>
+        prev.map((doc) =>
+          doc.id === documentId
+            ? {
+                ...doc,
+                status: 'signed' as const,
+                signedAt: new Date().toISOString(),
+                signatureUrl: signatureDataUrl,
+              }
+            : doc
+        )
+      );
+      handleCloseModal();
+    }
   };
 
   return (
@@ -136,9 +215,43 @@ export default function DocumentsPage() {
               Review and sign required documents for your child
             </p>
           </div>
-          <Link href="/" className="btn btn-outline self-start">
+          <div className="flex items-center gap-3">
+            {/* API Toggle for development */}
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={useRealAPI}
+                onChange={(e) => setUseRealAPI(e.target.checked)}
+                className="rounded"
+              />
+              Use Real API
+            </label>
+            <Link href="/" className="btn btn-outline self-start">
+              <svg
+                className="mr-2 h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
+              </svg>
+              Back to Dashboard
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
+          <div className="flex">
             <svg
-              className="mr-2 h-4 w-4"
+              className="h-5 w-5 text-red-400 flex-shrink-0"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -147,13 +260,60 @@ export default function DocumentsPage() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            Back to Dashboard
-          </Link>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error</h3>
+              <p className="mt-1 text-sm text-red-700">{error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="ml-auto text-red-400 hover:text-red-600"
+            >
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400 animate-spin"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <p className="mt-4 text-sm text-gray-600">Loading documents...</p>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && (
+        <>
 
       {/* Summary Cards */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -362,6 +522,8 @@ export default function DocumentsPage() {
         onClose={handleCloseModal}
         onSubmit={handleSignDocument}
       />
+      </>
+      )}
     </div>
   );
 }
