@@ -419,3 +419,184 @@ class SignatureRequestResponse(BaseResponse):
         default=None,
         description="Optional message from requester to signer",
     )
+
+
+class DocumentStatusCount(BaseSchema):
+    """Count of documents by status.
+
+    Attributes:
+        status: Document status (draft/pending/signed/expired)
+        count: Number of documents with this status
+    """
+
+    status: str = Field(
+        ...,
+        description="Document status",
+    )
+    count: int = Field(
+        ...,
+        ge=0,
+        description="Number of documents with this status",
+    )
+
+
+class DocumentTypeCount(BaseSchema):
+    """Count of documents by type.
+
+    Attributes:
+        type: Document type/category
+        count: Number of documents of this type
+        pending: Number of pending documents of this type
+        signed: Number of signed documents of this type
+    """
+
+    type: str = Field(
+        ...,
+        description="Document type/category",
+    )
+    count: int = Field(
+        ...,
+        ge=0,
+        description="Number of documents of this type",
+    )
+    pending: int = Field(
+        default=0,
+        ge=0,
+        description="Number of pending documents of this type",
+    )
+    signed: int = Field(
+        default=0,
+        ge=0,
+        description="Number of signed documents of this type",
+    )
+
+
+class SignatureActivity(BaseSchema):
+    """Recent signature activity.
+
+    Attributes:
+        document_id: ID of the signed document
+        document_title: Title of the signed document
+        signer_id: ID of the person who signed
+        signed_at: Timestamp of the signature
+        document_type: Type of the document
+    """
+
+    document_id: UUID = Field(
+        ...,
+        description="ID of the signed document",
+    )
+    document_title: str = Field(
+        ...,
+        description="Title of the signed document",
+    )
+    signer_id: UUID = Field(
+        ...,
+        description="ID of the person who signed",
+    )
+    signed_at: datetime = Field(
+        ...,
+        description="Timestamp of the signature",
+    )
+    document_type: str = Field(
+        ...,
+        description="Type of the document",
+    )
+
+
+class SignatureDashboardSummary(BaseSchema):
+    """Summary statistics for signature dashboard.
+
+    Attributes:
+        total_documents: Total number of documents
+        pending_signatures: Number of documents pending signature
+        signed_documents: Number of signed documents
+        expired_documents: Number of expired documents
+        draft_documents: Number of draft documents
+        completion_rate: Percentage of documents that are signed
+        documents_this_month: Number of documents created this month
+        signatures_this_month: Number of signatures completed this month
+    """
+
+    total_documents: int = Field(
+        ...,
+        ge=0,
+        description="Total number of documents",
+    )
+    pending_signatures: int = Field(
+        ...,
+        ge=0,
+        description="Number of documents pending signature",
+    )
+    signed_documents: int = Field(
+        ...,
+        ge=0,
+        description="Number of signed documents",
+    )
+    expired_documents: int = Field(
+        default=0,
+        ge=0,
+        description="Number of expired documents",
+    )
+    draft_documents: int = Field(
+        default=0,
+        ge=0,
+        description="Number of draft documents",
+    )
+    completion_rate: float = Field(
+        ...,
+        ge=0.0,
+        le=100.0,
+        description="Percentage of documents that are signed",
+    )
+    documents_this_month: int = Field(
+        default=0,
+        ge=0,
+        description="Number of documents created this month",
+    )
+    signatures_this_month: int = Field(
+        default=0,
+        ge=0,
+        description="Number of signatures completed this month",
+    )
+
+
+class SignatureDashboardResponse(BaseResponse):
+    """Response schema for signature status dashboard.
+
+    Provides aggregated statistics, breakdowns by status and type,
+    and recent signature activity.
+
+    Attributes:
+        summary: High-level summary statistics
+        status_breakdown: Count of documents by status
+        type_breakdown: Count of documents by type
+        recent_activity: List of recent signatures
+        alerts: List of important notifications (e.g., pending documents)
+        generated_at: Timestamp when dashboard data was generated
+    """
+
+    summary: SignatureDashboardSummary = Field(
+        ...,
+        description="High-level summary statistics",
+    )
+    status_breakdown: list[DocumentStatusCount] = Field(
+        ...,
+        description="Count of documents by status",
+    )
+    type_breakdown: list[DocumentTypeCount] = Field(
+        ...,
+        description="Count of documents by type",
+    )
+    recent_activity: list[SignatureActivity] = Field(
+        ...,
+        description="List of recent signatures",
+    )
+    alerts: list[str] = Field(
+        default_factory=list,
+        description="List of important notifications",
+    )
+    generated_at: datetime = Field(
+        ...,
+        description="Timestamp when dashboard data was generated",
+    )

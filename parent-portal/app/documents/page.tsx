@@ -6,9 +6,11 @@ import { DocumentCard } from '@/components/DocumentCard';
 import { DocumentSignature } from '@/components/DocumentSignature';
 import {
   getDocuments,
+  getSignatureDashboard,
   createSignature,
   type Document as ApiDocument,
   type DocumentStatus,
+  type SignatureDashboardResponse,
 } from '@/lib/ai-client';
 
 // Type definitions - Internal document representation for UI
@@ -105,6 +107,22 @@ export default function DocumentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [useRealAPI, setUseRealAPI] = useState(false);
+  const [dashboardData, setDashboardData] = useState<SignatureDashboardResponse | null>(null);
+
+  // Fetch dashboard data from API
+  const fetchDashboard = useCallback(async () => {
+    if (!useRealAPI) {
+      return;
+    }
+
+    try {
+      const dashboard = await getSignatureDashboard({ limit_recent: 5 });
+      setDashboardData(dashboard);
+    } catch (err) {
+      console.error('Failed to fetch dashboard:', err);
+      // Continue with local calculations if dashboard fails
+    }
+  }, [useRealAPI]);
 
   // Fetch documents from API
   const fetchDocuments = useCallback(async () => {
@@ -116,9 +134,18 @@ export default function DocumentsPage() {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await getDocuments({ limit: 100 });
-      const uiDocuments = response.items.map(apiDocumentToUIDocument);
+
+      // Fetch both documents and dashboard in parallel
+      const [documentsResponse, dashboardResponse] = await Promise.all([
+        getDocuments({ limit: 100 }),
+        getSignatureDashboard({ limit_recent: 5 }).catch(() => null),
+      ]);
+
+      const uiDocuments = documentsResponse.items.map(apiDocumentToUIDocument);
       setDocuments(uiDocuments);
+      if (dashboardResponse) {
+        setDashboardData(dashboardResponse);
+      }
     } catch (err) {
       console.error('Failed to fetch documents:', err);
       setError('Failed to load documents. Please try again later.');
@@ -140,9 +167,13 @@ export default function DocumentsPage() {
     return doc.status === filter;
   });
 
-  // Calculate counts
-  const pendingCount = documents.filter((d) => d.status === 'pending').length;
-  const signedCount = documents.filter((d) => d.status === 'signed').length;
+  // Calculate counts - use dashboard data if available, otherwise calculate locally
+  const pendingCount = dashboardData?.summary.pending_signatures ?? documents.filter((d) => d.status === 'pending').length;
+  const signedCount = dashboardData?.summary.signed_documents ?? documents.filter((d) => d.status === 'signed').length;
+  const totalCount = dashboardData?.summary.total_documents ?? documents.length;
+  const completionRate = dashboardData?.summary.completion_rate;
+  const signaturesThisMonth = dashboardData?.summary.signatures_this_month;
+  const alerts = dashboardData?.alerts ?? [];
 
   // Handle opening sign modal
   const handleOpenSignModal = (documentId: string) => {
@@ -316,7 +347,7 @@ export default function DocumentsPage() {
         <>
 
       {/* Summary Cards */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Documents */}
         <div className="card p-4">
           <div className="flex items-center space-x-3">
@@ -338,8 +369,13 @@ export default function DocumentsPage() {
             <div>
               <p className="text-sm text-gray-500">Total Documents</p>
               <p className="text-xl font-bold text-gray-900">
-                {documents.length}
+                {totalCount}
               </p>
+              {signaturesThisMonth !== undefined && (
+                <p className="text-xs text-gray-400 mt-1">
+                  {signaturesThisMonth} this month
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -393,7 +429,62 @@ export default function DocumentsPage() {
             </div>
           </div>
         </div>
+
+        {/* Completion Rate - only show if dashboard data available */}
+        {completionRate !== undefined && (
+          <div className="card p-4">
+            <div className="flex items-center space-x-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
+                <svg
+                  className="h-5 w-5 text-purple-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Completion Rate</p>
+                <p className="text-xl font-bold text-purple-600">
+                  {completionRate.toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Dashboard Alerts - only show if alerts available */}
+      {alerts.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {alerts.map((alert, index) => (
+            <div key={index} className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+              <div className="flex items-start">
+                <svg
+                  className="h-5 w-5 text-blue-400 flex-shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <p className="ml-3 text-sm text-blue-800">{alert}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div className="mb-6 flex items-center justify-between">

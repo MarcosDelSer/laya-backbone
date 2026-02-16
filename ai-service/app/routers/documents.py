@@ -21,6 +21,7 @@ from app.schemas.document import (
     DocumentTemplateResponse,
     DocumentTemplateUpdate,
     DocumentUpdate,
+    SignatureDashboardResponse,
     SignatureCreate,
     SignatureRequestCreate,
     SignatureRequestResponse,
@@ -29,6 +30,66 @@ from app.schemas.document import (
 from app.services.document_service import DocumentService
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
+
+
+# Dashboard Endpoint
+
+
+@router.get(
+    "/dashboard",
+    response_model=SignatureDashboardResponse,
+    summary="Get signature status dashboard",
+    description="Returns aggregated dashboard view with signature statistics, "
+    "status breakdowns, and recent activity.",
+)
+async def get_signature_dashboard(
+    user_id: Optional[UUID] = Query(
+        default=None,
+        description="Optional user ID to filter dashboard data",
+    ),
+    limit_recent: int = Query(
+        default=10,
+        ge=1,
+        le=50,
+        description="Number of recent activities to return",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> SignatureDashboardResponse:
+    """Get signature status dashboard with aggregated statistics.
+
+    Provides comprehensive overview of document signatures including:
+    - Summary statistics (total documents, pending, signed, completion rate)
+    - Breakdown by document status
+    - Breakdown by document type
+    - Recent signature activity
+    - Important alerts and notifications
+
+    Args:
+        user_id: Optional user ID to filter data (defaults to current user if not provided).
+        limit_recent: Maximum number of recent activities to return.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        SignatureDashboardResponse with aggregated dashboard data.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+
+    # If no user_id provided, use current user
+    if user_id is None:
+        user_id = UUID(current_user.get("id") or current_user.get("sub"))
+
+    dashboard_data = await service.get_signature_dashboard(
+        user_id=user_id,
+        limit_recent=limit_recent,
+    )
+
+    # Convert to response schema
+    return SignatureDashboardResponse(**dashboard_data)
 
 
 # Document Template Endpoints

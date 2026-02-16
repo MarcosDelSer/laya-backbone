@@ -47,6 +47,7 @@ const ENDPOINTS = {
   DOCUMENTS: '/api/v1/documents',
   DOCUMENT: (id: string) => `/api/v1/documents/${id}`,
   DOCUMENT_SIGNATURES: (id: string) => `/api/v1/documents/${id}/signatures`,
+  DOCUMENT_DASHBOARD: '/api/v1/documents/dashboard',
   SIGNATURE_REQUESTS: '/api/v1/documents/signature-requests',
   SIGNATURE_REQUEST: (id: string) => `/api/v1/documents/signature-requests/${id}`,
 } as const;
@@ -543,5 +544,88 @@ export async function markSignatureRequestViewed(
   return aiServiceClient.patch<SignatureRequest>(
     `${ENDPOINTS.SIGNATURE_REQUEST(requestId)}/viewed`,
     {}
+  );
+}
+
+/**
+ * Document status count.
+ */
+export interface DocumentStatusCount {
+  status: DocumentStatus;
+  count: number;
+}
+
+/**
+ * Document type count with status breakdown.
+ */
+export interface DocumentTypeCount {
+  type: string;
+  count: number;
+  pending: number;
+  signed: number;
+}
+
+/**
+ * Recent signature activity.
+ */
+export interface SignatureActivity {
+  document_id: string;
+  document_title: string;
+  signer_id: string;
+  signed_at: string;
+  document_type: string;
+}
+
+/**
+ * Dashboard summary statistics.
+ */
+export interface SignatureDashboardSummary {
+  total_documents: number;
+  pending_signatures: number;
+  signed_documents: number;
+  expired_documents: number;
+  draft_documents: number;
+  completion_rate: number;
+  documents_this_month: number;
+  signatures_this_month: number;
+}
+
+/**
+ * Signature status dashboard response.
+ */
+export interface SignatureDashboardResponse {
+  id: string;
+  summary: SignatureDashboardSummary;
+  status_breakdown: DocumentStatusCount[];
+  type_breakdown: DocumentTypeCount[];
+  recent_activity: SignatureActivity[];
+  alerts: string[];
+  generated_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Parameters for fetching dashboard data.
+ */
+export interface DashboardParams {
+  user_id?: string;
+  limit_recent?: number;
+}
+
+/**
+ * Get signature status dashboard with aggregated statistics.
+ */
+export async function getSignatureDashboard(
+  params?: DashboardParams
+): Promise<SignatureDashboardResponse> {
+  return aiServiceClient.get<SignatureDashboardResponse>(
+    ENDPOINTS.DOCUMENT_DASHBOARD,
+    {
+      params: {
+        user_id: params?.user_id,
+        limit_recent: params?.limit_recent,
+      },
+    }
   );
 }

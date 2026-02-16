@@ -807,3 +807,170 @@ class DocumentService:
             created_at=signature_request.created_at,
             updated_at=signature_request.updated_at,
         )
+
+    async def get_signature_dashboard(
+        self,
+        user_id: Optional[UUID] = None,
+        limit_recent: int = 10,
+    ) -> dict:
+        """Get aggregated signature status dashboard data.
+
+        Provides comprehensive statistics about documents and signatures including:
+        - Summary statistics (total, pending, signed, etc.)
+        - Breakdown by document status
+        - Breakdown by document type
+        - Recent signature activity
+
+        Args:
+            user_id: Optional user ID to filter by (for user-specific dashboard)
+            limit_recent: Maximum number of recent activities to return
+
+        Returns:
+            Dictionary with dashboard data including summary, breakdowns, and recent activity
+        """
+        now = datetime.now(timezone.utc)
+        first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # Base query for filtering by user if provided
+        base_filter = []
+        if user_id:
+            base_filter.append(Document.created_by == user_id)
+
+        # Get total counts by status
+        status_query = (
+            select(
+                Document.status,
+                func.count(Document.id).label("count"),
+            )
+            .group_by(Document.status)
+        )
+        if base_filter:
+            status_query = status_query.where(and_(*base_filter))
+
+        status_result = await self.db.execute(status_query)
+        status_counts = {row.status.value: row.count for row in status_result}
+
+        # Calculate summary statistics
+        total_documents = sum(status_counts.values())
+        pending_signatures = status_counts.get("pending", 0)
+        signed_documents = status_counts.get("signed", 0)
+        expired_documents = status_counts.get("expired", 0)
+        draft_documents = status_counts.get("draft", 0)
+
+        # Calculate completion rate
+        completable_docs = total_documents - draft_documents
+        completion_rate = (
+            (signed_documents / completable_docs * 100.0)
+            if completable_docs > 0
+            else 0.0
+        )
+
+        # Get documents created this month
+        month_query = select(func.count(Document.id)).where(
+            Document.created_at >= first_of_month
+        )
+        if base_filter:
+            month_query = month_query.where(and_(*base_filter))
+        month_result = await self.db.execute(month_query)
+        documents_this_month = month_result.scalar() or 0
+
+        # Get signatures created this month
+        sig_month_query = select(func.count(Signature.id)).where(
+            Signature.created_at >= first_of_month
+        )
+        if user_id:
+            sig_month_query = sig_month_query.where(Signature.signer_id == user_id)
+        sig_month_result = await self.db.execute(sig_month_query)
+        signatures_this_month = sig_month_result.scalar() or 0
+
+        # Get breakdown by document type with status counts
+        type_query = (
+            select(
+                Document.type,
+                func.count(Document.id).label("total"),
+                func.sum(
+                    cast(Document.status == DocumentStatus.PENDING, String).cast(func.Integer())
+                ).label("pending"),
+                func.sum(
+                    cast(Document.status == DocumentStatus.SIGNED, String).cast(func.Integer())
+                ).label("signed"),
+            )
+            .group_by(Document.type)
+        )
+        if base_filter:
+            type_query = type_query.where(and_(*base_filter))
+
+        type_result = await self.db.execute(type_query)
+        type_breakdown = [
+            {
+                "type": row.type.value,
+                "count": row.total,
+                "pending": row.pending or 0,
+                "signed": row.signed or 0,
+            }
+            for row in type_result
+        ]
+
+        # Get recent signature activity
+        activity_query = (
+            select(Signature, Document)
+            .join(Document, Signature.document_id == Document.id)
+            .order_by(Signature.created_at.desc())
+            .limit(limit_recent)
+        )
+        if user_id:
+            activity_query = activity_query.where(Signature.signer_id == user_id)
+
+        activity_result = await self.db.execute(activity_query)
+        recent_activity = [
+            {
+                "document_id": str(signature.document_id),
+                "document_title": document.title,
+                "signer_id": str(signature.signer_id),
+                "signed_at": signature.created_at.isoformat(),
+                "document_type": document.type.value,
+            }
+            for signature, document in activity_result
+        ]
+
+        # Generate alerts
+        alerts = []
+        if pending_signatures > 0:
+            alerts.append(
+                f"You have {pending_signatures} document{'s' if pending_signatures != 1 else ''} "
+                f"awaiting signature"
+            )
+        if expired_documents > 0:
+            alerts.append(
+                f"{expired_documents} document{'s' if expired_documents != 1 else ''} "
+                f"ha{'ve' if expired_documents != 1 else 's'} expired"
+            )
+        if completion_rate < 50 and completable_docs > 5:
+            alerts.append(
+                f"Signature completion rate is {completion_rate:.1f}%. "
+                f"Consider following up on pending documents."
+            )
+
+        # Build status breakdown
+        status_breakdown = [
+            {"status": status, "count": count}
+            for status, count in status_counts.items()
+        ]
+
+        return {
+            "summary": {
+                "total_documents": total_documents,
+                "pending_signatures": pending_signatures,
+                "signed_documents": signed_documents,
+                "expired_documents": expired_documents,
+                "draft_documents": draft_documents,
+                "completion_rate": round(completion_rate, 2),
+                "documents_this_month": documents_this_month,
+                "signatures_this_month": signatures_this_month,
+            },
+            "status_breakdown": status_breakdown,
+            "type_breakdown": type_breakdown,
+            "recent_activity": recent_activity,
+            "alerts": alerts,
+            "generated_at": now.isoformat(),
+        }
