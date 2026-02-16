@@ -157,10 +157,18 @@ class AuthService:
             TokenResponse containing new access and refresh tokens
 
         Raises:
-            HTTPException: 401 Unauthorized if refresh token is invalid or user not found
+            HTTPException: 401 Unauthorized if refresh token is invalid, revoked, or user not found
         """
         # Decode and validate refresh token
         payload = decode_token(refresh_request.refresh_token)
+
+        # Check if refresh token is blacklisted
+        if await self.is_token_blacklisted(refresh_request.refresh_token):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         # Verify token type
         token_type = payload.get("type")

@@ -20,13 +20,16 @@ from app.auth.schemas import (
     PasswordResetConfirm,
     PasswordResetConfirmResponse,
 )
+from app.auth.jwt import security, verify_token
 from app.auth.dependencies import get_current_user, require_role
 
 __all__ = [
+    # Models
     "User",
     "UserRole",
     "TokenBlacklist",
     "PasswordResetToken",
+    # Schemas
     "LoginRequest",
     "RefreshRequest",
     "TokenResponse",
@@ -36,6 +39,10 @@ __all__ = [
     "PasswordResetRequestResponse",
     "PasswordResetConfirm",
     "PasswordResetConfirmResponse",
+    # JWT utilities
+    "security",
+    "verify_token",
+    # Dependencies
     "get_current_user",
     "require_role",
 ]

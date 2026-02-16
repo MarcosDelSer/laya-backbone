@@ -9,35 +9,40 @@ from typing import Any, Callable
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import verify_token, security
+from app.auth.jwt import verify_token, security
 from app.auth.models import UserRole
+from app.database import get_db
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Dependency to get the current authenticated user from JWT token.
 
     This dependency extracts and validates the JWT token from the Authorization
-    header and returns the decoded payload containing user information.
+    header, checks that it has not been revoked, and returns the decoded payload
+    containing user information.
 
     Args:
         credentials: HTTP Authorization credentials injected by FastAPI
+        db: Async database session for blacklist lookup
 
     Returns:
         dict[str, Any]: Decoded token payload containing user information
             including 'sub' (user ID), 'email', 'role', and 'type'
 
     Raises:
-        HTTPException: 401 Unauthorized if token is missing, invalid, or expired
+        HTTPException: 401 Unauthorized if token is missing, invalid, expired, or revoked
 
     Example:
         @router.get("/profile")
         async def get_profile(current_user: dict = Depends(get_current_user)):
             return {"user_id": current_user["sub"], "email": current_user["email"]}
     """
-    return await verify_token(credentials)
+    return await verify_token(credentials, db)
 
 
 def require_role(*allowed_roles: UserRole) -> Callable:
