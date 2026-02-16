@@ -11,7 +11,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import verify_token, security
+from app.auth.jwt import verify_token, security
 from app.auth.models import UserRole
 from app.database import get_db
 
@@ -23,11 +23,12 @@ async def get_current_user(
     """Dependency to get the current authenticated user from JWT token.
 
     This dependency extracts and validates the JWT token from the Authorization
-    header and returns the decoded payload containing user information.
+    header, checks that it has not been revoked, and returns the decoded payload
+    containing user information.
 
     Args:
         credentials: HTTP Authorization credentials injected by FastAPI
-        db: Database session for checking token blacklist
+        db: Async database session for blacklist lookup
 
     Returns:
         dict[str, Any]: Decoded token payload containing user information

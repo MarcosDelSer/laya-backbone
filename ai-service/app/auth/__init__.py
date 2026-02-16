@@ -1,23 +1,48 @@
-"""Authentication bridge module for cross-service authentication.
+"""Authentication module for LAYA AI Service.
 
-This module provides role mapping and synchronization between Gibbon
-and the AI service authentication systems.
+This package contains authentication and authorization functionality including:
+- User models and schemas
+- JWT token generation and validation
+- Authentication routes and endpoints
+- Password hashing and verification
+- Role-based access control
 """
 
-from app.auth.bridges import (
-    AIServiceRole,
-    GibbonRoleID,
-    RoleMapping,
-    get_ai_role_from_gibbon,
-    get_gibbon_role_from_ai,
-    validate_role_mapping,
+from app.auth.models import User, UserRole, TokenBlacklist, PasswordResetToken
+from app.auth.schemas import (
+    LoginRequest,
+    RefreshRequest,
+    TokenResponse,
+    LogoutRequest,
+    LogoutResponse,
+    PasswordResetRequest,
+    PasswordResetRequestResponse,
+    PasswordResetConfirm,
+    PasswordResetConfirmResponse,
 )
+from app.auth.jwt import security, verify_token
+from app.auth.dependencies import get_current_user, require_role
 
 __all__ = [
-    "AIServiceRole",
-    "GibbonRoleID",
-    "RoleMapping",
-    "get_ai_role_from_gibbon",
-    "get_gibbon_role_from_ai",
-    "validate_role_mapping",
+    # Models
+    "User",
+    "UserRole",
+    "TokenBlacklist",
+    "PasswordResetToken",
+    # Schemas
+    "LoginRequest",
+    "RefreshRequest",
+    "TokenResponse",
+    "LogoutRequest",
+    "LogoutResponse",
+    "PasswordResetRequest",
+    "PasswordResetRequestResponse",
+    "PasswordResetConfirm",
+    "PasswordResetConfirmResponse",
+    # JWT utilities
+    "security",
+    "verify_token",
+    # Dependencies
+    "get_current_user",
+    "require_role",
 ]

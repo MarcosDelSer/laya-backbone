@@ -25,7 +25,7 @@ from app.auth.schemas import (
     PasswordResetConfirmResponse,
 )
 from app.auth.jwt import create_token as create_jwt_token, decode_token
-from app.core.security import verify_password, hash_password
+from app.core.security import verify_password, hash_password, hash_token
 from app.config import settings
 
 
@@ -157,10 +157,18 @@ class AuthService:
             TokenResponse containing new access and refresh tokens
 
         Raises:
-            HTTPException: 401 Unauthorized if refresh token is invalid or user not found
+            HTTPException: 401 Unauthorized if refresh token is invalid, revoked, or user not found
         """
         # Decode and validate refresh token
         payload = decode_token(refresh_request.refresh_token)
+
+        # Check if refresh token is blacklisted
+        if await self.is_token_blacklisted(refresh_request.refresh_token):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         # Verify token type
         token_type = payload.get("type")
@@ -370,14 +378,17 @@ class AuthService:
             # Generate secure random token
             reset_token = secrets.token_urlsafe(32)
 
+            # Hash token for secure storage (plain token sent to user, hash stored in DB)
+            token_hash = hash_token(reset_token)
+
             # Calculate expiration time
             expires_at = datetime.now(timezone.utc) + timedelta(
                 seconds=self.PASSWORD_RESET_TOKEN_EXPIRE_SECONDS
             )
 
-            # Store reset token in database
+            # Store hashed token in database
             password_reset = PasswordResetToken(
-                token=reset_token,
+                token=token_hash,
                 user_id=user.id,
                 email=user.email,
                 expires_at=expires_at,
@@ -386,8 +397,8 @@ class AuthService:
             self.db.add(password_reset)
             await self.db.commit()
 
-            # In production, send email with reset token here
-            # For now, the token would need to be retrieved from database or logs
+            # In production, send email with plain reset_token here
+            # The plain token is sent to user, only the hash is stored
 
         # Mask email for privacy (show first char and domain)
         email_parts = reset_request.email.split("@")
@@ -419,9 +430,12 @@ class AuthService:
                 - Token has already been used
                 - Associated user not found or inactive
         """
-        # Query reset token
+        # Hash the incoming token to match against stored hash
+        token_hash = hash_token(confirm_request.token)
+
+        # Query reset token by hash
         stmt = select(PasswordResetToken).where(
-            PasswordResetToken.token == confirm_request.token
+            PasswordResetToken.token == token_hash
         )
         result = await self.db.execute(stmt)
         reset_token = result.scalar_one_or_none()
