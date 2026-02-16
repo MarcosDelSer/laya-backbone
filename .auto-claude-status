@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "013-task-l-desktop-app",
+  "spec": "046-child-registration-form",
   "state": "building",
   "subtasks": {
-    "completed": 10,
-    "total": 12,
+    "completed": 8,
+    "total": 34,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Integration Verification",
+    "current": "Gibbon Gateway Classes",
     "id": null,
-    "total": 3
+    "total": 8
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 4,
-    "started_at": "2026-02-15T05:15:00.899192"
+    "number": 6,
+    "started_at": "2026-02-16T21:08:41.929205"
   },
-  "last_update": "2026-02-15T05:19:32.125362"
+  "last_update": "2026-02-16T21:22:10.863548"
 }
