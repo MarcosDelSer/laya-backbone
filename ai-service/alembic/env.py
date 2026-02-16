@@ -39,6 +39,11 @@ from app.models.analytics import (  # noqa: E402, F401
     ComplianceCheck,
     EnrollmentForecast,
 )
+from app.models.storage import (  # noqa: E402, F401
+    File,
+    FileThumbnail,
+    StorageQuota,
+)
 
 target_metadata = Base.metadata
 
