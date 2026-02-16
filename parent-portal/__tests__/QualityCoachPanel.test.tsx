@@ -566,4 +566,128 @@ describe('QualityCoachPanel', () => {
       expect(heading).toBeInTheDocument()
     })
   })
+
+  describe('Bilingual Support', () => {
+    describe('English (default)', () => {
+      it('displays English panel title', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis()} language="en" />)
+        const heading = screen.getByRole('heading', { name: 'Quality Coach' })
+        expect(heading).toBeInTheDocument()
+      })
+
+      it('displays English ready to send badge', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis({ isAcceptable: true })} language="en" />)
+        expect(screen.getByText('Ready to send')).toBeInTheDocument()
+      })
+
+      it('displays English review suggested badge', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis({ isAcceptable: false })} language="en" />)
+        expect(screen.getByText('Review suggested')).toBeInTheDocument()
+      })
+
+      it('displays English severity labels', () => {
+        const analysis = createMockAnalysis({
+          issues: [createMockIssue({ severity: 'critical' })],
+        })
+        render(<QualityCoachPanel analysis={analysis} language="en" />)
+        expect(screen.getByText('Critical')).toBeInTheDocument()
+      })
+
+      it('displays English quality checks', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis()} language="en" />)
+        expect(screen.getByText('Positive Opening')).toBeInTheDocument()
+        expect(screen.getByText('Factual Basis')).toBeInTheDocument()
+        expect(screen.getByText('Solution Focus')).toBeInTheDocument()
+      })
+
+      it('displays English great message text', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis({ isAcceptable: true, issues: [] })} language="en" />)
+        expect(screen.getByText('Great message!')).toBeInTheDocument()
+      })
+    })
+
+    describe('French', () => {
+      it('displays French panel title', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis()} language="fr" />)
+        const heading = screen.getByRole('heading', { name: 'Coach Qualité' })
+        expect(heading).toBeInTheDocument()
+      })
+
+      it('displays French ready to send badge', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis({ isAcceptable: true })} language="fr" />)
+        expect(screen.getByText('Prêt à envoyer')).toBeInTheDocument()
+      })
+
+      it('displays French review suggested badge', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis({ isAcceptable: false })} language="fr" />)
+        expect(screen.getByText('Révision suggérée')).toBeInTheDocument()
+      })
+
+      it('displays French severity labels', () => {
+        const analysis = createMockAnalysis({
+          issues: [createMockIssue({ severity: 'critical' })],
+        })
+        render(<QualityCoachPanel analysis={analysis} language="fr" />)
+        expect(screen.getByText('Critique')).toBeInTheDocument()
+      })
+
+      it('displays French quality checks', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis()} language="fr" />)
+        expect(screen.getByText('Ouverture positive')).toBeInTheDocument()
+        expect(screen.getByText('Base factuelle')).toBeInTheDocument()
+        expect(screen.getByText('Focus solution')).toBeInTheDocument()
+      })
+
+      it('displays French great message text', () => {
+        render(<QualityCoachPanel analysis={createMockAnalysis({ isAcceptable: true, issues: [] })} language="fr" />)
+        expect(screen.getByText('Excellent message !')).toBeInTheDocument()
+      })
+
+      it('displays French issue type labels', () => {
+        const analysis = createMockAnalysis({
+          issues: [createMockIssue({ issueType: 'accusatory_you' })],
+        })
+        render(<QualityCoachPanel analysis={analysis} language="fr" />)
+        expect(screen.getByText('Langage accusateur')).toBeInTheDocument()
+      })
+
+      it('displays French section headers', () => {
+        const analysis = createMockAnalysis({
+          issues: [createMockIssue()],
+        })
+        render(<QualityCoachPanel analysis={analysis} language="fr" />)
+        expect(screen.getByText('Problèmes détectés')).toBeInTheDocument()
+      })
+
+      it('displays French apply suggestion button', () => {
+        const analysis = createMockAnalysis({
+          rewriteSuggestions: [createMockRewriteSuggestion()],
+        })
+        render(<QualityCoachPanel analysis={analysis} onApplyRewrite={vi.fn()} language="fr" />)
+        expect(screen.getByRole('button', { name: 'Appliquer la suggestion' })).toBeInTheDocument()
+      })
+    })
+
+    describe('Loading and Empty States', () => {
+      it('displays English loading message by default', () => {
+        render(<QualityCoachPanel analysis={null} isLoading={true} />)
+        expect(screen.getByText('Analyzing message...')).toBeInTheDocument()
+      })
+
+      it('displays French loading message when language is fr', () => {
+        render(<QualityCoachPanel analysis={null} isLoading={true} language="fr" />)
+        expect(screen.getByText('Analyse en cours...')).toBeInTheDocument()
+      })
+
+      it('displays English empty state message by default', () => {
+        render(<QualityCoachPanel analysis={null} isLoading={false} />)
+        expect(screen.getByText('Start typing to see quality analysis')).toBeInTheDocument()
+      })
+
+      it('displays French empty state message when language is fr', () => {
+        render(<QualityCoachPanel analysis={null} isLoading={false} language="fr" />)
+        expect(screen.getByText("Commencez à taper pour voir l'analyse de qualité")).toBeInTheDocument()
+      })
+    })
+  })
 })

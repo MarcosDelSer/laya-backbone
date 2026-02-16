@@ -21,6 +21,58 @@ interface EnhancedMessageComposerProps {
   onAnalysisComplete?: (analysis: MessageAnalysisResponse | null) => void;
 }
 
+// =============================================================================
+// Bilingual UI Translations for Composer
+// =============================================================================
+
+type ComposerTranslationKey =
+  | 'qualityAnalysisUnavailable'
+  | 'attachFile'
+  | 'messageInput'
+  | 'sendMessage'
+  | 'sendWithWarning'
+  | 'enterToSend'
+  | 'typeMoreChars'
+  | 'messageQualityOk'
+  | 'reviewSuggestions'
+  | 'analyzing'
+  | 'qualityIssuesDetected'
+  | 'reviewBeforeSending'
+  | 'sendAnyway';
+
+const composerTranslations: Record<MessageLanguage, Record<ComposerTranslationKey, string>> = {
+  en: {
+    qualityAnalysisUnavailable: 'Quality analysis unavailable:',
+    attachFile: 'Attach file (coming soon)',
+    messageInput: 'Message input',
+    sendMessage: 'Send message',
+    sendWithWarning: 'Send with quality warning',
+    enterToSend: 'Press Enter to send, Shift+Enter for new line',
+    typeMoreChars: 'Type {count} more characters for quality analysis',
+    messageQualityOk: '✓ Message quality OK',
+    reviewSuggestions: '⚠ Review quality suggestions',
+    analyzing: 'Analyzing...',
+    qualityIssuesDetected: 'quality {count} detected.',
+    reviewBeforeSending: 'Review suggestions before sending.',
+    sendAnyway: 'Send anyway',
+  },
+  fr: {
+    qualityAnalysisUnavailable: 'Analyse qualité non disponible :',
+    attachFile: 'Joindre un fichier (bientôt)',
+    messageInput: 'Champ de message',
+    sendMessage: 'Envoyer le message',
+    sendWithWarning: 'Envoyer avec avertissement qualité',
+    enterToSend: 'Appuyez sur Entrée pour envoyer, Maj+Entrée pour nouvelle ligne',
+    typeMoreChars: 'Tapez encore {count} caractères pour l\'analyse qualité',
+    messageQualityOk: '✓ Qualité du message OK',
+    reviewSuggestions: '⚠ Révisez les suggestions de qualité',
+    analyzing: 'Analyse en cours...',
+    qualityIssuesDetected: '{count} problème(s) de qualité détecté(s).',
+    reviewBeforeSending: 'Révisez les suggestions avant d\'envoyer.',
+    sendAnyway: 'Envoyer quand même',
+  },
+};
+
 /**
  * Enhanced message composer with integrated Quality Coach panel.
  * Provides real-time message quality analysis based on Quebec 'Bonne Message' standards.
@@ -204,6 +256,8 @@ export function EnhancedMessageComposer({
   const canSend = message.trim().length > 0 && !disabled;
   const hasQualityWarning = analysis && !analysis.isAcceptable;
 
+  const t = composerTranslations[language];
+
   return (
     <div className="space-y-4">
       {/* Quality Coach Panel */}
@@ -215,6 +269,7 @@ export function EnhancedMessageComposer({
           onDismissIssue={handleDismissIssue}
           collapsed={isPanelCollapsed}
           onToggleCollapse={handleToggleCollapse}
+          language={language}
         />
       )}
 
@@ -234,7 +289,7 @@ export function EnhancedMessageComposer({
               />
             </svg>
             <p className="text-sm text-red-700">
-              Quality analysis unavailable: {analysisError}
+              {t.qualityAnalysisUnavailable} {analysisError}
             </p>
           </div>
         </div>
@@ -248,7 +303,7 @@ export function EnhancedMessageComposer({
             type="button"
             className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary rounded-full"
             disabled={disabled}
-            title="Attach file (coming soon)"
+            title={t.attachFile}
           >
             <svg
               className="h-5 w-5"
@@ -280,7 +335,7 @@ export function EnhancedMessageComposer({
                   ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500'
                   : 'border-gray-300 focus:border-primary focus:ring-primary'
               }`}
-              aria-label="Message input"
+              aria-label={t.messageInput}
             />
             {/* Character count */}
             {message.length > 200 && (
@@ -327,7 +382,7 @@ export function EnhancedMessageComposer({
                 ? 'bg-yellow-500 hover:bg-yellow-600 focus:ring-yellow-500 disabled:bg-gray-300'
                 : 'bg-primary hover:bg-primary-dark focus:ring-primary disabled:bg-gray-300'
             }`}
-            title={hasQualityWarning ? 'Send with quality warning' : 'Send message'}
+            title={hasQualityWarning ? t.sendWithWarning : t.sendMessage}
           >
             <svg
               className="h-5 w-5"
@@ -348,18 +403,18 @@ export function EnhancedMessageComposer({
         {/* Footer text */}
         <div className="mt-2 flex items-center justify-between">
           <p className="text-xs text-gray-400">
-            Press Enter to send, Shift+Enter for new line
+            {t.enterToSend}
           </p>
           {showQualityCoach && (
             <p className="text-xs text-gray-400">
               {message.trim().length < minCharactersForAnalysis
-                ? `Type ${minCharactersForAnalysis - message.trim().length} more characters for quality analysis`
+                ? t.typeMoreChars.replace('{count}', String(minCharactersForAnalysis - message.trim().length))
                 : analysis?.isAcceptable
-                ? '✓ Message quality OK'
+                ? t.messageQualityOk
                 : analysis && !analysis.isAcceptable
-                ? '⚠ Review quality suggestions'
+                ? t.reviewSuggestions
                 : isAnalyzing
-                ? 'Analyzing...'
+                ? t.analyzing
                 : ''}
             </p>
           )}
@@ -381,16 +436,15 @@ export function EnhancedMessageComposer({
                 />
               </svg>
               <span className="text-sm text-yellow-800">
-                {analysis.issues.length} quality{' '}
-                {analysis.issues.length === 1 ? 'issue' : 'issues'} detected.
-                Review suggestions before sending.
+                {t.qualityIssuesDetected.replace('{count}', String(analysis.issues.length))}{' '}
+                {t.reviewBeforeSending}
               </span>
             </div>
             <button
               type="submit"
               className="text-sm font-medium text-yellow-700 hover:text-yellow-900 focus:outline-none focus:underline"
             >
-              Send anyway
+              {t.sendAnyway}
             </button>
           </div>
         )}

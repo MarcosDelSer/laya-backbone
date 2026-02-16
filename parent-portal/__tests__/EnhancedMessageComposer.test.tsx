@@ -968,4 +968,139 @@ describe('EnhancedMessageComposer', () => {
       // No assertion needed - test passes if no error is thrown
     })
   })
+
+  describe('Bilingual Support', () => {
+    describe('English (default)', () => {
+      it('displays English footer text', () => {
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="en" />)
+        expect(screen.getByText('Press Enter to send, Shift+Enter for new line')).toBeInTheDocument()
+      })
+
+      it('displays English type more chars message', () => {
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} minCharactersForAnalysis={20} language="en" />)
+        expect(screen.getByText(/Type \d+ more characters for quality analysis/)).toBeInTheDocument()
+      })
+
+      it('has English aria-label on textarea', () => {
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="en" />)
+        const textarea = screen.getByLabelText('Message input')
+        expect(textarea).toBeInTheDocument()
+      })
+
+      it('displays English analyzing message', async () => {
+        mockAnalyzeMessageForComposer.mockImplementation(() => new Promise(() => {}))
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="en" minCharactersForAnalysis={5} />)
+        const textarea = screen.getByLabelText('Message input')
+
+        await act(async () => {
+          fireEvent.change(textarea, { target: { value: 'Testing message' } })
+          vi.advanceTimersByTime(600)
+        })
+
+        expect(screen.getByText('Analyzing...')).toBeInTheDocument()
+      })
+
+      it('displays English quality OK message', async () => {
+        mockAnalyzeMessageForComposer.mockResolvedValue(createMockAnalysis({ isAcceptable: true }))
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="en" minCharactersForAnalysis={5} />)
+        const textarea = screen.getByLabelText('Message input')
+
+        await act(async () => {
+          fireEvent.change(textarea, { target: { value: 'Testing message' } })
+          vi.advanceTimersByTime(600)
+        })
+
+        expect(screen.getByText('✓ Message quality OK')).toBeInTheDocument()
+      })
+    })
+
+    describe('French', () => {
+      it('displays French footer text', () => {
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="fr" />)
+        expect(screen.getByText('Appuyez sur Entrée pour envoyer, Maj+Entrée pour nouvelle ligne')).toBeInTheDocument()
+      })
+
+      it('displays French type more chars message', () => {
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} minCharactersForAnalysis={20} language="fr" />)
+        expect(screen.getByText(/Tapez encore \d+ caractères pour l'analyse qualité/)).toBeInTheDocument()
+      })
+
+      it('has French aria-label on textarea', () => {
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="fr" />)
+        const textarea = screen.getByLabelText('Champ de message')
+        expect(textarea).toBeInTheDocument()
+      })
+
+      it('displays French analyzing message', async () => {
+        mockAnalyzeMessageForComposer.mockImplementation(() => new Promise(() => {}))
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="fr" minCharactersForAnalysis={5} />)
+        const textarea = screen.getByLabelText('Champ de message')
+
+        await act(async () => {
+          fireEvent.change(textarea, { target: { value: 'Test du message' } })
+          vi.advanceTimersByTime(600)
+        })
+
+        expect(screen.getByText('Analyse en cours...')).toBeInTheDocument()
+      })
+
+      it('displays French quality OK message', async () => {
+        mockAnalyzeMessageForComposer.mockResolvedValue(createMockAnalysis({ isAcceptable: true }))
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="fr" minCharactersForAnalysis={5} />)
+        const textarea = screen.getByLabelText('Champ de message')
+
+        await act(async () => {
+          fireEvent.change(textarea, { target: { value: 'Test du message' } })
+          vi.advanceTimersByTime(600)
+        })
+
+        expect(screen.getByText('✓ Qualité du message OK')).toBeInTheDocument()
+      })
+
+      it('displays French review suggestions message', async () => {
+        mockAnalyzeMessageForComposer.mockResolvedValue(createMockAnalysis({ isAcceptable: false }))
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="fr" minCharactersForAnalysis={5} />)
+        const textarea = screen.getByLabelText('Champ de message')
+
+        await act(async () => {
+          fireEvent.change(textarea, { target: { value: 'Test du message' } })
+          vi.advanceTimersByTime(600)
+        })
+
+        expect(screen.getByText('⚠ Révisez les suggestions de qualité')).toBeInTheDocument()
+      })
+
+      it('displays French send anyway button', async () => {
+        mockAnalyzeMessageForComposer.mockResolvedValue(createMockAnalysis({
+          isAcceptable: false,
+          issues: [createMockIssue()],
+        }))
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="fr" minCharactersForAnalysis={5} />)
+        const textarea = screen.getByLabelText('Champ de message')
+
+        await act(async () => {
+          fireEvent.change(textarea, { target: { value: 'Test du message' } })
+          vi.advanceTimersByTime(600)
+        })
+
+        expect(screen.getByText('Envoyer quand même')).toBeInTheDocument()
+      })
+    })
+
+    describe('Language Switching', () => {
+      it('passes language prop to QualityCoachPanel', async () => {
+        mockAnalyzeMessageForComposer.mockResolvedValue(createMockAnalysis())
+        render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="fr" minCharactersForAnalysis={5} />)
+        const textarea = screen.getByLabelText('Champ de message')
+
+        await act(async () => {
+          fireEvent.change(textarea, { target: { value: 'Test du message' } })
+          vi.advanceTimersByTime(600)
+        })
+
+        // French panel title should be rendered
+        expect(screen.getByRole('heading', { name: 'Coach Qualité' })).toBeInTheDocument()
+      })
+    })
+  })
 })

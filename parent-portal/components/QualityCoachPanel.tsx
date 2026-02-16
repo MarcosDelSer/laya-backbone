@@ -6,6 +6,7 @@ import type {
   QualityIssueDetail,
   IssueSeverity,
   RewriteSuggestion,
+  MessageLanguage,
 } from '@/lib/types';
 
 interface QualityCoachPanelProps {
@@ -15,70 +16,210 @@ interface QualityCoachPanelProps {
   onDismissIssue?: (issue: QualityIssueDetail) => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** Language for UI translations */
+  language?: MessageLanguage;
 }
 
-// Severity configuration for visual indicators
-const severityConfig: Record<
-  IssueSeverity,
-  { color: string; bgColor: string; label: string; icon: React.ReactNode }
-> = {
-  critical: {
-    color: 'text-red-700',
-    bgColor: 'bg-red-50 border-red-200',
-    label: 'Critical',
-    icon: (
-      <svg className="h-4 w-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-        <path
-          fillRule="evenodd"
-          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-          clipRule="evenodd"
-        />
-      </svg>
-    ),
+// =============================================================================
+// Bilingual UI Translations
+// =============================================================================
+
+type TranslationKey =
+  | 'qualityCoach'
+  | 'readyToSend'
+  | 'reviewSuggested'
+  | 'analyzingMessage'
+  | 'startTyping'
+  | 'qualityScore'
+  | 'excellent'
+  | 'good'
+  | 'needsImprovement'
+  | 'requiresRevision'
+  | 'positiveOpening'
+  | 'factualBasis'
+  | 'solutionFocus'
+  | 'issuesDetected'
+  | 'issue'
+  | 'issues'
+  | 'suggestedRewrites'
+  | 'suggestedRewrite'
+  | 'original'
+  | 'suggested'
+  | 'applySuggestion'
+  | 'greatMessage'
+  | 'followsStandards'
+  | 'analysisNotes'
+  | 'dismiss'
+  | 'expandPanel'
+  | 'collapsePanel'
+  | 'iLanguage'
+  | 'sandwich'
+  | 'critical'
+  | 'high'
+  | 'medium'
+  | 'low'
+  | 'accusatoryLanguage'
+  | 'judgmentalLabel'
+  | 'blameShame'
+  | 'exaggeration'
+  | 'alarmist'
+  | 'comparison'
+  | 'negativeTone'
+  | 'missingPositive'
+  | 'missingSolution'
+  | 'multipleObjectives';
+
+const translations: Record<MessageLanguage, Record<TranslationKey, string>> = {
+  en: {
+    qualityCoach: 'Quality Coach',
+    readyToSend: 'Ready to send',
+    reviewSuggested: 'Review suggested',
+    analyzingMessage: 'Analyzing message...',
+    startTyping: 'Start typing to see quality analysis',
+    qualityScore: 'Quality Score',
+    excellent: 'Excellent',
+    good: 'Good',
+    needsImprovement: 'Needs Improvement',
+    requiresRevision: 'Requires Revision',
+    positiveOpening: 'Positive Opening',
+    factualBasis: 'Factual Basis',
+    solutionFocus: 'Solution Focus',
+    issuesDetected: 'Issues Detected',
+    issue: 'issue',
+    issues: 'issues',
+    suggestedRewrites: 'Suggested Rewrites',
+    suggestedRewrite: 'Suggested Rewrite',
+    original: 'Original:',
+    suggested: 'Suggested:',
+    applySuggestion: 'Apply Suggestion',
+    greatMessage: 'Great message!',
+    followsStandards: "Your message follows Quebec 'Bonne Message' standards.",
+    analysisNotes: 'Analysis Notes:',
+    dismiss: 'Dismiss issue',
+    expandPanel: 'Expand panel',
+    collapsePanel: 'Collapse panel',
+    iLanguage: 'I-language',
+    sandwich: 'Sandwich',
+    critical: 'Critical',
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low',
+    accusatoryLanguage: 'Accusatory Language',
+    judgmentalLabel: 'Judgmental Label',
+    blameShame: 'Blame/Shame Pattern',
+    exaggeration: 'Exaggeration',
+    alarmist: 'Alarmist Language',
+    comparison: 'Comparison',
+    negativeTone: 'Negative Tone',
+    missingPositive: 'Missing Positive Opening',
+    missingSolution: 'Missing Solution Focus',
+    multipleObjectives: 'Multiple Objectives',
   },
-  high: {
-    color: 'text-orange-700',
-    bgColor: 'bg-orange-50 border-orange-200',
-    label: 'High',
-    icon: (
-      <svg className="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-        <path
-          fillRule="evenodd"
-          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-          clipRule="evenodd"
-        />
-      </svg>
-    ),
-  },
-  medium: {
-    color: 'text-yellow-700',
-    bgColor: 'bg-yellow-50 border-yellow-200',
-    label: 'Medium',
-    icon: (
-      <svg className="h-4 w-4 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-        <path
-          fillRule="evenodd"
-          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-          clipRule="evenodd"
-        />
-      </svg>
-    ),
-  },
-  low: {
-    color: 'text-blue-700',
-    bgColor: 'bg-blue-50 border-blue-200',
-    label: 'Low',
-    icon: (
-      <svg className="h-4 w-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-        <path
-          fillRule="evenodd"
-          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-          clipRule="evenodd"
-        />
-      </svg>
-    ),
+  fr: {
+    qualityCoach: 'Coach Qualité',
+    readyToSend: 'Prêt à envoyer',
+    reviewSuggested: 'Révision suggérée',
+    analyzingMessage: 'Analyse en cours...',
+    startTyping: 'Commencez à taper pour voir l\'analyse de qualité',
+    qualityScore: 'Score de Qualité',
+    excellent: 'Excellent',
+    good: 'Bon',
+    needsImprovement: 'À améliorer',
+    requiresRevision: 'Révision requise',
+    positiveOpening: 'Ouverture positive',
+    factualBasis: 'Base factuelle',
+    solutionFocus: 'Focus solution',
+    issuesDetected: 'Problèmes détectés',
+    issue: 'problème',
+    issues: 'problèmes',
+    suggestedRewrites: 'Réécritures suggérées',
+    suggestedRewrite: 'Réécriture suggérée',
+    original: 'Original :',
+    suggested: 'Suggéré :',
+    applySuggestion: 'Appliquer la suggestion',
+    greatMessage: 'Excellent message !',
+    followsStandards: 'Votre message respecte les normes « Bonne Message » du Québec.',
+    analysisNotes: 'Notes d\'analyse :',
+    dismiss: 'Ignorer le problème',
+    expandPanel: 'Développer le panneau',
+    collapsePanel: 'Réduire le panneau',
+    iLanguage: 'Langage Je',
+    sandwich: 'Sandwich',
+    critical: 'Critique',
+    high: 'Élevé',
+    medium: 'Moyen',
+    low: 'Faible',
+    accusatoryLanguage: 'Langage accusateur',
+    judgmentalLabel: 'Étiquette jugeante',
+    blameShame: 'Blâme/Honte',
+    exaggeration: 'Exagération',
+    alarmist: 'Langage alarmiste',
+    comparison: 'Comparaison',
+    negativeTone: 'Ton négatif',
+    missingPositive: 'Ouverture positive manquante',
+    missingSolution: 'Focus solution manquant',
+    multipleObjectives: 'Objectifs multiples',
   },
 };
+
+// Severity icons (shared between languages)
+const severityIcons: Record<IssueSeverity, React.ReactNode> = {
+  critical: (
+    <svg className="h-4 w-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+      <path
+        fillRule="evenodd"
+        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+        clipRule="evenodd"
+      />
+    </svg>
+  ),
+  high: (
+    <svg className="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+      <path
+        fillRule="evenodd"
+        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+        clipRule="evenodd"
+      />
+    </svg>
+  ),
+  medium: (
+    <svg className="h-4 w-4 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+      <path
+        fillRule="evenodd"
+        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+        clipRule="evenodd"
+      />
+    </svg>
+  ),
+  low: (
+    <svg className="h-4 w-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+      <path
+        fillRule="evenodd"
+        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+        clipRule="evenodd"
+      />
+    </svg>
+  ),
+};
+
+// Severity colors (shared between languages)
+const severityColors: Record<IssueSeverity, { color: string; bgColor: string }> = {
+  critical: { color: 'text-red-700', bgColor: 'bg-red-50 border-red-200' },
+  high: { color: 'text-orange-700', bgColor: 'bg-orange-50 border-orange-200' },
+  medium: { color: 'text-yellow-700', bgColor: 'bg-yellow-50 border-yellow-200' },
+  low: { color: 'text-blue-700', bgColor: 'bg-blue-50 border-blue-200' },
+};
+
+// Get severity label by language
+function getSeverityLabel(severity: IssueSeverity, lang: MessageLanguage): string {
+  const labelMap: Record<IssueSeverity, TranslationKey> = {
+    critical: 'critical',
+    high: 'high',
+    medium: 'medium',
+    low: 'low',
+  };
+  return translations[lang][labelMap[severity]];
+}
 
 // Quality score color configuration
 function getScoreColor(score: number): string {
@@ -95,41 +236,56 @@ function getScoreBackgroundColor(score: number): string {
   return 'bg-red-100';
 }
 
-function getScoreLabel(score: number): string {
-  if (score >= 80) return 'Excellent';
-  if (score >= 60) return 'Good';
-  if (score >= 40) return 'Needs Improvement';
-  return 'Requires Revision';
+function getScoreLabel(score: number, lang: MessageLanguage): string {
+  const t = translations[lang];
+  if (score >= 80) return t.excellent;
+  if (score >= 60) return t.good;
+  if (score >= 40) return t.needsImprovement;
+  return t.requiresRevision;
 }
 
-// Issue type labels for display
-const issueTypeLabels: Record<string, string> = {
-  accusatory_you: 'Accusatory Language',
-  judgmental_label: 'Judgmental Label',
-  blame_shame: 'Blame/Shame Pattern',
-  exaggeration: 'Exaggeration',
-  alarmist: 'Alarmist Language',
-  comparison: 'Comparison',
-  negative_tone: 'Negative Tone',
-  missing_positive: 'Missing Positive Opening',
-  missing_solution: 'Missing Solution Focus',
-  multiple_objectives: 'Multiple Objectives',
-};
+// Issue type labels for display (bilingual)
+function getIssueTypeLabel(issueType: string, lang: MessageLanguage): string {
+  const issueTypeToKey: Record<string, TranslationKey> = {
+    accusatory_you: 'accusatoryLanguage',
+    judgmental_label: 'judgmentalLabel',
+    blame_shame: 'blameShame',
+    exaggeration: 'exaggeration',
+    alarmist: 'alarmist',
+    comparison: 'comparison',
+    negative_tone: 'negativeTone',
+    missing_positive: 'missingPositive',
+    missing_solution: 'missingSolution',
+    multiple_objectives: 'multipleObjectives',
+  };
+  const key = issueTypeToKey[issueType];
+  return key ? translations[lang][key] : issueType;
+}
 
-function SectionHeader({ title, count }: { title: string; count?: number }) {
+function SectionHeader({
+  title,
+  count,
+  language = 'en',
+}: {
+  title: string;
+  count?: number;
+  language?: MessageLanguage;
+}) {
+  const t = translations[language];
   return (
     <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-3">
       <h4 className="text-sm font-medium text-gray-900">{title}</h4>
       {count !== undefined && count > 0 && (
         <span className="text-xs text-gray-500">
-          {count} {count === 1 ? 'issue' : 'issues'}
+          {count} {count === 1 ? t.issue : t.issues}
         </span>
       )}
     </div>
   );
 }
 
-function LoadingState() {
+function LoadingState({ language = 'en' }: { language?: MessageLanguage }) {
+  const t = translations[language];
   return (
     <div className="flex items-center justify-center py-6">
       <div className="flex items-center space-x-3">
@@ -152,13 +308,14 @@ function LoadingState() {
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
           />
         </svg>
-        <span className="text-sm text-gray-600">Analyzing message...</span>
+        <span className="text-sm text-gray-600">{t.analyzingMessage}</span>
       </div>
     </div>
   );
 }
 
-function EmptyState() {
+function EmptyState({ language = 'en' }: { language?: MessageLanguage }) {
+  const t = translations[language];
   return (
     <div className="flex flex-col items-center justify-center py-6 text-center">
       <svg
@@ -175,16 +332,23 @@ function EmptyState() {
         />
       </svg>
       <p className="text-sm text-gray-500">
-        Start typing to see quality analysis
+        {t.startTyping}
       </p>
     </div>
   );
 }
 
-function QualityScoreIndicator({ score }: { score: number }) {
+function QualityScoreIndicator({
+  score,
+  language = 'en',
+}: {
+  score: number;
+  language?: MessageLanguage;
+}) {
+  const t = translations[language];
   const scoreColor = getScoreColor(score);
   const scoreBgColor = getScoreBackgroundColor(score);
-  const scoreLabel = getScoreLabel(score);
+  const scoreLabel = getScoreLabel(score, language);
 
   return (
     <div className="flex items-center space-x-3">
@@ -195,19 +359,22 @@ function QualityScoreIndicator({ score }: { score: number }) {
       </div>
       <div>
         <p className={`text-sm font-medium ${scoreColor}`}>{scoreLabel}</p>
-        <p className="text-xs text-gray-500">Quality Score</p>
+        <p className="text-xs text-gray-500">{t.qualityScore}</p>
       </div>
     </div>
   );
 }
 
 function QualityCheckIndicator({
-  label,
+  labelKey,
   passed,
+  language = 'en',
 }: {
-  label: string;
+  labelKey: TranslationKey;
   passed: boolean;
+  language?: MessageLanguage;
 }) {
+  const t = translations[language];
   return (
     <div className="flex items-center space-x-2">
       {passed ? (
@@ -228,7 +395,7 @@ function QualityCheckIndicator({
         </svg>
       )}
       <span className={`text-xs ${passed ? 'text-green-700' : 'text-gray-500'}`}>
-        {label}
+        {t[labelKey]}
       </span>
     </div>
   );
@@ -237,22 +404,27 @@ function QualityCheckIndicator({
 function IssueItem({
   issue,
   onDismiss,
+  language = 'en',
 }: {
   issue: QualityIssueDetail;
   onDismiss?: () => void;
+  language?: MessageLanguage;
 }) {
-  const config = severityConfig[issue.severity];
-  const issueLabel = issueTypeLabels[issue.issueType] || issue.issueType;
+  const t = translations[language];
+  const colors = severityColors[issue.severity];
+  const icon = severityIcons[issue.severity];
+  const severityLabel = getSeverityLabel(issue.severity, language);
+  const issueLabel = getIssueTypeLabel(issue.issueType, language);
 
   return (
-    <div className={`rounded-lg border p-3 ${config.bgColor}`}>
+    <div className={`rounded-lg border p-3 ${colors.bgColor}`}>
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-2">
-          <span className="flex-shrink-0 mt-0.5">{config.icon}</span>
+          <span className="flex-shrink-0 mt-0.5">{icon}</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center space-x-2">
-              <span className={`text-xs font-medium ${config.color}`}>
-                {config.label}
+              <span className={`text-xs font-medium ${colors.color}`}>
+                {severityLabel}
               </span>
               <span className="text-xs text-gray-400">|</span>
               <span className="text-xs text-gray-600">{issueLabel}</span>
@@ -288,7 +460,7 @@ function IssueItem({
             type="button"
             onClick={onDismiss}
             className="flex-shrink-0 ml-2 p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary rounded"
-            title="Dismiss issue"
+            title={t.dismiss}
           >
             <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
               <path
@@ -307,10 +479,13 @@ function IssueItem({
 function RewriteSuggestionCard({
   suggestion,
   onApply,
+  language = 'en',
 }: {
   suggestion: RewriteSuggestion;
   onApply?: () => void;
+  language?: MessageLanguage;
 }) {
+  const t = translations[language];
   return (
     <div className="rounded-lg border border-green-200 bg-green-50 p-3">
       <div className="flex items-start justify-between mb-2">
@@ -329,18 +504,18 @@ function RewriteSuggestionCard({
             />
           </svg>
           <span className="text-xs font-medium text-green-700">
-            Suggested Rewrite
+            {t.suggestedRewrite}
           </span>
         </div>
         <div className="flex items-center space-x-1">
           {suggestion.usesILanguage && (
             <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-              I-language
+              {t.iLanguage}
             </span>
           )}
           {suggestion.hasSandwichStructure && (
             <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
-              Sandwich
+              {t.sandwich}
             </span>
           )}
         </div>
@@ -348,13 +523,13 @@ function RewriteSuggestionCard({
 
       <div className="space-y-2">
         <div>
-          <p className="text-xs text-gray-500 mb-1">Original:</p>
+          <p className="text-xs text-gray-500 mb-1">{t.original}</p>
           <p className="text-sm text-gray-600 line-through">
             {suggestion.originalText}
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-500 mb-1">Suggested:</p>
+          <p className="text-xs text-gray-500 mb-1">{t.suggested}</p>
           <p className="text-sm text-gray-900">{suggestion.suggestedText}</p>
         </div>
         {suggestion.explanation && (
@@ -378,7 +553,7 @@ function RewriteSuggestionCard({
               d="M5 13l4 4L19 7"
             />
           </svg>
-          <span>Apply Suggestion</span>
+          <span>{t.applySuggestion}</span>
         </button>
       )}
     </div>
@@ -392,7 +567,10 @@ export function QualityCoachPanel({
   onDismissIssue,
   collapsed = false,
   onToggleCollapse,
+  language = 'en',
 }: QualityCoachPanelProps) {
+  const t = translations[language];
+
   // Sort issues by severity (critical first, then high, medium, low)
   const sortedIssues = useMemo(() => {
     if (!analysis?.issues) return [];
@@ -440,7 +618,7 @@ export function QualityCoachPanel({
               d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
             />
           </svg>
-          <h3 className="text-sm font-semibold text-gray-900">Quality Coach</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{t.qualityCoach}</h3>
           {analysis && !isLoading && (
             <span
               className={`text-xs px-2 py-0.5 rounded-full ${
@@ -449,7 +627,7 @@ export function QualityCoachPanel({
                   : 'bg-yellow-100 text-yellow-700'
               }`}
             >
-              {analysis.isAcceptable ? 'Ready to send' : 'Review suggested'}
+              {analysis.isAcceptable ? t.readyToSend : t.reviewSuggested}
             </span>
           )}
         </div>
@@ -458,7 +636,7 @@ export function QualityCoachPanel({
             type="button"
             onClick={onToggleCollapse}
             className="p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary rounded"
-            title={collapsed ? 'Expand panel' : 'Collapse panel'}
+            title={collapsed ? t.expandPanel : t.collapsePanel}
           >
             <svg
               className={`h-5 w-5 transition-transform ${
@@ -483,26 +661,29 @@ export function QualityCoachPanel({
       {!collapsed && (
         <div className="p-4">
           {isLoading ? (
-            <LoadingState />
+            <LoadingState language={language} />
           ) : !analysis ? (
-            <EmptyState />
+            <EmptyState language={language} />
           ) : (
             <div className="space-y-4">
               {/* Quality Score Section */}
               <div className="flex items-start justify-between">
-                <QualityScoreIndicator score={analysis.qualityScore} />
+                <QualityScoreIndicator score={analysis.qualityScore} language={language} />
                 <div className="flex flex-col space-y-1">
                   <QualityCheckIndicator
-                    label="Positive Opening"
+                    labelKey="positiveOpening"
                     passed={analysis.hasPositiveOpening}
+                    language={language}
                   />
                   <QualityCheckIndicator
-                    label="Factual Basis"
+                    labelKey="factualBasis"
                     passed={analysis.hasFactualBasis}
+                    language={language}
                   />
                   <QualityCheckIndicator
-                    label="Solution Focus"
+                    labelKey="solutionFocus"
                     passed={analysis.hasSolutionFocus}
+                    language={language}
                   />
                 </div>
               </div>
@@ -511,15 +692,17 @@ export function QualityCoachPanel({
               {hasIssues && (
                 <div className="flex items-center space-x-2 flex-wrap">
                   {(Object.keys(issueCounts) as IssueSeverity[]).map((severity) => {
-                    const config = severityConfig[severity];
+                    const colors = severityColors[severity];
+                    const icon = severityIcons[severity];
+                    const label = getSeverityLabel(severity, language);
                     return (
                       <span
                         key={severity}
-                        className={`inline-flex items-center space-x-1 text-xs px-2 py-1 rounded-full ${config.bgColor}`}
+                        className={`inline-flex items-center space-x-1 text-xs px-2 py-1 rounded-full ${colors.bgColor}`}
                       >
-                        {config.icon}
-                        <span className={config.color}>
-                          {issueCounts[severity]} {config.label}
+                        {icon}
+                        <span className={colors.color}>
+                          {issueCounts[severity]} {label}
                         </span>
                       </span>
                     );
@@ -530,7 +713,7 @@ export function QualityCoachPanel({
               {/* Issues List */}
               {hasIssues && (
                 <div>
-                  <SectionHeader title="Issues Detected" count={sortedIssues.length} />
+                  <SectionHeader title={t.issuesDetected} count={sortedIssues.length} language={language} />
                   <div className="space-y-2">
                     {sortedIssues.map((issue, index) => (
                       <IssueItem
@@ -539,6 +722,7 @@ export function QualityCoachPanel({
                         onDismiss={
                           onDismissIssue ? () => onDismissIssue(issue) : undefined
                         }
+                        language={language}
                       />
                     ))}
                   </div>
@@ -549,8 +733,9 @@ export function QualityCoachPanel({
               {hasRewrites && (
                 <div>
                   <SectionHeader
-                    title="Suggested Rewrites"
+                    title={t.suggestedRewrites}
                     count={analysis.rewriteSuggestions.length}
+                    language={language}
                   />
                   <div className="space-y-2">
                     {analysis.rewriteSuggestions.map((suggestion, index) => (
@@ -562,6 +747,7 @@ export function QualityCoachPanel({
                             ? () => onApplyRewrite(suggestion)
                             : undefined
                         }
+                        language={language}
                       />
                     ))}
                   </div>
@@ -571,7 +757,7 @@ export function QualityCoachPanel({
               {/* Analysis Notes */}
               {analysis.analysisNotes && (
                 <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-500 mb-1">Analysis Notes:</p>
+                  <p className="text-xs text-gray-500 mb-1">{t.analysisNotes}</p>
                   <p className="text-sm text-gray-700">{analysis.analysisNotes}</p>
                 </div>
               )}
@@ -592,10 +778,10 @@ export function QualityCoachPanel({
                   </svg>
                   <div>
                     <p className="text-sm font-medium text-green-800">
-                      Great message!
+                      {t.greatMessage}
                     </p>
                     <p className="text-xs text-green-600">
-                      Your message follows Quebec &apos;Bonne Message&apos; standards.
+                      {t.followsStandards}
                     </p>
                   </div>
                 </div>
