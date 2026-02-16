@@ -200,7 +200,7 @@ foreach ($pendingNotifications as $notification) {
     if (in_array($channel, ['email', 'both'])) {
         output('  Sending email to ' . $recipient['recipientEmail']);
 
-        $emailResult = $emailDelivery->send($notification, $recipient);
+        $emailResult = $emailDelivery->send($notification, $recipient, $notification['attempts'] + 1);
 
         if ($emailResult['success']) {
             output('  Email sent successfully');

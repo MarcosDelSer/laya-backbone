@@ -147,3 +147,28 @@ ADD COLUMN `readAt` DATETIME NULL COMMENT 'Timestamp when notification was marke
 
 CREATE INDEX `idx_readAt` ON `gibbonNotificationQueue` (`readAt`);end
 ";
+
+// v1.2.00 - Add notification delivery logging table
+++$count;
+$sql[$count][0] = '1.2.00';
+$sql[$count][1] = "
+CREATE TABLE IF NOT EXISTS `gibbonNotificationDeliveryLog` (
+    `gibbonNotificationDeliveryLogID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonNotificationQueueID` INT UNSIGNED NOT NULL COMMENT 'Reference to notification',
+    `channel` ENUM('email','push') NOT NULL COMMENT 'Delivery channel',
+    `status` ENUM('success','failed','skipped') NOT NULL COMMENT 'Delivery outcome',
+    `recipientIdentifier` VARCHAR(255) NULL COMMENT 'Email address or FCM token',
+    `attemptNumber` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'Attempt number (1, 2, 3...)',
+    `errorCode` VARCHAR(50) NULL COMMENT 'Error code if failed',
+    `errorMessage` TEXT NULL COMMENT 'Detailed error message',
+    `responseData` JSON NULL COMMENT 'Provider response (FCM message ID, etc.)',
+    `deliveryTimeMs` INT UNSIGNED NULL COMMENT 'Time taken to deliver in milliseconds',
+    `timestampCreated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'When attempt was made',
+    KEY `idx_queue` (`gibbonNotificationQueueID`),
+    KEY `idx_status` (`status`),
+    KEY `idx_channel` (`channel`),
+    KEY `idx_timestamp` (`timestampCreated`),
+    KEY `idx_queue_channel` (`gibbonNotificationQueueID`, `channel`),
+    FOREIGN KEY (`gibbonNotificationQueueID`) REFERENCES `gibbonNotificationQueue` (`gibbonNotificationQueueID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Detailed notification delivery logging for analytics and debugging';end
+";

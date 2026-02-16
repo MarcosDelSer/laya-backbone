@@ -3,7 +3,7 @@
   "spec": "032-push-notification-wiring",
   "state": "building",
   "subtasks": {
-    "completed": 4,
+    "completed": 6,
     "total": 8,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 2,
+    "number": 4,
     "started_at": "2026-02-16T02:44:02.995086"
   },
-  "last_update": "2026-02-16T02:49:42.319477"
+  "last_update": "2026-02-16T03:05:07.749782"
 }
