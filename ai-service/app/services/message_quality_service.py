@@ -1826,9 +1826,8 @@ class MessageQualityService:
         return MessageTemplateListResponse(
             items=items,
             total=total,
-            page=offset // limit + 1 if limit > 0 else 1,
-            page_size=limit,
-            has_more=offset + len(items) < total,
+            skip=offset,
+            limit=limit,
         )
 
     async def create_template(
@@ -1979,7 +1978,6 @@ class MessageQualityService:
         return TrainingExampleListResponse(
             items=items,
             total=total,
-            page=offset // limit + 1 if limit > 0 else 1,
-            page_size=limit,
-            has_more=offset + len(items) < total,
+            skip=offset,
+            limit=limit,
         )

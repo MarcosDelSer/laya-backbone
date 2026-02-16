@@ -245,6 +245,69 @@ CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(chi
 """
 
 
+# SQLite-compatible message quality tables (PostgreSQL ARRAY not supported in SQLite)
+SQLITE_CREATE_MESSAGE_QUALITY_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS message_analyses (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    child_id TEXT,
+    message_text TEXT NOT NULL,
+    language VARCHAR(2) NOT NULL DEFAULT 'en',
+    context VARCHAR(50) NOT NULL DEFAULT 'general_update',
+    quality_score INTEGER NOT NULL DEFAULT 0,
+    is_acceptable INTEGER NOT NULL DEFAULT 0,
+    issues_detected TEXT,
+    has_positive_opening INTEGER NOT NULL DEFAULT 0,
+    has_factual_basis INTEGER NOT NULL DEFAULT 1,
+    has_solution_focus INTEGER NOT NULL DEFAULT 0,
+    rewrite_suggested INTEGER NOT NULL DEFAULT 0,
+    rewrite_accepted INTEGER,
+    analysis_notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS message_templates (
+    id TEXT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    language VARCHAR(2) NOT NULL DEFAULT 'en',
+    description TEXT,
+    is_system INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS training_examples (
+    id TEXT PRIMARY KEY,
+    original_message TEXT NOT NULL,
+    improved_message TEXT NOT NULL,
+    issues_demonstrated TEXT NOT NULL,
+    explanation TEXT NOT NULL,
+    language VARCHAR(2) NOT NULL DEFAULT 'en',
+    difficulty_level VARCHAR(20) NOT NULL DEFAULT 'beginner',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    helpfulness_score REAL,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_analyses_user ON message_analyses(user_id);
+CREATE INDEX IF NOT EXISTS idx_message_analyses_child ON message_analyses(child_id);
+CREATE INDEX IF NOT EXISTS idx_message_analyses_language ON message_analyses(language);
+CREATE INDEX IF NOT EXISTS idx_message_templates_category ON message_templates(category);
+CREATE INDEX IF NOT EXISTS idx_message_templates_language ON message_templates(language);
+CREATE INDEX IF NOT EXISTS idx_training_examples_language ON training_examples(language);
+CREATE INDEX IF NOT EXISTS idx_training_examples_difficulty ON training_examples(difficulty_level);
+"""
+
+
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -333,6 +396,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
+    # Create message quality tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_MESSAGE_QUALITY_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     async with TestAsyncSessionLocal() as session:
         try:
             yield session
@@ -355,6 +425,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
+        # Drop message quality tables
+        await conn.execute(text("DROP TABLE IF EXISTS message_analyses"))
+        await conn.execute(text("DROP TABLE IF EXISTS message_templates"))
+        await conn.execute(text("DROP TABLE IF EXISTS training_examples"))
 
 
 @pytest_asyncio.fixture
