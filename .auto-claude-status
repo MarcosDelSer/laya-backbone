@@ -3,13 +3,13 @@
   "spec": "033-invoice-pdf-generation",
   "state": "building",
   "subtasks": {
-    "completed": 1,
+    "completed": 3,
     "total": 8,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Phase 1: Core Implementation",
+    "current": "Phase 2: Service Integration",
     "id": null,
     "total": 2
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 2,
+    "number": 4,
     "started_at": "2026-02-16T03:23:33.166888"
   },
-  "last_update": "2026-02-16T03:26:04.316180"
+  "last_update": "2026-02-16T03:33:04.816197"
 }

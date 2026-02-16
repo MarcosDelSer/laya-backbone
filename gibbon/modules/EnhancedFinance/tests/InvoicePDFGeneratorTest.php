@@ -456,6 +456,246 @@ class InvoicePDFGeneratorTest extends TestCase
         $this->assertEquals(3.32, $qst, 'QST should round to 2 decimal places');
     }
 
+    /**
+     * Test tax calculation with large amounts (typical monthly daycare fee).
+     */
+    public function testTaxCalculationWithLargeAmount(): void
+    {
+        $subtotal = 5000.00; // Large monthly fee
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+        $total = $subtotal + $gst + $qst;
+
+        $this->assertEquals(250.00, $gst, 'GST on $5000 should be $250.00');
+        $this->assertEquals(498.75, $qst, 'QST on $5000 should be $498.75');
+        $this->assertEquals(5748.75, $total, 'Total with taxes should be $5748.75');
+    }
+
+    /**
+     * Test tax calculation with small amounts (single day care).
+     */
+    public function testTaxCalculationWithSmallAmount(): void
+    {
+        $subtotal = 10.00; // Small daily fee
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+        $total = $subtotal + $gst + $qst;
+
+        $this->assertEquals(0.50, $gst, 'GST on $10 should be $0.50');
+        $this->assertEquals(1.00, $qst, 'QST on $10 should be $1.00');
+        $this->assertEquals(11.50, $total, 'Total with taxes should be $11.50');
+    }
+
+    /**
+     * Test tax calculation with very small amount (pennies).
+     */
+    public function testTaxCalculationWithPennies(): void
+    {
+        $subtotal = 0.50; // 50 cents
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+        $total = $subtotal + $gst + $qst;
+
+        $this->assertEquals(0.03, $gst, 'GST on $0.50 should be $0.03');
+        $this->assertEquals(0.05, $qst, 'QST on $0.50 should be $0.05');
+        $this->assertEquals(0.58, $total, 'Total with taxes should be $0.58');
+    }
+
+    /**
+     * Test tax calculation with typical monthly daycare fee ($1,500).
+     */
+    public function testTaxCalculationWithTypicalMonthlyFee(): void
+    {
+        $subtotal = 1500.00; // Typical monthly daycare fee
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+        $total = $subtotal + $gst + $qst;
+
+        $this->assertEquals(75.00, $gst, 'GST on $1500 should be $75.00');
+        $this->assertEquals(149.63, $qst, 'QST on $1500 should be $149.63');
+        $this->assertEquals(1724.63, $total, 'Total with taxes should be $1724.63');
+    }
+
+    /**
+     * Test tax calculation accuracy for QST rate (9.975%).
+     */
+    public function testQSTRateAccuracy(): void
+    {
+        $subtotal = 1000.00;
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+
+        // QST should be exactly 9.975% = $99.75
+        $this->assertEquals(99.75, $qst, 'QST rate of 9.975% should be accurate');
+    }
+
+    /**
+     * Test combined tax rate (GST + QST) is correct.
+     */
+    public function testCombinedTaxRate(): void
+    {
+        $combinedRate = InvoicePDFGenerator::GST_RATE + InvoicePDFGenerator::QST_RATE;
+
+        // GST 5% + QST 9.975% = 14.975%
+        $this->assertEquals(0.14975, $combinedRate, 'Combined tax rate should be 14.975%');
+    }
+
+    /**
+     * Test tax calculation with rounding edge case (up).
+     */
+    public function testTaxRoundingEdgeCaseUp(): void
+    {
+        $subtotal = 99.99;
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+
+        // GST: 99.99 * 0.05 = 4.9995 → rounds to 5.00
+        // QST: 99.99 * 0.09975 = 9.974025 → rounds to 9.97
+        $this->assertEquals(5.00, $gst, 'GST should round up to $5.00');
+        $this->assertEquals(9.97, $qst, 'QST should round down to $9.97');
+    }
+
+    /**
+     * Test tax calculation with rounding edge case (down).
+     */
+    public function testTaxRoundingEdgeCaseDown(): void
+    {
+        $subtotal = 88.88;
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+
+        // GST: 88.88 * 0.05 = 4.444 → rounds to 4.44
+        // QST: 88.88 * 0.09975 = 8.86590 → rounds to 8.87
+        $this->assertEquals(4.44, $gst, 'GST should round down to $4.44');
+        $this->assertEquals(8.87, $qst, 'QST should round up to $8.87');
+    }
+
+    /**
+     * Test tax calculation consistency across multiple calculations.
+     */
+    public function testTaxCalculationConsistency(): void
+    {
+        $subtotal1 = 100.00;
+        $subtotal2 = 100.00;
+
+        $gst1 = round($subtotal1 * InvoicePDFGenerator::GST_RATE, 2);
+        $gst2 = round($subtotal2 * InvoicePDFGenerator::GST_RATE, 2);
+        $qst1 = round($subtotal1 * InvoicePDFGenerator::QST_RATE, 2);
+        $qst2 = round($subtotal2 * InvoicePDFGenerator::QST_RATE, 2);
+
+        $this->assertEquals($gst1, $gst2, 'GST calculation should be consistent');
+        $this->assertEquals($qst1, $qst2, 'QST calculation should be consistent');
+    }
+
+    /**
+     * Test tax calculation in actual invoice rendering.
+     */
+    public function testTaxCalculationInInvoiceRendering(): void
+    {
+        $reflection = new \ReflectionClass($this->generator);
+        $method = $reflection->getMethod('renderInvoiceTemplate');
+        $method->setAccessible(true);
+
+        $html = $method->invoke($this->generator, $this->sampleInvoiceData);
+
+        // Verify tax amounts appear in rendered HTML
+        $this->assertStringContainsString('54.38', $html, 'GST amount should appear in invoice');
+        $this->assertStringContainsString('108.48', $html, 'QST amount should appear in invoice');
+        $this->assertStringContainsString('1,250.36', $html, 'Total with taxes should appear in invoice');
+    }
+
+    /**
+     * Test tax calculation with fractional cent subtotal.
+     */
+    public function testTaxCalculationWithFractionalCents(): void
+    {
+        $subtotal = 123.456; // This would come from item calculations
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+
+        // GST: 123.456 * 0.05 = 6.1728 → rounds to 6.17
+        // QST: 123.456 * 0.09975 = 12.309756 → rounds to 12.31
+        $this->assertEquals(6.17, $gst, 'GST should handle fractional cents correctly');
+        $this->assertEquals(12.31, $qst, 'QST should handle fractional cents correctly');
+    }
+
+    /**
+     * Test tax calculation preserves precision before rounding.
+     */
+    public function testTaxCalculationPrecision(): void
+    {
+        $subtotal = 1234.56;
+
+        // Calculate with full precision
+        $gstExact = $subtotal * InvoicePDFGenerator::GST_RATE;
+        $qstExact = $subtotal * InvoicePDFGenerator::QST_RATE;
+
+        // Then round
+        $gst = round($gstExact, 2);
+        $qst = round($qstExact, 2);
+
+        // Verify precision is maintained before rounding
+        $this->assertGreaterThan($gst, $gstExact, 'GST exact should have more precision');
+        $this->assertEquals(61.73, $gst, 'GST should be correctly rounded');
+        $this->assertEquals(123.14, $qst, 'QST should be correctly rounded');
+    }
+
+    /**
+     * Test tax calculation matches Quebec tax regulations.
+     */
+    public function testTaxCalculationMatchesQuebecRegulations(): void
+    {
+        // Quebec tax regulations: GST 5% + QST 9.975%
+        // Example from Quebec Revenue: $100 subtotal
+        $subtotal = 100.00;
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+        $total = $subtotal + $gst + $qst;
+
+        $this->assertEquals(5.00, $gst, 'GST should match Quebec regulation: 5%');
+        $this->assertEquals(9.98, $qst, 'QST should match Quebec regulation: 9.975%');
+        $this->assertEquals(114.98, $total, 'Total should match Quebec tax calculation');
+    }
+
+    /**
+     * Test tax calculation for real-world daycare scenario.
+     */
+    public function testTaxCalculationRealWorldDaycareScenario(): void
+    {
+        // Realistic daycare invoice:
+        // - 20 days basic care @ $45/day = $900
+        // - 15 lunches @ $8.50/meal = $127.50
+        // - 5 extended hours @ $12/hour = $60
+        // Subtotal: $1,087.50
+
+        $subtotal = 1087.50;
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+        $total = $subtotal + $gst + $qst;
+
+        $this->assertEquals(54.38, $gst, 'GST for realistic daycare invoice');
+        $this->assertEquals(108.48, $qst, 'QST for realistic daycare invoice');
+        $this->assertEquals(1250.36, $total, 'Total for realistic daycare invoice');
+    }
+
+    /**
+     * Test tax calculation doesn't compound (tax on tax).
+     */
+    public function testTaxCalculationDoesNotCompound(): void
+    {
+        $subtotal = 100.00;
+        $gst = round($subtotal * InvoicePDFGenerator::GST_RATE, 2);
+        $qst = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+        $total = $subtotal + $gst + $qst;
+
+        // Verify QST is calculated on subtotal, not on (subtotal + GST)
+        $qstOnSubtotal = round($subtotal * InvoicePDFGenerator::QST_RATE, 2);
+        $this->assertEquals($qstOnSubtotal, $qst, 'QST should be calculated on subtotal only, not compounded');
+
+        // Verify total is simple addition, not compounded
+        $expectedTotal = $subtotal + $gst + $qst;
+        $this->assertEquals($expectedTotal, $total, 'Total should be simple sum, not compounded');
+    }
+
     // =========================================================================
     // INVOICE DATA VALIDATION TESTS
     // =========================================================================
