@@ -1,6 +1,6 @@
 """FastAPI dependency injection utilities for LAYA AI Service.
 
-Provides reusable dependencies for authentication and database access.
+Provides reusable dependencies for authentication, database access, and services.
 """
 
 from __future__ import annotations
@@ -9,8 +9,11 @@ from typing import Any
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import security, verify_token
+from app.database import get_db
+from app.services.llm_service import LLMService
 
 
 async def get_current_user(
@@ -66,3 +69,29 @@ async def get_optional_user(
         return None
 
     return await verify_token(credentials)
+
+
+async def get_llm_service(
+    db: AsyncSession = Depends(get_db),
+) -> LLMService:
+    """Dependency to get the LLM service instance.
+
+    This dependency creates an LLMService instance with the provided database
+    session for token tracking, caching, and usage analytics.
+
+    Args:
+        db: Async database session injected by FastAPI
+
+    Returns:
+        LLMService: Configured LLM service instance with caching, tracking,
+            and fallback capabilities enabled
+
+    Example:
+        @app.post("/completions")
+        async def create_completion(
+            request: LLMCompletionRequest,
+            service: LLMService = Depends(get_llm_service),
+        ):
+            return await service.complete(request)
+    """
+    return LLMService(db)
