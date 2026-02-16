@@ -1,0 +1,39 @@
+{
+    "name": "laya/gibbon-modules",
+    "description": "LAYA custom modules for Gibbon",
+    "type": "project",
+    "license": "GPL-3.0-or-later",
+    "require": {
+        "php": "^8.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Gibbon\\Module\\System\\Domain\\": "modules/System/Domain/",
+            "Gibbon\\Module\\AISync\\Domain\\": "modules/AISync/Domain/",
+            "Gibbon\\Module\\NotificationEngine\\Domain\\": "modules/NotificationEngine/Domain/",
+            "Gibbon\\Module\\PhotoManagement\\Domain\\": "modules/PhotoManagement/Domain/",
+            "Gibbon\\Module\\CareTracking\\Domain\\": "modules/CareTracking/Domain/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Gibbon\\Module\\System\\Tests\\": "modules/System/tests/",
+            "Gibbon\\Module\\AISync\\Tests\\": "modules/AISync/tests/",
+            "Gibbon\\Module\\NotificationEngine\\Tests\\": "modules/NotificationEngine/tests/",
+            "Gibbon\\Module\\PhotoManagement\\Tests\\": "modules/PhotoManagement/tests/",
+            "Gibbon\\Module\\CareTracking\\Tests\\": "modules/CareTracking/tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:coverage": "phpunit --coverage-html coverage",
+        "test:system": "phpunit --testsuite System"
+    }
+}
