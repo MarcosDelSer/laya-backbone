@@ -18,6 +18,11 @@ from app.schemas.messaging import (
     MessageCreate,
     MessageListResponse,
     MessageResponse,
+    NotificationChannelType,
+    NotificationPreferenceListResponse,
+    NotificationPreferenceRequest,
+    NotificationPreferenceResponse,
+    NotificationType,
     SenderType,
     ThreadCreate,
     ThreadListResponse,
@@ -31,6 +36,7 @@ from app.services.messaging_service import (
     MessageNotFoundError,
     MessagingService,
     MessagingServiceError,
+    NotificationPreferenceNotFoundError,
     ThreadNotFoundError,
     UnauthorizedAccessError,
 )
@@ -688,6 +694,294 @@ async def get_message(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         )
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+# =============================================================================
+# Notification Preference Endpoints
+# =============================================================================
+
+
+@router.post("/notifications/preferences", response_model=NotificationPreferenceResponse)
+async def create_or_update_notification_preference(
+    request: NotificationPreferenceRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> NotificationPreferenceResponse:
+    """Create or update a notification preference.
+
+    Sets a parent's notification preference for a specific notification type
+    and delivery channel. If a preference already exists for the same
+    type/channel combination, it will be updated.
+
+    Args:
+        request: The notification preference request containing parent_id,
+                 notification_type, channel, is_enabled, frequency, and quiet hours
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        NotificationPreferenceResponse containing:
+        - id: Unique identifier of the preference
+        - parent_id: The parent's identifier
+        - notification_type: Type of notification configured
+        - channel: Notification delivery channel
+        - is_enabled: Whether notifications are enabled
+        - frequency: Notification delivery frequency
+        - quiet_hours_start: Start of quiet hours (if set)
+        - quiet_hours_end: End of quiet hours (if set)
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        return await service.create_notification_preference(request)
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.get(
+    "/notifications/preferences/{parent_id}",
+    response_model=NotificationPreferenceListResponse,
+)
+async def get_notification_preferences(
+    parent_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> NotificationPreferenceListResponse:
+    """Get all notification preferences for a parent.
+
+    Retrieves all notification preference configurations for a parent user
+    across all notification types and channels.
+
+    Args:
+        parent_id: Unique identifier of the parent user
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        NotificationPreferenceListResponse containing:
+        - parent_id: The parent's identifier
+        - preferences: List of notification preference configurations
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        return await service.get_notification_preferences(parent_id)
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.get(
+    "/notifications/preferences/{parent_id}/{notification_type}/{channel}",
+    response_model=NotificationPreferenceResponse,
+)
+async def get_notification_preference(
+    parent_id: UUID,
+    notification_type: NotificationType,
+    channel: NotificationChannelType,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> NotificationPreferenceResponse:
+    """Get a specific notification preference.
+
+    Retrieves a single notification preference for a specific notification
+    type and channel combination.
+
+    Args:
+        parent_id: Unique identifier of the parent user
+        notification_type: Type of notification (message, daily_log, urgent, admin)
+        channel: Notification delivery channel (email, push, sms)
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        NotificationPreferenceResponse with the preference configuration
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 404: When the preference is not found
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        return await service.get_notification_preference(
+            parent_id=parent_id,
+            notification_type=notification_type,
+            channel=channel,
+        )
+    except NotificationPreferenceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.delete(
+    "/notifications/preferences/{parent_id}/{notification_type}/{channel}",
+)
+async def delete_notification_preference(
+    parent_id: UUID,
+    notification_type: NotificationType,
+    channel: NotificationChannelType,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, bool]:
+    """Delete a notification preference.
+
+    Removes a notification preference for a specific type/channel combination.
+    After deletion, the system will use default notification behavior for
+    that type/channel.
+
+    Args:
+        parent_id: Unique identifier of the parent user
+        notification_type: Type of notification (message, daily_log, urgent, admin)
+        channel: Notification delivery channel (email, push, sms)
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        Dictionary containing:
+        - deleted: True if the preference was successfully deleted
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 404: When the preference is not found
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        await service.delete_notification_preference(
+            parent_id=parent_id,
+            notification_type=notification_type,
+            channel=channel,
+        )
+        return {"deleted": True}
+    except NotificationPreferenceNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.post(
+    "/notifications/preferences/{parent_id}/defaults",
+    response_model=NotificationPreferenceListResponse,
+)
+async def get_or_create_default_preferences(
+    parent_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> NotificationPreferenceListResponse:
+    """Get existing or create default notification preferences.
+
+    If preferences exist for the parent, returns them. Otherwise, creates
+    default preferences for all notification types and channels with
+    sensible defaults:
+    - Email and push enabled for all notification types
+    - SMS enabled only for urgent notifications
+    - No quiet hours configured
+
+    Args:
+        parent_id: Unique identifier of the parent user
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        NotificationPreferenceListResponse containing:
+        - parent_id: The parent's identifier
+        - preferences: List of notification preference configurations
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        return await service.get_or_create_default_preferences(parent_id)
+    except MessagingServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Messaging service error: {str(e)}",
+        )
+
+
+@router.patch("/notifications/preferences/{parent_id}/quiet-hours")
+async def set_quiet_hours(
+    parent_id: UUID,
+    quiet_hours_start: Optional[str] = Query(
+        default=None,
+        pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$",
+        description="Start of quiet hours in HH:MM format (e.g., '22:00')",
+    ),
+    quiet_hours_end: Optional[str] = Query(
+        default=None,
+        pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$",
+        description="End of quiet hours in HH:MM format (e.g., '07:00')",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, int]:
+    """Set quiet hours for all notification preferences.
+
+    Updates quiet hours across all notification preferences for a parent.
+    During quiet hours, notifications may be delayed or silenced depending
+    on the notification type priority.
+
+    Args:
+        parent_id: Unique identifier of the parent user
+        quiet_hours_start: Start of quiet hours (HH:MM format, e.g., "22:00")
+        quiet_hours_end: End of quiet hours (HH:MM format, e.g., "07:00")
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        Dictionary containing:
+        - updated_count: Number of preferences updated
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessagingService(db)
+
+    try:
+        updated_count = await service.set_quiet_hours(
+            parent_id=parent_id,
+            quiet_hours_start=quiet_hours_start,
+            quiet_hours_end=quiet_hours_end,
+        )
+        return {"updated_count": updated_count}
     except MessagingServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
