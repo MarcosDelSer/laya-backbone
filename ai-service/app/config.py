@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
 
+    # Database connection pool configuration
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 3600
+    db_pool_pre_ping: bool = True
+    db_echo: bool = False
+
     @property
     def database_url(self) -> str:
         """Construct the async database URL.
