@@ -712,3 +712,108 @@ async def test_password_reset_confirm_used_token(
     # Verify error message
     assert "detail" in data
     assert "Reset token has already been used" in data["detail"]
+
+
+# ============================================================================
+# Integration tests - Complete authentication flow
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_integration_login_to_protected_endpoint(
+    client: AsyncClient, test_user: User
+) -> None:
+    """Integration test for complete authentication flow.
+
+    This test verifies the entire authentication workflow from login to
+    accessing protected endpoints with various token scenarios:
+
+    1. Login with valid credentials → receive tokens
+    2. Access protected endpoint with valid Bearer token → 200 OK
+    3. Access protected endpoint without token → 401 Unauthorized
+    4. Access protected endpoint with invalid token → 401 Unauthorized
+    5. Access protected endpoint with expired token → 401 Unauthorized
+
+    This ensures end-to-end JWT authentication works correctly.
+    """
+    # Step 1: Login to get access token
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "teacher@example.com",
+            "password": "TestPassword123!",
+        },
+    )
+
+    assert login_response.status_code == 200
+    login_data = login_response.json()
+    assert "access_token" in login_data
+    access_token = login_data["access_token"]
+
+    # Step 2: Access protected endpoint with valid Bearer token → 200
+    protected_response = await client.get(
+        "/protected",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert protected_response.status_code == 200
+    protected_data = protected_response.json()
+
+    # Verify protected endpoint response structure
+    assert "message" in protected_data
+    assert "user" in protected_data
+    assert "token_data" in protected_data
+
+    # Verify response values
+    assert protected_data["message"] == "Access granted"
+    assert protected_data["user"] == str(test_user.id)
+
+    # Verify token data contains expected fields
+    token_data = protected_data["token_data"]
+    assert "sub" in token_data
+    assert "email" in token_data
+    assert "role" in token_data
+    assert token_data["sub"] == str(test_user.id)
+    assert token_data["email"] == test_user.email
+    assert token_data["role"] == test_user.role.value
+
+    # Step 3: Access protected endpoint without token → 401
+    no_token_response = await client.get("/protected")
+
+    assert no_token_response.status_code == 401
+    no_token_data = no_token_response.json()
+    assert "detail" in no_token_data
+    assert "Not authenticated" in no_token_data["detail"]
+
+    # Step 4: Access protected endpoint with invalid token → 401
+    invalid_token_response = await client.get(
+        "/protected",
+        headers={"Authorization": "Bearer invalid.token.here"},
+    )
+
+    assert invalid_token_response.status_code == 401
+    invalid_token_data = invalid_token_response.json()
+    assert "detail" in invalid_token_data
+    assert "Invalid authentication token" in invalid_token_data["detail"]
+
+    # Step 5: Access protected endpoint with expired token → 401
+    # Create an expired access token (expired 1 hour ago)
+    expired_token = create_token(
+        subject=str(test_user.id),
+        expires_delta_seconds=-3600,  # Negative means expired
+        additional_claims={
+            "email": test_user.email,
+            "role": test_user.role.value,
+            "type": "access",
+        },
+    )
+
+    expired_token_response = await client.get(
+        "/protected",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+
+    assert expired_token_response.status_code == 401
+    expired_token_data = expired_token_response.json()
+    assert "detail" in expired_token_data
+    assert "Token has expired" in expired_token_data["detail"]
