@@ -72,6 +72,8 @@ $qstRate = $qstRate ?? 0.09975;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice <?php echo htmlspecialchars($invoiceData['invoiceNumber'] ?? 'N/A'); ?></title>
+    <!-- Print-friendly CSS for browser printing -->
+    <link rel="stylesheet" href="<?php echo isset($modulePath) ? $modulePath : '../modules/EnhancedFinance'; ?>/css/invoice_print.css" media="print">
     <style>
         /* Base Styles */
         * {
