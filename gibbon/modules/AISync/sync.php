@@ -413,6 +413,7 @@ class AISyncService
                         SET status = 'failed',
                             response = :response,
                             errorMessage = :errorMessage,
+                            retryCount = retryCount + 1,
                             timestampProcessed = NOW()
                         WHERE gibbonAISyncLogID = :logID
                     ");
