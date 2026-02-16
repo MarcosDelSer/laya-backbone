@@ -631,4 +631,117 @@ class IncidentGateway extends QueryableGateway
 
         return $this->runSelect($query);
     }
+
+    /**
+     * Select severe incidents requiring director escalation.
+     *
+     * Returns Critical and High severity incidents that have not yet
+     * been escalated to the director for review.
+     *
+     * @param int $gibbonSchoolYearID
+     * @param string|null $date Optional date filter (defaults to all dates)
+     * @return \Gibbon\Database\Result
+     */
+    public function selectSevereIncidentsForEscalation($gibbonSchoolYearID, $date = null)
+    {
+        $query = $this
+            ->newSelect()
+            ->from($this->getTableName())
+            ->cols([
+                'gibbonCareIncident.*',
+                'gibbonPerson.preferredName',
+                'gibbonPerson.surname',
+                'gibbonPerson.image_240',
+                'gibbonPerson.dob',
+                'recordedBy.preferredName as recordedByName',
+                'recordedBy.surname as recordedBySurname',
+            ])
+            ->innerJoin('gibbonPerson', 'gibbonCareIncident.gibbonPersonID=gibbonPerson.gibbonPersonID')
+            ->leftJoin('gibbonPerson as recordedBy', 'gibbonCareIncident.recordedByID=recordedBy.gibbonPersonID')
+            ->where('gibbonCareIncident.gibbonSchoolYearID=:gibbonSchoolYearID')
+            ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID)
+            ->where("(gibbonCareIncident.severity='Critical' OR gibbonCareIncident.severity='High')")
+            ->where("(gibbonCareIncident.directorNotified IS NULL OR gibbonCareIncident.directorNotified='N')")
+            ->orderBy(['gibbonCareIncident.severity DESC', 'gibbonCareIncident.date DESC', 'gibbonCareIncident.time DESC']);
+
+        if ($date !== null) {
+            $query->where('gibbonCareIncident.date=:date')
+                  ->bindValue('date', $date);
+        }
+
+        return $this->runSelect($query);
+    }
+
+    /**
+     * Mark director as notified for an incident.
+     *
+     * @param int $gibbonCareIncidentID
+     * @return bool
+     */
+    public function markDirectorNotified($gibbonCareIncidentID)
+    {
+        return $this->update($gibbonCareIncidentID, [
+            'directorNotified' => 'Y',
+            'directorNotifiedTime' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    /**
+     * Get the escalation queue of incidents pending director notification.
+     *
+     * Returns a prioritized queue of incidents that require director attention,
+     * sorted by severity (Critical first) and then by date/time.
+     *
+     * @param int $gibbonSchoolYearID
+     * @param int $limit Maximum number of incidents to return (default 50)
+     * @return array
+     */
+    public function getEscalationQueue($gibbonSchoolYearID, $limit = 50)
+    {
+        $data = [
+            'gibbonSchoolYearID' => $gibbonSchoolYearID,
+            'limit' => $limit,
+        ];
+
+        $sql = "SELECT
+                    gibbonCareIncident.gibbonCareIncidentID,
+                    gibbonCareIncident.gibbonPersonID,
+                    gibbonCareIncident.date,
+                    gibbonCareIncident.time,
+                    gibbonCareIncident.type,
+                    gibbonCareIncident.severity,
+                    gibbonCareIncident.description,
+                    gibbonCareIncident.actionTaken,
+                    gibbonCareIncident.incidentCategory,
+                    gibbonCareIncident.bodyPart,
+                    gibbonCareIncident.medicalConsulted,
+                    gibbonCareIncident.followUpRequired,
+                    gibbonCareIncident.parentNotified,
+                    gibbonCareIncident.parentAcknowledged,
+                    gibbonCareIncident.timestampCreated,
+                    gibbonPerson.preferredName,
+                    gibbonPerson.surname,
+                    gibbonPerson.image_240,
+                    gibbonPerson.dob,
+                    recordedBy.preferredName as recordedByName,
+                    recordedBy.surname as recordedBySurname,
+                    TIMESTAMPDIFF(MINUTE, gibbonCareIncident.timestampCreated, NOW()) as minutesSinceCreated
+                FROM gibbonCareIncident
+                INNER JOIN gibbonPerson ON gibbonCareIncident.gibbonPersonID=gibbonPerson.gibbonPersonID
+                LEFT JOIN gibbonPerson as recordedBy ON gibbonCareIncident.recordedByID=recordedBy.gibbonPersonID
+                WHERE gibbonCareIncident.gibbonSchoolYearID=:gibbonSchoolYearID
+                AND (gibbonCareIncident.severity='Critical' OR gibbonCareIncident.severity='High')
+                AND (gibbonCareIncident.directorNotified IS NULL OR gibbonCareIncident.directorNotified='N')
+                ORDER BY
+                    CASE gibbonCareIncident.severity
+                        WHEN 'Critical' THEN 1
+                        WHEN 'High' THEN 2
+                        ELSE 3
+                    END ASC,
+                    gibbonCareIncident.date DESC,
+                    gibbonCareIncident.time DESC
+                LIMIT :limit";
+
+        return $this->db()->select($sql, $data)->fetchAll();
+    }
 }
