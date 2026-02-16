@@ -1,0 +1,35 @@
+[
+  {
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "email": "jane.smith@littlestars.ca",
+    "phone": "416-555-0101",
+    "mobile": "416-555-0102",
+    "role": "Director",
+    "qualifications": "Early Childhood Education Diploma, Bachelor of Education",
+    "certifications": "First Aid/CPR, Vulnerable Sector Check",
+    "start_date": "2020-01-15"
+  },
+  {
+    "first_name": "John",
+    "last_name": "Doe",
+    "email": "john.doe@littlestars.ca",
+    "phone": "416-555-0103",
+    "mobile": "416-555-0104",
+    "role": "Lead Educator",
+    "qualifications": "Early Childhood Education Certificate",
+    "certifications": "First Aid/CPR, Vulnerable Sector Check",
+    "start_date": "2021-03-01"
+  },
+  {
+    "first_name": "Emily",
+    "last_name": "Brown",
+    "email": "emily.brown@littlestars.ca",
+    "phone": "416-555-0105",
+    "mobile": "416-555-0106",
+    "role": "Educator",
+    "qualifications": "Early Childhood Assistant Certificate",
+    "certifications": "First Aid/CPR",
+    "start_date": "2021-09-15"
+  }
+]

@@ -413,6 +413,7 @@ class AISyncService
                         SET status = 'failed',
                             response = :response,
                             errorMessage = :errorMessage,
+                            retryCount = retryCount + 1,
                             timestampProcessed = NOW()
                         WHERE gibbonAISyncLogID = :logID
                     ");
@@ -702,6 +703,40 @@ class AISyncService
     {
         return $this->sendWebhookAsync(
             'photo_uploaded',
+            'photo',
+            $photoID,
+            $photoData
+        );
+    }
+
+    /**
+     * Sync a photo tag event to the AI service.
+     *
+     * @param int $photoID Photo ID
+     * @param array $tagData Photo tag data including tagged children
+     * @return array Result
+     */
+    public function syncPhotoTag($photoID, array $tagData)
+    {
+        return $this->sendWebhookAsync(
+            'photo_tagged',
+            'photo',
+            $photoID,
+            $tagData
+        );
+    }
+
+    /**
+     * Sync a photo delete event to the AI service.
+     *
+     * @param int $photoID Photo ID
+     * @param array $photoData Photo metadata
+     * @return array Result
+     */
+    public function syncPhotoDelete($photoID, array $photoData)
+    {
+        return $this->sendWebhookAsync(
+            'photo_deleted',
             'photo',
             $photoID,
             $photoData

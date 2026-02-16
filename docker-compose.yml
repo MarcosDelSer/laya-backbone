@@ -1,0 +1,213 @@
+# LAYA Kindergarten & Childcare Management Platform
+# Docker Compose Configuration for Development Environment
+#
+# Services:
+#   - mysql: Gibbon CMS database (MySQL 8.0)
+#   - postgres: AI Service database (PostgreSQL 12)
+#   - nginx: Web server for Gibbon CMS
+#   - php-fpm: PHP 8.3 processor for Gibbon
+#   - redis: Session storage and caching
+#
+# Usage:
+#   cp .env.example .env
+#   docker-compose up -d
+#
+# Service URLs:
+#   - Gibbon CMS: http://localhost:8080
+#   - AI Service: http://localhost:8000
+#   - Parent Portal: http://localhost:3000
+
+services:
+  # MySQL 8.0 for Gibbon CMS
+  mysql:
+    image: mysql:8.0
+    container_name: laya-mysql
+    restart: unless-stopped
+    # MySQL 8.0 configuration for Gibbon CMS compatibility
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=caching_sha2_password
+      - --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-laya_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-gibbon}
+      MYSQL_USER: ${MYSQL_USER:-gibbon}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-gibbon_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-laya_root_password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - laya-network
+
+  # PostgreSQL 12 for AI Service
+  postgres:
+    image: postgres:12-alpine
+    container_name: laya-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-laya_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-laya}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-laya_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-laya} -d ${POSTGRES_DB:-laya_ai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - laya-network
+
+  # Redis for session storage and caching
+  redis:
+    image: redis:7-alpine
+    container_name: laya-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - laya-network
+
+  # PHP-FPM 8.3 for Gibbon CMS
+  # Includes automatic database installation on first run
+  php-fpm:
+    build:
+      context: ./docker/php
+      dockerfile: Dockerfile
+    container_name: laya-php
+    restart: unless-stopped
+    environment:
+      # Database connection
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-gibbon}
+      DB_USER: ${MYSQL_USER:-gibbon}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-gibbon_password}
+      # Gibbon admin credentials (for automatic installation)
+      GIBBON_ADMIN_USERNAME: ${GIBBON_ADMIN_USERNAME:-admin}
+      GIBBON_ADMIN_PASSWORD: ${GIBBON_ADMIN_PASSWORD:-laya_admin_2026}
+      GIBBON_ADMIN_EMAIL: ${GIBBON_ADMIN_EMAIL:-admin@laya.local}
+      GIBBON_ADMIN_FIRSTNAME: ${GIBBON_ADMIN_FIRSTNAME:-System}
+      GIBBON_ADMIN_SURNAME: ${GIBBON_ADMIN_SURNAME:-Administrator}
+      # Gibbon configuration
+      GIBBON_ORG_NAME: ${GIBBON_ORG_NAME:-LAYA Childcare}
+      GIBBON_TIMEZONE: ${GIBBON_TIMEZONE:-America/Toronto}
+      GIBBON_LOCALE: ${GIBBON_LOCALE:-en_GB}
+      GIBBON_GUID: ${GIBBON_GUID:-}
+    volumes:
+      - ./gibbon:/var/www/html/gibbon
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php-fpm-healthcheck || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - laya-network
+
+  # Nginx web server for Gibbon CMS
+  nginx:
+    image: nginx:alpine
+    container_name: laya-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    volumes:
+      - ./gibbon:/var/www/html/gibbon:ro
+      - ./docker/nginx/gibbon.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      php-fpm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - laya-network
+
+  # AI Service (FastAPI)
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: laya-ai-service
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-laya_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-laya}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-laya_password}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-your_jwt_secret_key_change_in_production}
+      GIBBON_API_URL: http://nginx/gibbon
+    ports:
+      - "${AI_SERVICE_PORT:-8000}:8000"
+    volumes:
+      - ./ai-service:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - laya-network
+    profiles:
+      - full
+
+  # Parent Portal (Next.js)
+  parent-portal:
+    build:
+      context: ./parent-portal
+      dockerfile: Dockerfile
+    container_name: laya-parent-portal
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:${AI_SERVICE_PORT:-8000}
+      NEXT_PUBLIC_GIBBON_URL: http://localhost:${NGINX_PORT:-8080}/gibbon
+    ports:
+      - "${PARENT_PORTAL_PORT:-3000}:3000"
+    volumes:
+      - ./parent-portal:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - nginx
+    networks:
+      - laya-network
+    profiles:
+      - full
+
+volumes:
+  mysql_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  laya-network:
+    driver: bridge

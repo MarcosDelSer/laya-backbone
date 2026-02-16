@@ -5,7 +5,8 @@
   This manifest declares the app's permissions, components, and configuration.
   Equivalent to the iOS Info.plist for permission descriptions.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- ==================== PERMISSIONS ==================== -->
 
@@ -107,17 +108,20 @@
         <!-- Default notification channel for FCM -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="laya_teacher_notifications" />
+            android:value="laya_teacher_notifications"
+            tools:replace="android:value" />
 
         <!-- Default notification icon -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_notification" />
+            android:resource="@drawable/ic_notification"
+            tools:replace="android:resource" />
 
         <!-- Default notification color -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
-            android:resource="@color/notification_color" />
+            android:resource="@color/notification_color"
+            tools:replace="android:resource" />
 
         <!-- ==================== BOOT RECEIVER ==================== -->
 

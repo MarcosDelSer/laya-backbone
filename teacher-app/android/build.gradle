@@ -3,9 +3,6 @@
 // Top-level build file for the Teacher Android app.
 // Includes React Native and Firebase configuration.
 
-// Check if React Native node_modules exist
-def reactNativeModulesExist = file("$rootDir/../node_modules/@react-native/gradle-plugin").exists()
-
 buildscript {
     ext {
         // Build configuration
@@ -28,20 +25,10 @@ buildscript {
     dependencies {
         classpath("com.android.tools.build:gradle:8.6.0")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        classpath("com.facebook.react:react-native-gradle-plugin") // resolved via includeBuild
 
         // Firebase Cloud Messaging for push notifications
-        // Note: google-services.json must be placed in android/app/
-        // Download from Firebase Console: https://console.firebase.google.com/
         classpath("com.google.gms:google-services:4.4.2")
-    }
-}
-
-// Add React Native gradle plugin classpath only if node_modules exist
-if (reactNativeModulesExist) {
-    buildscript {
-        dependencies {
-            classpath("com.facebook.react:react-native-gradle-plugin")
-        }
     }
 }
 
