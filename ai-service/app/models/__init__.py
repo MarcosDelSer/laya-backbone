@@ -42,6 +42,7 @@ from app.models.document import (
     Document,
     DocumentStatus,
     DocumentType,
+    Signature,
 )
 
 __all__ = [
@@ -71,4 +72,5 @@ __all__ = [
     "Document",
     "DocumentStatus",
     "DocumentType",
+    "Signature",
 ]

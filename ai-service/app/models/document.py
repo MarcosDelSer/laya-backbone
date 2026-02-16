@@ -12,12 +12,13 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     DateTime,
     Enum,
+    ForeignKey,
     String,
     Text,
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -119,6 +120,90 @@ class Document(Base):
         onupdate=func.now(),
     )
 
+    # Relationships
+    signatures: Mapped[list["Signature"]] = relationship(
+        "Signature",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         """Return string representation of the Document."""
         return f"<Document(id={self.id}, title='{self.title}', status={self.status.value})>"
+
+
+class Signature(Base):
+    """SQLAlchemy model for document signatures.
+
+    Represents a signature applied to a document by a parent or guardian.
+    Tracks signature metadata including the signer, timestamp, device info, and audit trail.
+
+    Attributes:
+        id: Unique identifier for the signature
+        document_id: ID of the document that was signed
+        signer_id: User ID of the person who signed the document
+        signature_image_url: URL or path to the stored signature image file
+        ip_address: IP address from which the signature was submitted
+        timestamp: Date and time when the signature was created
+        device_info: Information about the device/browser used for signing
+        created_at: Timestamp when the record was created
+        updated_at: Timestamp when the record was last updated
+    """
+
+    __tablename__ = "signatures"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    signer_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    signature_image_url: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    ip_address: Mapped[str] = mapped_column(
+        String(45),  # IPv6 max length is 45 characters
+        nullable=False,
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
+    device_info: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    # Relationships
+    document: Mapped["Document"] = relationship(
+        "Document",
+        back_populates="signatures",
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation of the Signature."""
+        return f"<Signature(id={self.id}, document_id={self.document_id}, signer_id={self.signer_id})>"
