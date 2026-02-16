@@ -127,9 +127,10 @@ try {
 output('Notification Queue Processor started', true);
 output('Limit: ' . $limit . ', Dry Run: ' . ($dryRun ? 'Yes' : 'No'));
 
-// Get batch size from settings
+// Get batch size and retry settings
 $batchSize = (int) ($settingGateway->getSettingByScope('Notification Engine', 'queueBatchSize') ?: 50);
 $maxAttempts = (int) ($settingGateway->getSettingByScope('Notification Engine', 'maxRetryAttempts') ?: 3);
+$retryDelayMinutes = (int) ($settingGateway->getSettingByScope('Notification Engine', 'retryDelayMinutes') ?: 5);
 
 // Use the smaller of limit and batch size
 $processLimit = min($limit, $batchSize);
@@ -137,6 +138,7 @@ $processLimit = min($limit, $batchSize);
 // Get queue statistics before processing
 $statsBefore = $notificationGateway->getQueueStatistics();
 output('Queue status - Pending: ' . $statsBefore['pending'] . ', Processing: ' . $statsBefore['processing'] . ', Failed: ' . $statsBefore['failed']);
+output('Retry settings - Max attempts: ' . $maxAttempts . ', Base delay: ' . $retryDelayMinutes . ' minutes (exponential backoff)');
 
 // Purge old notifications if requested
 if ($doPurge) {
@@ -150,11 +152,21 @@ if ($doPurge) {
     }
 }
 
-// Get pending notifications
-$pendingNotifications = $notificationGateway->selectPendingNotifications($processLimit, $maxAttempts);
+// Get pending notifications (with exponential backoff retry logic)
+$pendingNotifications = $notificationGateway->selectPendingNotifications($processLimit, $maxAttempts, $retryDelayMinutes);
 
 if (empty($pendingNotifications)) {
     output('No pending notifications to process', true);
+
+    // Show retry queue info if verbose
+    if ($verbose) {
+        $retryHealth = $notificationGateway->getRetryHealthMetrics();
+        if ($retryHealth['pending_retry_count'] > 0) {
+            output('Notifications waiting for retry backoff: ' . $retryHealth['pending_retry_count']);
+            output('Average attempts: ' . $retryHealth['avg_attempts']);
+        }
+    }
+
     exit(0);
 }
 

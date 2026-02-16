@@ -121,6 +121,54 @@ The NotificationEngine module provides comprehensive multi-channel notification 
   - Query performance optimization
   - Analytics methods
 
+### ✅ Failed Delivery Retry Mechanism (NEW v1.0.00)
+
+- **Exponential Backoff Strategy**
+  - Automatic retry with progressive delays
+  - Formula: `retryDelayMinutes × 2^(attempts-1)`
+  - Example (5 min base): 5min → 10min → 20min
+  - Prevents service overload
+  - Allows temporary issues to resolve
+
+- **Retry Management** (`notifications_retry_management.php`)
+  - Health metrics dashboard
+  - Success/failure/recovery rates
+  - Retry statistics by attempt number
+  - Waiting queue visibility
+  - Permanently failed notifications
+  - Configuration overview
+
+- **Intelligent Queue Processing**
+  - Respects retry delays automatically
+  - Only processes ready notifications
+  - Tracks attempt counts
+  - Marks permanently failed after max attempts
+  - Detailed error logging
+
+- **Analytics & Monitoring**
+  - Retry health metrics
+  - Recovery rate tracking
+  - Average attempts calculation
+  - Oldest retry age monitoring
+  - Per-attempt success rates
+
+- **API Methods** (`NotificationGateway`)
+  - `selectPendingNotifications()` - Backoff-aware queue fetch
+  - `calculateRetryDelay()` - Delay calculation
+  - `getNextRetryTime()` - Next retry timestamp
+  - `isReadyForRetry()` - Readiness check
+  - `getRetryInfo()` - Detailed retry information
+  - `getRetryStatistics()` - Statistics by attempt
+  - `selectNotificationsPendingRetry()` - Waiting queue
+  - `getRetryHealthMetrics()` - Overall health
+
+- **Documentation**
+  - Complete retry mechanism guide (`docs/RETRY_MECHANISM.md`)
+  - Test script (`tests/test_retry_mechanism.php`)
+  - Configuration examples
+  - Troubleshooting guide
+  - Best practices
+
 ## Architecture
 
 ```
@@ -147,10 +195,14 @@ NotificationEngine/
 │   ├── setup-cron.sh                # Cron setup assistant
 │   └── README.md                    # CLI documentation
 ├── docs/
-│   └── DELIVERY_LOGGING.md          # Logging documentation
+│   ├── DELIVERY_LOGGING.md          # Logging documentation
+│   └── RETRY_MECHANISM.md           # Retry mechanism documentation
+├── tests/
+│   └── test_retry_mechanism.php     # Retry mechanism test script
 ├── notifications_settings.php       # User preferences UI
 ├── notifications_queue.php          # Queue management UI
 ├── delivery_logs.php                # Delivery logs UI
+├── notifications_retry_management.php  # Retry management UI
 ├── CHANGEDB.php                     # Database migrations
 └── manifest.php                     # Module manifest
 ```
