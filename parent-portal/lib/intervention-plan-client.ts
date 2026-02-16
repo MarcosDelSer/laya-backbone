@@ -25,18 +25,18 @@ import type {
 
 const ENDPOINTS = {
   // Intervention Plans
-  PLANS: '/api/v1/intervention-plans/plans',
-  PLAN: (id: string) => `/api/v1/intervention-plans/plans/${id}`,
-  PLAN_HISTORY: (id: string) => `/api/v1/intervention-plans/plans/${id}/history`,
+  PLANS: '/api/v1/intervention-plans',
+  PLAN: (id: string) => `/api/v1/intervention-plans/${id}`,
+  PLAN_HISTORY: (id: string) => `/api/v1/intervention-plans/${id}/history`,
 
   // Progress
-  PLAN_PROGRESS: (id: string) => `/api/v1/intervention-plans/plans/${id}/progress`,
+  PLAN_PROGRESS: (id: string) => `/api/v1/intervention-plans/${id}/progress`,
 
   // Parent Signature
-  PLAN_SIGN: (id: string) => `/api/v1/intervention-plans/plans/${id}/sign`,
+  PLAN_SIGN: (id: string) => `/api/v1/intervention-plans/${id}/sign`,
 
   // Review Reminders
-  PENDING_REVIEW: '/api/v1/intervention-plans/plans/pending-review',
+  PENDING_REVIEW: '/api/v1/intervention-plans/pending-review',
 
   // Health Check
   HEALTH: '/api/v1/intervention-plans/health',
