@@ -42,10 +42,11 @@
 15 2 * * * /path/to/laya-backbone/scripts/backup/postgres_backup.sh >> /var/log/postgres_backup.log 2>&1
 
 # =============================================================================
-# Backup Cleanup - Daily at 3:00 AM (to be implemented)
+# Backup Retention Policy - Daily at 3:00 AM
 # =============================================================================
 # Implements retention policy: 7 daily, 4 weekly, 12 monthly
-# 0 3 * * * /path/to/laya-backbone/scripts/backup/cleanup_old_backups.sh >> /var/log/backup_cleanup.log 2>&1
+# Cleans up old backups while preserving important snapshots
+0 3 * * * /path/to/laya-backbone/scripts/backup/retention_policy.sh >> /var/log/retention_policy.log 2>&1
 
 # =============================================================================
 # Backup Verification - Daily at 4:00 AM (to be implemented)

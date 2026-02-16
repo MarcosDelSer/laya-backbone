@@ -164,12 +164,101 @@ gunzip -c /var/backups/mysql/laya_db_20260215_020000.sql.gz | mysql -h localhost
    - Set up alerts for backup failures
    - Test restore procedures regularly
 
-## Backup Retention (To Be Implemented)
+## Backup Retention Policy
 
-The backup retention policy will maintain:
-- **Daily backups:** Keep last 7 days
-- **Weekly backups:** Keep last 4 weeks
-- **Monthly backups:** Keep last 12 months
+The retention policy script (`retention_policy.sh`) automatically manages backup lifecycle:
+
+### Retention Rules
+
+- **Daily backups:** Keep last 7 days (all backups from past week)
+- **Weekly backups:** Keep last 4 weeks (Sunday backups)
+- **Monthly backups:** Keep last 12 months (1st day of month backups)
+
+### Features
+
+- ✅ Intelligent backup classification (daily/weekly/monthly)
+- ✅ Safe deletion with comprehensive logging
+- ✅ Dry-run mode for testing before actual deletion
+- ✅ Separate retention for MySQL and PostgreSQL backups
+- ✅ Automatic disk space recovery
+- ✅ Protection against accidental deletion of critical backups
+
+### Setup
+
+#### Manual Execution
+
+Test with dry-run first:
+```bash
+./scripts/backup/retention_policy.sh --dry-run
+```
+
+Execute actual cleanup:
+```bash
+./scripts/backup/retention_policy.sh
+```
+
+#### Automated Cleanup (Cron)
+
+Add to crontab to run daily at 3:00 AM (after backups complete):
+
+```bash
+crontab -e
+```
+
+Add this line:
+```
+0 3 * * * /path/to/laya-backbone/scripts/backup/retention_policy.sh >> /var/log/retention_policy.log 2>&1
+```
+
+#### Configuration Options
+
+**Environment Variables:**
+```bash
+export MYSQL_BACKUP_DIR=/var/backups/mysql
+export POSTGRES_BACKUP_DIR=/var/backups/postgres
+export RETENTION_LOG=/var/log/retention_policy.log
+export DRY_RUN=true  # Set to true for dry-run mode
+```
+
+**Command Line Options:**
+```bash
+# Test retention policy without deleting files
+./retention_policy.sh --dry-run
+
+# Use custom backup directories
+./retention_policy.sh --mysql-dir /custom/mysql/backups --postgres-dir /custom/postgres/backups
+
+# Show help
+./retention_policy.sh --help
+```
+
+### How It Works
+
+1. **Daily Retention**: All backups from the last 7 days are kept automatically
+2. **Weekly Retention**: After 7 days, only Sunday backups are kept for 4 weeks
+3. **Monthly Retention**: After 4 weeks, only 1st-of-month backups are kept for 12 months
+4. **Deletion**: Backups older than the retention periods are safely deleted
+
+### Example Timeline
+
+Given today is March 15, 2026:
+
+- **Kept as Daily**: March 9-15 (all backups)
+- **Kept as Weekly**: Feb 16 (Sun), Feb 23 (Sun), Mar 2 (Sun), Mar 9 (Sun)
+- **Kept as Monthly**: Apr 1, May 1, Jun 1, Jul 1, Aug 1, Sep 1, Oct 1, Nov 1, Dec 1, Jan 1, Feb 1, Mar 1
+- **Deleted**: All other backups older than 7 days that aren't weekly/monthly snapshots
+
+### Monitoring
+
+Check retention policy logs:
+```bash
+tail -f /var/log/retention_policy.log
+```
+
+View retention statistics:
+```bash
+grep "Retention summary" /var/log/retention_policy.log
+```
 
 ## Troubleshooting
 
@@ -354,7 +443,7 @@ gunzip -c /var/backups/postgres/laya_db_20260216_021500.sql.gz | psql -h localho
 ## Future Enhancements
 
 - [x] PostgreSQL backup script (scheduled at 2:15 AM)
-- [ ] Automated backup retention/cleanup
+- [x] Automated backup retention/cleanup (7 daily, 4 weekly, 12 monthly)
 - [ ] Backup verification script (restore to temp DB)
 - [ ] Remote backup to S3 or rsync to remote server
 - [ ] Photo and upload file backups
