@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { useFormatting } from '@/lib/hooks/useFormatting';
 
 // Mock data for dashboard - will be replaced with API calls
 const childData = {
@@ -9,16 +13,10 @@ const childData = {
   teacher: 'Ms. Sarah',
 };
 
-const todaysSummary = {
-  date: new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }),
+const todaysSummaryData = {
   meals: [
-    { type: 'Breakfast', time: '8:45 AM', notes: 'Ate all of their oatmeal and fruit', amount: 'all' },
-    { type: 'Snack', time: '10:30 AM', notes: 'Apple slices and crackers', amount: 'most' },
+    { type: 'breakfast', time: '8:45 AM', notes: 'Ate all of their oatmeal and fruit', amount: 'all' },
+    { type: 'snack', time: '10:30 AM', notes: 'Apple slices and crackers', amount: 'most' },
   ],
   naps: [
     { startTime: '12:30 PM', endTime: '2:00 PM', quality: 'good', duration: '1h 30m' },
@@ -36,23 +34,16 @@ const recentPhotos = [
   { id: '3', url: '/placeholder-3.jpg', caption: 'Story time', date: 'Yesterday' },
 ];
 
-const quickStats = [
-  { label: 'Meals Today', value: '2 of 3', icon: 'meal', color: 'green' },
-  { label: 'Nap Time', value: '1h 30m', icon: 'nap', color: 'blue' },
-  { label: 'Activities', value: '3', icon: 'activity', color: 'purple' },
-  { label: 'Photos', value: '3 new', icon: 'photo', color: 'pink' },
-];
-
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
   const statusConfig = {
-    'checked-in': { label: 'Checked In', className: 'badge-success' },
-    'checked-out': { label: 'Checked Out', className: 'badge-neutral' },
-    'absent': { label: 'Absent', className: 'badge-warning' },
+    'checked-in': { labelKey: 'checkedIn', className: 'badge-success' },
+    'checked-out': { labelKey: 'checkedOut', className: 'badge-neutral' },
+    'absent': { labelKey: 'absent', className: 'badge-warning' },
   };
 
   const config = statusConfig[status as keyof typeof statusConfig] || statusConfig['checked-out'];
 
-  return <span className={`badge ${config.className}`}>{config.label}</span>;
+  return <span className={`badge ${config.className}`}>{t(`common.status.${config.labelKey}`)}</span>;
 }
 
 function StatIcon({ icon, color }: { icon: string; color: string }) {
@@ -107,7 +98,34 @@ function StatIcon({ icon, color }: { icon: string; color: string }) {
   );
 }
 
+/**
+ * Gets the appropriate greeting key based on the current time of day.
+ */
+function getGreetingKey(): 'morning' | 'afternoon' | 'evening' {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+}
+
 export default function DashboardPage() {
+  const t = useTranslations();
+  const { formatDate } = useFormatting();
+
+  // Format today's date using locale-aware formatting
+  const todaysDate = formatDate(new Date(), 'full');
+
+  // Get time-appropriate greeting
+  const greetingKey = getGreetingKey();
+
+  // Build quick stats with translated labels
+  const quickStats = [
+    { labelKey: 'mealsToday', value: '2 of 3', icon: 'meal', color: 'green' },
+    { labelKey: 'napTime', value: '1h 30m', icon: 'nap', color: 'blue' },
+    { labelKey: 'activities', value: '3', icon: 'activity', color: 'purple' },
+    { labelKey: 'photos', value: t('dashboard.quickStats.new', { count: 3 }), icon: 'photo', color: 'pink' },
+  ];
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Header */}
@@ -115,13 +133,13 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Good morning!
+              {t(`dashboard.greeting.${greetingKey}`)}
             </h1>
-            <p className="mt-1 text-gray-600">{todaysSummary.date}</p>
+            <p className="mt-1 text-gray-600">{todaysDate}</p>
           </div>
           <div className="mt-4 sm:mt-0">
             <Link href="/daily-reports" className="btn btn-primary">
-              View Full Report
+              {t('dashboard.viewFullReport')}
             </Link>
           </div>
         </div>
@@ -145,9 +163,9 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="text-right">
-              <StatusBadge status={childData.status} />
+              <StatusBadge status={childData.status} t={t} />
               <p className="mt-1 text-sm text-gray-500">
-                Since {childData.checkedInAt}
+                {t('common.time.since', { time: childData.checkedInAt })}
               </p>
             </div>
           </div>
@@ -157,11 +175,11 @@ export default function DashboardPage() {
       {/* Quick Stats */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
         {quickStats.map((stat) => (
-          <div key={stat.label} className="card p-4">
+          <div key={stat.labelKey} className="card p-4">
             <div className="flex items-center space-x-3">
               <StatIcon icon={stat.icon} color={stat.color} />
               <div>
-                <p className="text-sm text-gray-500">{stat.label}</p>
+                <p className="text-sm text-gray-500">{t(`dashboard.quickStats.${stat.labelKey}`)}</p>
                 <p className="text-lg font-semibold text-gray-900">{stat.value}</p>
               </div>
             </div>
@@ -176,14 +194,14 @@ export default function DashboardPage() {
           {/* Today's Activities */}
           <div className="card">
             <div className="card-header flex items-center justify-between">
-              <h3 className="section-title">Today&apos;s Activities</h3>
+              <h3 className="section-title">{t('dashboard.sections.todaysActivities')}</h3>
               <Link href="/daily-reports" className="text-sm text-primary-600 hover:text-primary-700">
-                View all
+                {t('common.viewAll')}
               </Link>
             </div>
             <div className="card-body">
               <div className="space-y-4">
-                {todaysSummary.activities.map((activity, index) => (
+                {todaysSummaryData.activities.map((activity, index) => (
                   <div key={index} className="flex items-start space-x-4">
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-purple-100">
                       <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -208,11 +226,11 @@ export default function DashboardPage() {
             {/* Meals */}
             <div className="card">
               <div className="card-header">
-                <h3 className="section-title">Meals</h3>
+                <h3 className="section-title">{t('dashboard.sections.meals')}</h3>
               </div>
               <div className="card-body">
                 <div className="space-y-3">
-                  {todaysSummary.meals.map((meal, index) => (
+                  {todaysSummaryData.meals.map((meal, index) => (
                     <div key={index} className="flex items-start space-x-3">
                       <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-green-100">
                         <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -221,12 +239,12 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <p className="font-medium text-gray-900">{meal.type}</p>
+                          <p className="font-medium text-gray-900">{t(`dailyReports.mealTypes.${meal.type}`)}</p>
                           <span className="text-xs text-gray-500">{meal.time}</span>
                         </div>
                         <p className="text-sm text-gray-600">{meal.notes}</p>
                         <span className={`badge mt-1 ${meal.amount === 'all' ? 'badge-success' : 'badge-info'}`}>
-                          Ate {meal.amount}
+                          {t(`dashboard.mealAmount.${meal.amount}`)}
                         </span>
                       </div>
                     </div>
@@ -238,11 +256,11 @@ export default function DashboardPage() {
             {/* Naps */}
             <div className="card">
               <div className="card-header">
-                <h3 className="section-title">Nap Time</h3>
+                <h3 className="section-title">{t('dashboard.sections.napTime')}</h3>
               </div>
               <div className="card-body">
                 <div className="space-y-3">
-                  {todaysSummary.naps.map((nap, index) => (
+                  {todaysSummaryData.naps.map((nap, index) => (
                     <div key={index} className="flex items-start space-x-3">
                       <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
                         <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -255,7 +273,7 @@ export default function DashboardPage() {
                           {nap.startTime} - {nap.endTime}
                         </p>
                         <span className={`badge mt-1 ${nap.quality === 'good' ? 'badge-success' : 'badge-warning'}`}>
-                          {nap.quality.charAt(0).toUpperCase() + nap.quality.slice(1)} sleep
+                          {t(`dashboard.napQuality.${nap.quality}`)}
                         </span>
                       </div>
                     </div>
@@ -271,9 +289,9 @@ export default function DashboardPage() {
           {/* Recent Photos */}
           <div className="card">
             <div className="card-header flex items-center justify-between">
-              <h3 className="section-title">Recent Photos</h3>
+              <h3 className="section-title">{t('dashboard.sections.recentPhotos')}</h3>
               <Link href="/daily-reports" className="text-sm text-primary-600 hover:text-primary-700">
-                View all
+                {t('common.viewAll')}
               </Link>
             </div>
             <div className="card-body">
@@ -292,7 +310,9 @@ export default function DashboardPage() {
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100">
                       <div className="absolute bottom-2 left-2 text-white">
                         <p className="text-xs font-medium">{photo.caption}</p>
-                        <p className="text-xs opacity-75">{photo.date}</p>
+                        <p className="text-xs opacity-75">
+                          {photo.date === 'Today' ? t('common.today') : photo.date === 'Yesterday' ? t('common.yesterday') : photo.date}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -304,7 +324,7 @@ export default function DashboardPage() {
           {/* Quick Links */}
           <div className="card">
             <div className="card-header">
-              <h3 className="section-title">Quick Links</h3>
+              <h3 className="section-title">{t('dashboard.sections.quickLinks')}</h3>
             </div>
             <div className="card-body">
               <div className="space-y-2">
@@ -319,8 +339,8 @@ export default function DashboardPage() {
                       </svg>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">View Invoices</p>
-                      <p className="text-sm text-gray-500">1 pending payment</p>
+                      <p className="font-medium text-gray-900">{t('dashboard.quickLinks.viewInvoices')}</p>
+                      <p className="text-sm text-gray-500">{t('dashboard.quickLinks.pendingPayment', { count: 1 })}</p>
                     </div>
                   </div>
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -339,8 +359,8 @@ export default function DashboardPage() {
                       </svg>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Messages</p>
-                      <p className="text-sm text-gray-500">2 unread messages</p>
+                      <p className="font-medium text-gray-900">{t('dashboard.quickLinks.messages')}</p>
+                      <p className="text-sm text-gray-500">{t('dashboard.quickLinks.unreadMessages', { count: 2 })}</p>
                     </div>
                   </div>
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -359,8 +379,8 @@ export default function DashboardPage() {
                       </svg>
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Documents</p>
-                      <p className="text-sm text-gray-500">1 awaiting signature</p>
+                      <p className="font-medium text-gray-900">{t('dashboard.quickLinks.documents')}</p>
+                      <p className="text-sm text-gray-500">{t('dashboard.quickLinks.awaitingSignature', { count: 1 })}</p>
                     </div>
                   </div>
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
