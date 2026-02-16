@@ -3,6 +3,8 @@
 Loads environment variables with sensible defaults for local development.
 """
 
+from typing import Optional
+
 from pydantic_settings import BaseSettings
 
 
@@ -17,6 +19,13 @@ class Settings(BaseSettings):
         postgres_password: PostgreSQL database password
         jwt_secret_key: Secret key for JWT token signing
         jwt_algorithm: Algorithm for JWT token signing
+        openai_api_key: OpenAI API key for GPT models
+        anthropic_api_key: Anthropic API key for Claude models
+        llm_default_provider: Default LLM provider (openai or anthropic)
+        llm_default_model: Default model to use for completions
+        llm_temperature: Default temperature for LLM responses (0.0-2.0)
+        llm_max_tokens: Default maximum tokens for LLM responses
+        llm_timeout: Default timeout in seconds for LLM API calls
     """
 
     # Database configuration
@@ -29,6 +38,17 @@ class Settings(BaseSettings):
     # JWT configuration
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
+
+    # LLM API Keys
+    openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+
+    # LLM Configuration
+    llm_default_provider: str = "openai"
+    llm_default_model: str = "gpt-4o"
+    llm_temperature: float = 0.7
+    llm_max_tokens: int = 4096
+    llm_timeout: int = 60
 
     @property
     def database_url(self) -> str:
