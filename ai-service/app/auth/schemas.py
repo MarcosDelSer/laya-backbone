@@ -75,3 +75,45 @@ class TokenResponse(BaseSchema):
         default="bearer",
         description="Type of token (always 'bearer' for JWT)",
     )
+
+
+class LogoutRequest(BaseSchema):
+    """Request schema for user logout.
+
+    Used to invalidate authentication tokens and log out the user.
+
+    Attributes:
+        access_token: The JWT access token to invalidate
+        refresh_token: Optional refresh token to invalidate
+    """
+
+    access_token: str = Field(
+        ...,
+        min_length=1,
+        description="JWT access token to invalidate",
+    )
+    refresh_token: str | None = Field(
+        default=None,
+        description="Optional JWT refresh token to invalidate",
+    )
+
+
+class LogoutResponse(BaseSchema):
+    """Response schema for user logout.
+
+    Contains confirmation of successful logout.
+
+    Attributes:
+        message: Success message
+        tokens_invalidated: Number of tokens invalidated
+    """
+
+    message: str = Field(
+        ...,
+        description="Success message",
+    )
+    tokens_invalidated: int = Field(
+        ...,
+        ge=0,
+        description="Number of tokens invalidated",
+    )

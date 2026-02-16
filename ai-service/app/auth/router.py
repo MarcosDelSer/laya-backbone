@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.schemas import LoginRequest, RefreshRequest, TokenResponse
+from app.auth.schemas import LoginRequest, RefreshRequest, TokenResponse, LogoutRequest, LogoutResponse
 from app.auth.service import AuthService
 from app.database import get_db
 
@@ -124,3 +124,55 @@ async def refresh(
     """
     service = AuthService(db)
     return await service.refresh_tokens(refresh_request)
+
+
+@router.post(
+    "/logout",
+    response_model=LogoutResponse,
+    summary="User logout",
+    description="Invalidate authentication tokens to log out the user.",
+)
+async def logout(
+    logout_request: LogoutRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LogoutResponse:
+    """Logout user by invalidating their tokens.
+
+    This endpoint invalidates the provided authentication tokens, preventing
+    their further use. This effectively logs the user out by adding the tokens
+    to a blacklist that is checked during authentication.
+
+    Both the access token and optional refresh token are invalidated. If only
+    the access token is provided, it will be blacklisted and the refresh token
+    (if it exists) will remain valid until it's used or expires.
+
+    Args:
+        logout_request: Request containing tokens to invalidate
+        db: Async database session (injected)
+
+    Returns:
+        LogoutResponse containing:
+            - message: Success confirmation message
+            - tokens_invalidated: Number of tokens that were invalidated
+
+    Raises:
+        HTTPException: 401 Unauthorized if:
+            - Access token is invalid or expired
+            - Access token is not of type 'access'
+            - Token format is malformed
+
+    Example:
+        POST /api/v1/auth/logout
+        {
+            "access_token": "eyJhbGc...",
+            "refresh_token": "eyJhbGc..."
+        }
+
+        Response:
+        {
+            "message": "Successfully logged out",
+            "tokens_invalidated": 2
+        }
+    """
+    service = AuthService(db)
+    return await service.logout(logout_request)

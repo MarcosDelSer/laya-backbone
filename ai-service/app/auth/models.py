@@ -108,3 +108,51 @@ class User(Base):
     def __repr__(self) -> str:
         """Return string representation of the User."""
         return f"<User(id={self.id}, email='{self.email}', role={self.role.value})>"
+
+
+class TokenBlacklist(Base):
+    """SQLAlchemy model for blacklisted tokens.
+
+    Stores revoked JWT tokens to prevent their reuse after logout.
+    Tokens should be removed from the blacklist after they expire.
+
+    Attributes:
+        id: Unique identifier for the blacklist entry
+        token: The JWT token that has been revoked
+        user_id: ID of the user who owned the token
+        blacklisted_at: Timestamp when the token was blacklisted
+        expires_at: Timestamp when the token expires (for cleanup)
+    """
+
+    __tablename__ = "token_blacklist"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    token: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    blacklisted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation of the TokenBlacklist."""
+        return f"<TokenBlacklist(id={self.id}, user_id={self.user_id})>"
