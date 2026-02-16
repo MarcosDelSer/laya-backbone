@@ -7,9 +7,14 @@
 
 import { gibbonClient, ApiError } from './api';
 import type {
+  AcknowledgeIncidentRequest,
   Child,
   DailyReport,
   Document,
+  Incident,
+  IncidentListItem,
+  IncidentSeverity,
+  IncidentStatus,
   Invoice,
   Message,
   MessageThread,
@@ -50,6 +55,11 @@ const ENDPOINTS = {
   DOCUMENT: (id: string) => `/api/v1/documents/${id}`,
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
+
+  // Incidents
+  INCIDENTS: '/api/v1/incidents',
+  INCIDENT: (id: string) => `/api/v1/incidents/${id}`,
+  ACKNOWLEDGE_INCIDENT: (id: string) => `/api/v1/incidents/${id}/acknowledge`,
 } as const;
 
 // ============================================================================
@@ -326,6 +336,56 @@ export function getDocumentPdfUrl(documentId: string): string {
 export async function getPendingDocumentsCount(): Promise<number> {
   const response = await getDocuments({ status: 'pending', limit: 1 });
   return response.total;
+}
+
+// ============================================================================
+// Incidents API
+// ============================================================================
+
+/**
+ * Parameters for fetching incidents.
+ */
+export interface IncidentParams extends PaginationParams {
+  childId?: string;
+  status?: IncidentStatus;
+  severity?: IncidentSeverity;
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * Fetch incidents with optional filters.
+ */
+export async function getIncidents(
+  params?: IncidentParams
+): Promise<PaginatedResponse<IncidentListItem>> {
+  return gibbonClient.get<PaginatedResponse<IncidentListItem>>(ENDPOINTS.INCIDENTS, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      child_id: params?.childId,
+      status: params?.status,
+      severity: params?.severity,
+      start_date: params?.startDate,
+      end_date: params?.endDate,
+    },
+  });
+}
+
+/**
+ * Fetch a specific incident by ID.
+ */
+export async function getIncident(incidentId: string): Promise<Incident> {
+  return gibbonClient.get<Incident>(ENDPOINTS.INCIDENT(incidentId));
+}
+
+/**
+ * Acknowledge an incident as a parent.
+ */
+export async function acknowledgeIncident(request: AcknowledgeIncidentRequest): Promise<Incident> {
+  return gibbonClient.post<Incident>(ENDPOINTS.ACKNOWLEDGE_INCIDENT(request.incidentId), {
+    notes: request.notes,
+  });
 }
 
 // ============================================================================
