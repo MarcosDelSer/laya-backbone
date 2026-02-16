@@ -3,8 +3,15 @@
 Provides CRUD operations for message threads, messages, and notification
 preferences. Supports direct communication between parents and educators/directors
 with thread organization by type (daily_log, urgent, serious, admin).
+
+Features:
+- @mention extraction from message content
+- Private note handling for staff-only visibility
+- Thread and message CRUD operations
+- Notification preference management
 """
 
+import re
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -1064,6 +1071,291 @@ class MessagingService:
             updated_at=base_response.updated_at,
             messages=message_responses,
         )
+
+    # =========================================================================
+    # Mention Extraction and Private Note Handling
+    # =========================================================================
+
+    @staticmethod
+    def extract_mentions(content: str) -> list[str]:
+        """Extract @mentions from message content.
+
+        Parses the message content to find @mention patterns. Supports:
+        - @username format (alphanumeric with underscores)
+        - @[Display Name] format (names in square brackets)
+        - @uuid format (UUID strings)
+
+        Args:
+            content: The message content to parse
+
+        Returns:
+            List of unique mention identifiers (usernames or UUIDs)
+        """
+        if not content:
+            return []
+
+        mentions = []
+
+        # Pattern 1: @[Display Name] - names in square brackets
+        bracket_pattern = r"@\[([^\]]+)\]"
+        bracket_matches = re.findall(bracket_pattern, content)
+        mentions.extend(bracket_matches)
+
+        # Pattern 2: @username - alphanumeric with underscores and hyphens
+        # Must not be immediately followed by [ to avoid double-matching
+        username_pattern = r"@([a-zA-Z0-9_\-]+)(?!\[)"
+        username_matches = re.findall(username_pattern, content)
+        mentions.extend(username_matches)
+
+        # Pattern 3: @uuid - UUID format
+        uuid_pattern = (
+            r"@([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+        )
+        uuid_matches = re.findall(uuid_pattern, content)
+        mentions.extend(uuid_matches)
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_mentions = []
+        for mention in mentions:
+            if mention.lower() not in seen:
+                seen.add(mention.lower())
+                unique_mentions.append(mention)
+
+        return unique_mentions
+
+    @staticmethod
+    def extract_mention_uuids(content: str) -> list[UUID]:
+        """Extract @mentions that are valid UUIDs from message content.
+
+        Args:
+            content: The message content to parse
+
+        Returns:
+            List of valid UUIDs found in @mentions
+        """
+        mentions = MessagingService.extract_mentions(content)
+        uuids = []
+
+        for mention in mentions:
+            try:
+                # Try to parse as UUID
+                uuid_val = UUID(mention)
+                uuids.append(uuid_val)
+            except (ValueError, AttributeError):
+                # Not a valid UUID, skip
+                continue
+
+        return uuids
+
+    def resolve_mentions_to_participants(
+        self,
+        content: str,
+        participants: list[dict],
+    ) -> list[dict]:
+        """Resolve @mentions to thread participants.
+
+        Matches @mentions in content against thread participants by
+        display name or user_id.
+
+        Args:
+            content: The message content with @mentions
+            participants: List of participant dictionaries from thread
+
+        Returns:
+            List of matched participant dictionaries
+        """
+        if not content or not participants:
+            return []
+
+        mentions = self.extract_mentions(content)
+        if not mentions:
+            return []
+
+        matched_participants = []
+        mention_lower_set = {m.lower() for m in mentions}
+
+        for participant in participants:
+            user_id = participant.get("user_id", "")
+            display_name = participant.get("display_name", "")
+
+            # Check if user_id matches any mention
+            if user_id and user_id.lower() in mention_lower_set:
+                matched_participants.append(participant)
+                continue
+
+            # Check if display_name matches any mention
+            if display_name and display_name.lower() in mention_lower_set:
+                matched_participants.append(participant)
+                continue
+
+        return matched_participants
+
+    @staticmethod
+    def is_staff_sender(sender_type: str) -> bool:
+        """Check if the sender type indicates a staff member.
+
+        Staff members include educators, directors, and admins.
+
+        Args:
+            sender_type: The sender type string
+
+        Returns:
+            True if the sender is a staff member
+        """
+        staff_types = {"educator", "director", "admin"}
+        return sender_type.lower() in staff_types
+
+    def can_view_private_note(
+        self,
+        user_id: UUID,
+        user_type: str,
+        message_visible_to: Optional[list[str]] = None,
+    ) -> bool:
+        """Check if a user can view a private note.
+
+        Private notes are only visible to:
+        - Staff members (educators, directors, admins)
+        - Users explicitly listed in the visible_to list
+
+        Args:
+            user_id: ID of the user trying to view the note
+            user_type: Type of the user (parent, educator, director, admin)
+            message_visible_to: Optional list of user IDs who can view the note
+
+        Returns:
+            True if the user can view the private note
+        """
+        # Staff members can always view private notes
+        if self.is_staff_sender(user_type):
+            return True
+
+        # If visible_to is specified, check if user is in the list
+        if message_visible_to:
+            user_id_str = str(user_id)
+            return user_id_str in message_visible_to
+
+        return False
+
+    def filter_messages_by_visibility(
+        self,
+        messages: list,
+        user_id: UUID,
+        user_type: str,
+    ) -> list:
+        """Filter messages based on visibility rules.
+
+        Removes private notes from the list if the user does not have
+        permission to view them. Messages without visibility restrictions
+        are always included.
+
+        Args:
+            messages: List of message objects
+            user_id: ID of the user requesting messages
+            user_type: Type of the user (parent, educator, director, admin)
+
+        Returns:
+            Filtered list of messages the user can view
+        """
+        visible_messages = []
+
+        for message in messages:
+            # Check if message has private note metadata
+            # Private notes are typically stored in message metadata or a flag
+            is_private = getattr(message, "is_private_note", False)
+
+            if not is_private:
+                # Public message - always visible
+                visible_messages.append(message)
+                continue
+
+            # Private note - check visibility
+            visible_to = getattr(message, "visible_to", None)
+            if self.can_view_private_note(user_id, user_type, visible_to):
+                visible_messages.append(message)
+
+        return visible_messages
+
+    @staticmethod
+    def format_mentions_for_display(content: str) -> str:
+        """Format @mentions for display with styling hints.
+
+        Wraps @mentions in a format that can be styled by the frontend.
+        Converts @[Name] to <mention>Name</mention> format.
+
+        Args:
+            content: The message content with @mentions
+
+        Returns:
+            Content with mentions wrapped for styling
+        """
+        if not content:
+            return content
+
+        # Replace @[Display Name] format
+        bracket_pattern = r"@\[([^\]]+)\]"
+        content = re.sub(bracket_pattern, r"<mention>\1</mention>", content)
+
+        # Replace @username format (but not @[...] since already handled)
+        username_pattern = r"@([a-zA-Z0-9_\-]+)(?!\[)"
+        content = re.sub(username_pattern, r"<mention>@\1</mention>", content)
+
+        return content
+
+    @staticmethod
+    def strip_mention_formatting(content: str) -> str:
+        """Strip mention formatting from content.
+
+        Removes <mention> tags while preserving the mention text.
+
+        Args:
+            content: The content with mention formatting
+
+        Returns:
+            Content with mention formatting removed
+        """
+        if not content:
+            return content
+
+        pattern = r"<mention>([^<]+)</mention>"
+        return re.sub(pattern, r"\1", content)
+
+    def get_notification_recipients_from_mentions(
+        self,
+        content: str,
+        participants: list[dict],
+        sender_id: UUID,
+    ) -> list[UUID]:
+        """Get user IDs that should receive notifications from mentions.
+
+        Resolves @mentions to participant UUIDs for sending notifications.
+        Excludes the sender from the notification list.
+
+        Args:
+            content: The message content with @mentions
+            participants: List of participant dictionaries from thread
+            sender_id: ID of the message sender (excluded from recipients)
+
+        Returns:
+            List of UUIDs for users who should be notified
+        """
+        matched_participants = self.resolve_mentions_to_participants(
+            content, participants
+        )
+
+        recipient_ids = []
+        sender_id_str = str(sender_id)
+
+        for participant in matched_participants:
+            user_id = participant.get("user_id")
+            if user_id and user_id != sender_id_str:
+                try:
+                    recipient_ids.append(UUID(user_id))
+                except (ValueError, AttributeError):
+                    continue
+
+        return recipient_ids
 
     # =========================================================================
     # Notification Preference Operations
