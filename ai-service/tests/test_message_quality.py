@@ -1714,6 +1714,449 @@ class TestBilingualSupport:
         assert Language.FR.value == "fr", "French language code should be 'fr'"
         assert len(list(Language)) == 2, "Should have exactly 2 languages"
 
+    @pytest.mark.asyncio
+    async def test_french_accusatory_detection_quebec_compliance(
+        self,
+        message_quality_service: MessageQualityService,
+        accusatory_message_fr: str,
+    ) -> None:
+        """Test French accusatory 'vous' detection for Quebec compliance.
+
+        Verifies that French accusatory patterns like 'Vous devez',
+        'Vous n'avez jamais' are properly detected with appropriate severity.
+        """
+        request = MessageAnalysisRequest(
+            message_text=accusatory_message_fr,
+            language=Language.FR,
+            context=MessageContext.GENERAL_UPDATE,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        # Should detect accusatory language in French
+        assert len(response.issues) > 0, (
+            "Should detect issues in French accusatory message"
+        )
+        assert response.language == Language.FR, (
+            "Response should be in French"
+        )
+        assert not response.is_acceptable, (
+            "French accusatory message should not be acceptable"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_judgmental_detection_quebec_compliance(
+        self,
+        message_quality_service: MessageQualityService,
+        judgmental_message_fr: str,
+    ) -> None:
+        """Test French judgmental label detection for Quebec compliance.
+
+        Verifies detection of French judgmental phrases like
+        'enfant difficile', 'perturbateur'.
+        """
+        request = MessageAnalysisRequest(
+            message_text=judgmental_message_fr,
+            language=Language.FR,
+            context=MessageContext.BEHAVIOR_CONCERN,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        judgmental_issues = [
+            issue for issue in response.issues
+            if issue.issue_type == QualityIssue.JUDGMENTAL_LABEL
+        ]
+        assert len(judgmental_issues) > 0, (
+            "Should detect judgmental labels in French for Quebec compliance"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_blame_shame_detection_quebec_compliance(
+        self,
+        message_quality_service: MessageQualityService,
+        blame_shame_message_fr: str,
+    ) -> None:
+        """Test French blame/shame pattern detection for Quebec compliance.
+
+        Verifies detection of French blame patterns like
+        'c'est votre faute', 'si seulement vous aviez'.
+        """
+        request = MessageAnalysisRequest(
+            message_text=blame_shame_message_fr,
+            language=Language.FR,
+            context=MessageContext.BEHAVIOR_CONCERN,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        blame_issues = [
+            issue for issue in response.issues
+            if issue.issue_type == QualityIssue.BLAME_SHAME
+        ]
+        assert len(blame_issues) > 0, (
+            "Should detect blame/shame patterns in French for Quebec compliance"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_exaggeration_detection_quebec_compliance(
+        self,
+        message_quality_service: MessageQualityService,
+        exaggeration_message_fr: str,
+    ) -> None:
+        """Test French exaggeration pattern detection for Quebec compliance.
+
+        Verifies detection of French exaggeration words like
+        'toujours', 'jamais', 'chaque fois'.
+        """
+        request = MessageAnalysisRequest(
+            message_text=exaggeration_message_fr,
+            language=Language.FR,
+            context=MessageContext.BEHAVIOR_CONCERN,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        exaggeration_issues = [
+            issue for issue in response.issues
+            if issue.issue_type == QualityIssue.EXAGGERATION
+        ]
+        assert len(exaggeration_issues) > 0, (
+            "Should detect exaggeration patterns in French for Quebec compliance"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_alarmist_detection_quebec_compliance(
+        self,
+        message_quality_service: MessageQualityService,
+        alarmist_message_fr: str,
+    ) -> None:
+        """Test French alarmist language detection for Quebec compliance.
+
+        Verifies detection of French alarmist terms like
+        'urgent', 'très inquiet', 'grave préoccupation'.
+        """
+        request = MessageAnalysisRequest(
+            message_text=alarmist_message_fr,
+            language=Language.FR,
+            context=MessageContext.INCIDENT_REPORT,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        alarmist_issues = [
+            issue for issue in response.issues
+            if issue.issue_type == QualityIssue.ALARMIST
+        ]
+        assert len(alarmist_issues) > 0, (
+            "Should detect alarmist language in French for Quebec compliance"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_comparison_detection_quebec_compliance(
+        self,
+        message_quality_service: MessageQualityService,
+        comparison_message_fr: str,
+    ) -> None:
+        """Test French comparison pattern detection for Quebec compliance.
+
+        Verifies detection of French comparison phrases like
+        'contrairement aux autres enfants', 'la plupart des enfants'.
+        """
+        request = MessageAnalysisRequest(
+            message_text=comparison_message_fr,
+            language=Language.FR,
+            context=MessageContext.BEHAVIOR_CONCERN,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        comparison_issues = [
+            issue for issue in response.issues
+            if issue.issue_type == QualityIssue.COMPARISON
+        ]
+        assert len(comparison_issues) > 0, (
+            "Should detect comparison patterns in French for Quebec compliance"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_positive_message_high_score_quebec_compliance(
+        self,
+        message_quality_service: MessageQualityService,
+        positive_message_fr: str,
+    ) -> None:
+        """Test French positive messages receive high quality scores.
+
+        Verifies Quebec compliance for well-structured French messages
+        following 'Bonne Message' standards.
+        """
+        request = MessageAnalysisRequest(
+            message_text=positive_message_fr,
+            language=Language.FR,
+            context=MessageContext.GENERAL_UPDATE,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        assert response.quality_score >= 70, (
+            f"French positive message should have score >= 70, got {response.quality_score}"
+        )
+        assert response.is_acceptable, (
+            "French positive message should be marked as acceptable"
+        )
+        assert response.language == Language.FR, (
+            "Response language should be French"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_short_positive_message_acceptable(
+        self,
+        message_quality_service: MessageQualityService,
+        short_positive_message_fr: str,
+    ) -> None:
+        """Test short French positive messages are acceptable.
+
+        Verifies Quebec compliance for brief but positive French messages.
+        """
+        request = MessageAnalysisRequest(
+            message_text=short_positive_message_fr,
+            language=Language.FR,
+            context=MessageContext.GENERAL_UPDATE,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        assert response.quality_score >= 60, (
+            f"Short French positive message should have score >= 60, got {response.quality_score}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_rewrite_suggestions_in_french(
+        self,
+        message_quality_service: MessageQualityService,
+        accusatory_message_fr: str,
+    ) -> None:
+        """Test that French rewrite suggestions are generated in French.
+
+        Verifies Quebec compliance by ensuring rewrites are in French
+        when analyzing French messages.
+        """
+        request = MessageAnalysisRequest(
+            message_text=accusatory_message_fr,
+            language=Language.FR,
+            context=MessageContext.GENERAL_UPDATE,
+            include_rewrites=True,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        if len(response.rewrite_suggestions) > 0:
+            suggestion = response.rewrite_suggestions[0]
+            # French suggestions should contain French language markers
+            suggested_lower = suggestion.suggested_text.lower()
+            french_markers = ["je", "j'", "nous", "votre", "de", "la", "le", "les"]
+            assert any(
+                marker in suggested_lower for marker in french_markers
+            ), "French rewrite should contain French language markers"
+
+    @pytest.mark.asyncio
+    async def test_consistent_issue_severity_english_french(
+        self,
+        message_quality_service: MessageQualityService,
+        judgmental_message_en: str,
+        judgmental_message_fr: str,
+    ) -> None:
+        """Test that same issue types have consistent severity across languages.
+
+        Verifies Quebec compliance by ensuring French messages are analyzed
+        with the same severity standards as English messages.
+        """
+        request_en = MessageAnalysisRequest(
+            message_text=judgmental_message_en,
+            language=Language.EN,
+            context=MessageContext.BEHAVIOR_CONCERN,
+        )
+        request_fr = MessageAnalysisRequest(
+            message_text=judgmental_message_fr,
+            language=Language.FR,
+            context=MessageContext.BEHAVIOR_CONCERN,
+        )
+
+        response_en = await message_quality_service.analyze_message(request_en)
+        response_fr = await message_quality_service.analyze_message(request_fr)
+
+        # Both should detect judgmental labels
+        en_judgmental = [
+            i for i in response_en.issues
+            if i.issue_type == QualityIssue.JUDGMENTAL_LABEL
+        ]
+        fr_judgmental = [
+            i for i in response_fr.issues
+            if i.issue_type == QualityIssue.JUDGMENTAL_LABEL
+        ]
+
+        assert len(en_judgmental) > 0, "Should detect judgmental in English"
+        assert len(fr_judgmental) > 0, "Should detect judgmental in French"
+
+        # Same issue type should have same severity
+        if en_judgmental and fr_judgmental:
+            assert en_judgmental[0].severity == fr_judgmental[0].severity, (
+                "Judgmental labels should have same severity in both languages"
+            )
+
+    @pytest.mark.asyncio
+    async def test_french_issue_descriptions_in_french(
+        self,
+        message_quality_service: MessageQualityService,
+        accusatory_message_fr: str,
+    ) -> None:
+        """Test that issue descriptions are in French for French messages.
+
+        Verifies Quebec compliance by ensuring all user-facing descriptions
+        are properly localized to French.
+        """
+        request = MessageAnalysisRequest(
+            message_text=accusatory_message_fr,
+            language=Language.FR,
+            context=MessageContext.GENERAL_UPDATE,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        for issue in response.issues:
+            # French descriptions should contain French words
+            french_indicators = [
+                "détecté", "langage", "peut", "être", "les", "que",
+                "vous", "votre", "cette", "une", "des"
+            ]
+            assert any(
+                indicator in issue.description.lower()
+                for indicator in french_indicators
+            ), f"French issue description should be in French: {issue.description}"
+
+    @pytest.mark.asyncio
+    async def test_french_suggestion_text_in_french(
+        self,
+        message_quality_service: MessageQualityService,
+        accusatory_message_fr: str,
+    ) -> None:
+        """Test that issue suggestions are in French for French messages.
+
+        Verifies Quebec compliance by ensuring suggestions are localized.
+        """
+        request = MessageAnalysisRequest(
+            message_text=accusatory_message_fr,
+            language=Language.FR,
+            context=MessageContext.GENERAL_UPDATE,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        for issue in response.issues:
+            # French suggestions should contain French words
+            french_indicators = [
+                "utilisez", "langage", "évitez", "essayez", "remplacez",
+                "formulez", "plutôt", "préférez", "je", "nous"
+            ]
+            assert any(
+                indicator in issue.suggestion.lower()
+                for indicator in french_indicators
+            ), f"French suggestion should be in French: {issue.suggestion}"
+
+    @pytest.mark.asyncio
+    async def test_bilingual_quality_score_calculation_parity(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that quality score calculation is consistent across languages.
+
+        Verifies Quebec compliance by ensuring scoring algorithms
+        work equivalently for French and English content.
+        """
+        # Equivalent positive messages in both languages
+        en_message = "Thank you for the lovely snacks today! Emma had a great day."
+        fr_message = "Merci pour les délicieuses collations aujourd'hui! Emma a passé une excellente journée."
+
+        result_en = message_quality_service.calculate_quality_score(
+            message_text=en_message,
+            language=Language.EN,
+        )
+        result_fr = message_quality_service.calculate_quality_score(
+            message_text=fr_message,
+            language=Language.FR,
+        )
+
+        # Quality scores should be in the same acceptable range
+        assert result_en["quality_score"] >= 60, (
+            "English positive message should have score >= 60"
+        )
+        assert result_fr["quality_score"] >= 60, (
+            "French positive message should have score >= 60"
+        )
+
+        # Scores should be relatively similar for equivalent content
+        score_difference = abs(result_en["quality_score"] - result_fr["quality_score"])
+        assert score_difference <= 20, (
+            f"Quality scores should be similar across languages. "
+            f"EN: {result_en['quality_score']}, FR: {result_fr['quality_score']}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_structural_elements_detected(
+        self,
+        message_quality_service: MessageQualityService,
+        positive_message_fr: str,
+    ) -> None:
+        """Test that structural elements are detected in French messages.
+
+        Verifies Quebec compliance by ensuring positive opening and
+        solution focus are properly detected in French content.
+        """
+        request = MessageAnalysisRequest(
+            message_text=positive_message_fr,
+            language=Language.FR,
+            context=MessageContext.BEHAVIOR_CONCERN,
+        )
+
+        response = await message_quality_service.analyze_message(request)
+
+        assert response.has_positive_opening, (
+            "Should detect positive opening in French message"
+        )
+        assert response.has_solution_focus, (
+            "Should detect solution focus in French message"
+        )
+
+    @pytest.mark.asyncio
+    async def test_french_quality_score_validation_fields(
+        self,
+        message_quality_service: MessageQualityService,
+    ) -> None:
+        """Test that quality score validation includes all fields for French.
+
+        Verifies Quebec compliance by ensuring French messages
+        get full validation analysis.
+        """
+        fr_message = (
+            "Je voulais vous informer que votre enfant a passé une excellente journée. "
+            "Nous avons remarqué de bons progrès dans ses activités de groupe. "
+            "N'hésitez pas à me contacter si vous avez des questions."
+        )
+
+        result = message_quality_service.calculate_quality_score(
+            message_text=fr_message,
+            language=Language.FR,
+        )
+
+        # Should include all validation fields
+        assert "quality_score" in result, "Should include quality_score"
+        assert "has_single_objective" in result, "Should include has_single_objective"
+        assert "has_factual_basis" in result, "Should include has_factual_basis"
+        assert "has_neutral_tone" in result, "Should include has_neutral_tone"
+        assert "has_collaborative_approach" in result, "Should include has_collaborative_approach"
+        assert "issues" in result, "Should include issues list"
+        assert "validation_details" in result, "Should include validation_details"
+
 
 # =============================================================================
 # Tests - Error Handling
