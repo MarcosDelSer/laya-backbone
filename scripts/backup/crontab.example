@@ -19,6 +19,14 @@
 # MYSQL_DATABASE=laya_db
 # BACKUP_DIR=/var/backups/mysql
 #
+# PostgreSQL Environment Variables:
+# PGHOST=localhost
+# PGPORT=5432
+# PGUSER=backup_user
+# PGPASSWORD=secure_password
+# PGDATABASE=laya_db
+# BACKUP_DIR=/var/backups/postgres
+#
 # =============================================================================
 # MySQL Backup - Daily at 2:00 AM
 # =============================================================================
@@ -27,9 +35,11 @@
 0 2 * * * /path/to/laya-backbone/scripts/backup/mysql_backup.sh >> /var/log/mysql_backup.log 2>&1
 
 # =============================================================================
-# PostgreSQL Backup - Daily at 2:15 AM (to be implemented)
+# PostgreSQL Backup - Daily at 2:15 AM
 # =============================================================================
-# 15 2 * * * /path/to/laya-backbone/scripts/backup/postgres_backup.sh >> /var/log/postgres_backup.log 2>&1
+# Runs pg_dump with comprehensive options and gzip compression
+# Logs output to /var/log/postgres_backup.log
+15 2 * * * /path/to/laya-backbone/scripts/backup/postgres_backup.sh >> /var/log/postgres_backup.log 2>&1
 
 # =============================================================================
 # Backup Cleanup - Daily at 3:00 AM (to be implemented)
@@ -48,7 +58,9 @@
 # =============================================================================
 # - Ensure the script paths are absolute paths
 # - Create log directories before running: sudo mkdir -p /var/log && sudo chmod 755 /var/log
-# - Create backup directories: sudo mkdir -p /var/backups/mysql && sudo chmod 700 /var/backups/mysql
+# - Create backup directories:
+#   sudo mkdir -p /var/backups/mysql && sudo chmod 700 /var/backups/mysql
+#   sudo mkdir -p /var/backups/postgres && sudo chmod 700 /var/backups/postgres
 # - Consider using a dedicated backup user with minimal privileges
 # - Monitor log files regularly for backup failures
 # - Test backup restoration periodically

@@ -216,9 +216,144 @@ gzip -t /var/backups/mysql/laya_db_*.sql.gz
 sudo smartctl -a /dev/sda
 ```
 
+### PostgreSQL Backup Script (`postgres_backup.sh`)
+
+**Features:**
+- ✅ pg_dump with comprehensive options
+- ✅ Gzip compression for space efficiency
+- ✅ Timestamped backup files (`YYYYMMDD_HHMMSS`)
+- ✅ Comprehensive error handling and logging
+- ✅ Pre-flight checks (connectivity, disk space, database existence)
+- ✅ Backup integrity verification
+- ✅ Secure file permissions (600)
+- ✅ Includes schema and data
+- ✅ UTF-8 character set support
+- ✅ Clean restore with DROP/CREATE commands
+
+**Backup Options:**
+- `--clean`: Include DROP commands before CREATE
+- `--if-exists`: Use IF EXISTS with DROP commands
+- `--create`: Include CREATE DATABASE command
+- `--no-owner`: Don't output ownership commands
+- `--no-acl`: Don't output ACL commands
+- `--encoding=UTF8`: UTF-8 encoding
+
+**Scheduled Time:** Daily at 2:15 AM
+
+### 4. PostgreSQL Backup Setup
+
+#### Prerequisites
+- PostgreSQL client tools (`pg_dump`, `psql`) installed
+- `gzip` and `bc` installed
+- Sufficient disk space for backups
+- PostgreSQL user with backup privileges
+
+#### Environment Variables
+
+Create a `.env` file or set environment variables:
+
+```bash
+export PGHOST=localhost
+export PGPORT=5432
+export PGUSER=backup_user
+export PGPASSWORD=your_secure_password
+export PGDATABASE=laya_db
+export BACKUP_DIR=/var/backups/postgres
+```
+
+#### Grant Backup Privileges
+
+Create a dedicated PostgreSQL backup user:
+
+```sql
+CREATE USER backup_user WITH PASSWORD 'secure_password';
+GRANT CONNECT ON DATABASE laya_db TO backup_user;
+\c laya_db
+GRANT USAGE ON SCHEMA public TO backup_user;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_user;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO backup_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO backup_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON SEQUENCES TO backup_user;
+```
+
+#### Manual Backup
+
+Run the backup script manually:
+
+```bash
+cd /path/to/laya-backbone
+./scripts/backup/postgres_backup.sh
+```
+
+#### Automated Backup (Cron)
+
+1. Create backup directory:
+```bash
+sudo mkdir -p /var/backups/postgres
+sudo chmod 700 /var/backups/postgres
+```
+
+2. Create log directory:
+```bash
+sudo mkdir -p /var/log
+sudo chmod 755 /var/log
+```
+
+3. Edit crontab:
+```bash
+crontab -e
+```
+
+4. Add the following line (adjust paths as needed):
+```
+15 2 * * * PGHOST=localhost PGPORT=5432 PGUSER=backup_user PGPASSWORD=secure_password PGDATABASE=laya_db BACKUP_DIR=/var/backups/postgres /path/to/laya-backbone/scripts/backup/postgres_backup.sh >> /var/log/postgres_backup.log 2>&1
+```
+
+Or use an environment file:
+```
+15 2 * * * /bin/bash -c 'source /path/to/.env && /path/to/laya-backbone/scripts/backup/postgres_backup.sh' >> /var/log/postgres_backup.log 2>&1
+```
+
+### 5. Verify PostgreSQL Backup
+
+Check if backup was created:
+
+```bash
+ls -lh /var/backups/postgres/
+```
+
+View backup log:
+
+```bash
+tail -f /var/log/postgres_backup.log
+```
+
+Test backup integrity:
+
+```bash
+gzip -t /var/backups/postgres/laya_db_*.sql.gz
+```
+
+### 6. Restore PostgreSQL Backup
+
+To restore a backup:
+
+```bash
+# Decompress and restore
+gunzip -c /var/backups/postgres/laya_db_20260216_021500.sql.gz | psql -h localhost -U postgres
+```
+
+Or restore to a specific database:
+
+```bash
+# Drop existing database and restore
+dropdb -h localhost -U postgres laya_db
+gunzip -c /var/backups/postgres/laya_db_20260216_021500.sql.gz | psql -h localhost -U postgres
+```
+
 ## Future Enhancements
 
-- [ ] PostgreSQL backup script (scheduled at 2:15 AM)
+- [x] PostgreSQL backup script (scheduled at 2:15 AM)
 - [ ] Automated backup retention/cleanup
 - [ ] Backup verification script (restore to temp DB)
 - [ ] Remote backup to S3 or rsync to remote server
@@ -233,6 +368,8 @@ sudo smartctl -a /dev/sda
 
 - [mysqldump Documentation](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html)
 - [MySQL Backup and Recovery](https://dev.mysql.com/doc/refman/8.0/en/backup-and-recovery.html)
+- [pg_dump Documentation](https://www.postgresql.org/docs/current/app-pgdump.html)
+- [PostgreSQL Backup and Restore](https://www.postgresql.org/docs/current/backup.html)
 - [Cron Configuration Guide](https://crontab.guru/)
 
 ## Support
@@ -240,5 +377,5 @@ sudo smartctl -a /dev/sda
 For issues or questions, please refer to the LAYA documentation or contact the infrastructure team.
 
 ---
-**Last Updated:** 2026-02-15
+**Last Updated:** 2026-02-16
 **Maintained by:** LAYA Infrastructure Team
