@@ -84,6 +84,68 @@ async def inactive_user(db_session: AsyncSession) -> User:
     return user
 
 
+@pytest_asyncio.fixture
+async def admin_user(db_session: AsyncSession) -> User:
+    """Create an admin test user for role-based access tests.
+
+    Creates an active admin user for testing role-based access control.
+
+    Args:
+        db_session: Test database session
+
+    Returns:
+        User: Created admin user with credentials:
+            - email: admin@example.com
+            - password: AdminPassword123!
+            - role: admin
+            - is_active: True
+    """
+    user = User(
+        id=uuid4(),
+        email="admin@example.com",
+        password_hash=hash_password("AdminPassword123!"),
+        first_name="Admin",
+        last_name="User",
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def accountant_user(db_session: AsyncSession) -> User:
+    """Create an accountant test user for role-based access tests.
+
+    Creates an active accountant user for testing role-based access control.
+
+    Args:
+        db_session: Test database session
+
+    Returns:
+        User: Created accountant user with credentials:
+            - email: accountant@example.com
+            - password: AccountantPassword123!
+            - role: accountant
+            - is_active: True
+    """
+    user = User(
+        id=uuid4(),
+        email="accountant@example.com",
+        password_hash=hash_password("AccountantPassword123!"),
+        first_name="Accountant",
+        last_name="User",
+        role=UserRole.ACCOUNTANT,
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
 # ============================================================================
 # Login endpoint tests
 # ============================================================================
@@ -817,3 +879,194 @@ async def test_integration_login_to_protected_endpoint(
     expired_token_data = expired_token_response.json()
     assert "detail" in expired_token_data
     assert "Token has expired" in expired_token_data["detail"]
+
+
+# ============================================================================
+# Role-based access control tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_admin_endpoint_as_admin(client: AsyncClient, admin_user: User) -> None:
+    """Test admin endpoint access with admin role.
+
+    Verifies that a user with the ADMIN role can successfully access
+    admin-only endpoints.
+
+    Expected: HTTP 200 status code with success message
+    """
+    # Login as admin to get access token
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "admin@example.com",
+            "password": "AdminPassword123!",
+        },
+    )
+
+    assert login_response.status_code == 200
+    login_data = login_response.json()
+    access_token = login_data["access_token"]
+
+    # Access admin endpoint with admin token
+    response = await client.get(
+        "/api/v1/auth/admin/test",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "message" in data
+    assert data["message"] == "Admin access granted"
+    assert "user" in data
+    assert data["user"] == "admin@example.com"
+
+
+@pytest.mark.asyncio
+async def test_admin_endpoint_as_teacher(client: AsyncClient, test_user: User) -> None:
+    """Test admin endpoint access with teacher role.
+
+    Verifies that a user with the TEACHER role cannot access admin-only
+    endpoints and receives a 403 Forbidden response.
+
+    Expected: HTTP 403 status code with error message indicating insufficient permissions
+    """
+    # Login as teacher to get access token
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "teacher@example.com",
+            "password": "TestPassword123!",
+        },
+    )
+
+    assert login_response.status_code == 200
+    login_data = login_response.json()
+    access_token = login_data["access_token"]
+
+    # Attempt to access admin endpoint with teacher token
+    response = await client.get(
+        "/api/v1/auth/admin/test",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "detail" in data
+    assert "Access denied" in data["detail"]
+    assert "admin" in data["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_financial_endpoint_as_admin(client: AsyncClient, admin_user: User) -> None:
+    """Test financial endpoint access with admin role.
+
+    Verifies that a user with the ADMIN role can successfully access
+    endpoints that require ADMIN or ACCOUNTANT roles.
+
+    Expected: HTTP 200 status code with success message
+    """
+    # Login as admin to get access token
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "admin@example.com",
+            "password": "AdminPassword123!",
+        },
+    )
+
+    assert login_response.status_code == 200
+    login_data = login_response.json()
+    access_token = login_data["access_token"]
+
+    # Access financial endpoint with admin token
+    response = await client.get(
+        "/api/v1/auth/financial/test",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "message" in data
+    assert data["message"] == "Financial access granted"
+    assert "user" in data
+    assert data["user"] == "admin@example.com"
+    assert "role" in data
+    assert data["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_financial_endpoint_as_accountant(
+    client: AsyncClient, accountant_user: User
+) -> None:
+    """Test financial endpoint access with accountant role.
+
+    Verifies that a user with the ACCOUNTANT role can successfully access
+    endpoints that require ADMIN or ACCOUNTANT roles.
+
+    Expected: HTTP 200 status code with success message
+    """
+    # Login as accountant to get access token
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "accountant@example.com",
+            "password": "AccountantPassword123!",
+        },
+    )
+
+    assert login_response.status_code == 200
+    login_data = login_response.json()
+    access_token = login_data["access_token"]
+
+    # Access financial endpoint with accountant token
+    response = await client.get(
+        "/api/v1/auth/financial/test",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "message" in data
+    assert data["message"] == "Financial access granted"
+    assert "user" in data
+    assert data["user"] == "accountant@example.com"
+    assert "role" in data
+    assert data["role"] == "accountant"
+
+
+@pytest.mark.asyncio
+async def test_financial_endpoint_as_teacher(
+    client: AsyncClient, test_user: User
+) -> None:
+    """Test financial endpoint access with teacher role.
+
+    Verifies that a user with the TEACHER role cannot access endpoints
+    that require ADMIN or ACCOUNTANT roles and receives a 403 Forbidden response.
+
+    Expected: HTTP 403 status code with error message indicating insufficient permissions
+    """
+    # Login as teacher to get access token
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "teacher@example.com",
+            "password": "TestPassword123!",
+        },
+    )
+
+    assert login_response.status_code == 200
+    login_data = login_response.json()
+    access_token = login_data["access_token"]
+
+    # Attempt to access financial endpoint with teacher token
+    response = await client.get(
+        "/api/v1/auth/financial/test",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "detail" in data
+    assert "Access denied" in data["detail"]
+    assert ("admin" in data["detail"].lower() or "accountant" in data["detail"].lower())
