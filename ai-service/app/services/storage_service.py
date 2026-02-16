@@ -467,6 +467,147 @@ class StorageService:
 
         return quota
 
+    async def check_quota(
+        self,
+        owner_id: UUID,
+        required_bytes: int,
+        raise_on_exceeded: bool = True,
+    ) -> bool:
+        """Check if storage quota allows a file upload.
+
+        Verifies that the user has sufficient quota space available
+        for the requested upload size.
+
+        Args:
+            owner_id: UUID of the user.
+            required_bytes: Number of bytes needed for the upload.
+            raise_on_exceeded: If True, raises QuotaExceededError when
+                quota would be exceeded. If False, returns False instead.
+
+        Returns:
+            True if quota allows the upload, False otherwise.
+
+        Raises:
+            QuotaExceededError: If raise_on_exceeded is True and quota
+                would be exceeded.
+        """
+        quota = await self.get_or_create_quota(owner_id)
+
+        if quota.available_bytes >= required_bytes:
+            return True
+
+        if raise_on_exceeded:
+            raise QuotaExceededError(
+                f"Storage quota exceeded. "
+                f"Available: {quota.available_bytes} bytes, "
+                f"Required: {required_bytes} bytes. "
+                f"Current usage: {quota.used_bytes}/{quota.quota_bytes} bytes "
+                f"({quota.usage_percentage:.1f}%)"
+            )
+
+        return False
+
+    async def get_quota_usage(
+        self,
+        owner_id: UUID,
+    ) -> dict:
+        """Get detailed storage quota usage statistics.
+
+        Provides comprehensive quota information including current usage,
+        available space, file counts, and usage percentage.
+
+        Args:
+            owner_id: UUID of the user.
+
+        Returns:
+            Dictionary containing quota usage statistics:
+                - quota_bytes: Maximum allowed storage
+                - used_bytes: Current storage used
+                - available_bytes: Remaining storage space
+                - usage_percentage: Usage as percentage (0-100)
+                - file_count: Number of files stored
+                - can_upload: Whether any uploads are allowed
+        """
+        quota = await self.get_or_create_quota(owner_id)
+
+        return {
+            "quota_bytes": quota.quota_bytes,
+            "used_bytes": quota.used_bytes,
+            "available_bytes": quota.available_bytes,
+            "usage_percentage": round(quota.usage_percentage, 2),
+            "file_count": quota.file_count,
+            "can_upload": quota.available_bytes > 0,
+        }
+
+    async def update_quota(
+        self,
+        owner_id: UUID,
+        new_quota_bytes: int,
+    ) -> StorageQuota:
+        """Update storage quota limit for a user.
+
+        Allows administrators to modify the maximum storage quota
+        for a specific user.
+
+        Args:
+            owner_id: UUID of the user.
+            new_quota_bytes: New quota limit in bytes. Must be positive.
+
+        Returns:
+            Updated StorageQuota record.
+
+        Raises:
+            ValueError: If new_quota_bytes is not positive.
+        """
+        if new_quota_bytes <= 0:
+            raise ValueError("Quota must be a positive number of bytes")
+
+        quota = await self.get_or_create_quota(owner_id)
+        quota.quota_bytes = new_quota_bytes
+
+        await self.db.commit()
+        await self.db.refresh(quota)
+
+        return quota
+
+    async def recalculate_quota(
+        self,
+        owner_id: UUID,
+    ) -> StorageQuota:
+        """Recalculate storage quota usage from actual file data.
+
+        Scans all files owned by the user and recalculates the total
+        used bytes and file count. Useful for data consistency checks
+        or recovery after data corruption.
+
+        Args:
+            owner_id: UUID of the user.
+
+        Returns:
+            Updated StorageQuota record with recalculated values.
+        """
+        # Get actual usage from files
+        query = select(
+            func.coalesce(func.sum(File.size_bytes), 0).label("total_bytes"),
+            func.count(File.id).label("file_count"),
+        ).where(cast(File.owner_id, String) == str(owner_id))
+
+        result = await self.db.execute(query)
+        row = result.one()
+
+        total_bytes = int(row.total_bytes)
+        file_count = int(row.file_count)
+
+        # Update quota record
+        quota = await self.get_or_create_quota(owner_id)
+        quota.used_bytes = total_bytes
+        quota.file_count = file_count
+
+        await self.db.commit()
+        await self.db.refresh(quota)
+
+        return quota
+
     async def update_file_metadata(
         self,
         file_id: UUID,
