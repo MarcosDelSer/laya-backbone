@@ -391,6 +391,86 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
+// Incident Types
+// ============================================================================
+
+/**
+ * Incident severity levels.
+ */
+export type IncidentSeverity = 'minor' | 'moderate' | 'serious' | 'severe';
+
+/**
+ * Incident category types.
+ */
+export type IncidentCategory =
+  | 'bump'
+  | 'fall'
+  | 'bite'
+  | 'scratch'
+  | 'behavioral'
+  | 'medical'
+  | 'allergic_reaction'
+  | 'other';
+
+/**
+ * Incident status values.
+ */
+export type IncidentStatus = 'pending' | 'acknowledged' | 'resolved';
+
+/**
+ * Complete incident report record.
+ */
+export interface Incident {
+  id: string;
+  childId: string;
+  childName: string;
+  date: string;
+  time: string;
+  severity: IncidentSeverity;
+  category: IncidentCategory;
+  status: IncidentStatus;
+  description: string;
+  actionTaken: string;
+  location: string;
+  witnesses?: string[];
+  reportedBy: string;
+  reportedByName: string;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  parentNotifiedAt?: string;
+  requiresFollowUp: boolean;
+  followUpNotes?: string;
+  attachments?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Incident list item for summary views.
+ */
+export interface IncidentListItem {
+  id: string;
+  childId: string;
+  childName: string;
+  date: string;
+  time: string;
+  severity: IncidentSeverity;
+  category: IncidentCategory;
+  status: IncidentStatus;
+  description: string;
+  requiresFollowUp: boolean;
+  createdAt: string;
+}
+
+/**
+ * Request payload for acknowledging an incident.
+ */
+export interface AcknowledgeIncidentRequest {
+  incidentId: string;
+  notes?: string;
+}
+
+// ============================================================================
 // API Response Types
 // ============================================================================
 
