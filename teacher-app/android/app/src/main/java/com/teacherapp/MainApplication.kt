@@ -19,6 +19,7 @@ import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
 
 /**
@@ -134,9 +135,9 @@ class MainApplication : Application(), ReactApplication {
     override fun onCreate() {
         super.onCreate()
 
-        // Initialize SoLoader, which is required for loading native libraries
-        // used by React Native (Hermes, Yoga, etc.)
-        SoLoader.init(this, false)
+        // Initialize SoLoader with merged SO mapping for React Native 0.78+
+        // This maps individual library names to the merged libreactnative.so
+        SoLoader.init(this, OpenSourceMergedSoMapping)
 
         // If the new architecture is enabled, load the native entry point
         if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {

@@ -9,9 +9,11 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
+    auth: Models for authentication and authorization
 """
 
 from app.models.base import Base
+from app.auth.models import User, UserRole
 from app.models.coaching import (
     CoachingRecommendation,
     CoachingSession,
@@ -40,6 +42,9 @@ from app.models.communication import (
 
 __all__ = [
     "Base",
+    # Auth models
+    "User",
+    "UserRole",
     # Coaching models
     "CoachingSession",
     "CoachingRecommendation",
