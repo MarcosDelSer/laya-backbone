@@ -7,6 +7,7 @@ Modules:
     coaching_service: Service for RAG-based special needs coaching guidance
     activity_service: Service for activity intelligence and recommendations
     analytics_service: Service for business intelligence and analytics
+    occupancy_service: Service for real-time occupancy and attendance tracking
 """
 
 from app.services.coaching_service import (
@@ -18,6 +19,7 @@ from app.services.coaching_service import (
 )
 from app.services.activity_service import ActivityService
 from app.services.analytics_service import AnalyticsService
+from app.services.occupancy_service import OccupancyService
 
 __all__: list[str] = [
     # Coaching
@@ -30,4 +32,6 @@ __all__: list[str] = [
     "ActivityService",
     # Analytics
     "AnalyticsService",
+    # Occupancy
+    "OccupancyService",
 ]
