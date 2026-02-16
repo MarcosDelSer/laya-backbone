@@ -9,6 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
+    llm: LLM integration schemas
 """
 
 from app.schemas.activity import (
@@ -72,6 +73,20 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
+from app.schemas.llm import (
+    LLMCompletionRequest,
+    LLMCompletionResponse,
+    LLMHealthResponse,
+    LLMMessageRole,
+    LLMMessageSchema,
+    LLMModelInfo,
+    LLMModelsListResponse,
+    LLMProvider,
+    LLMUsageListResponse,
+    LLMUsageLogResponse,
+    LLMUsageStats,
+    LLMUsageSummary,
+)
 
 __all__ = [
     # Base schemas
@@ -130,4 +145,17 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
+    # LLM schemas
+    "LLMProvider",
+    "LLMMessageRole",
+    "LLMMessageSchema",
+    "LLMCompletionRequest",
+    "LLMCompletionResponse",
+    "LLMUsageStats",
+    "LLMUsageLogResponse",
+    "LLMUsageListResponse",
+    "LLMUsageSummary",
+    "LLMHealthResponse",
+    "LLMModelInfo",
+    "LLMModelsListResponse",
 ]
