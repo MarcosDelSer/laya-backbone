@@ -137,3 +137,13 @@ INSERT INTO `gibbonNotificationTemplate` (`type`, `nameDisplay`, `subjectTemplat
 VALUES ('announcement', 'General Announcement', '{{schoolName}}: {{announcementTitle}}', 'Hello {{parentName}},\n\n{{announcementBody}}\n\nBest regards,\n{{schoolName}}', '{{announcementTitle}}', '{{announcementSummary}}', 'Y')
 ON DUPLICATE KEY UPDATE nameDisplay=nameDisplay;end
 ";
+
+// v1.1.00 - Add readAt column for notification inbox
+++$count;
+$sql[$count][0] = '1.1.00';
+$sql[$count][1] = "
+ALTER TABLE `gibbonNotificationQueue`
+ADD COLUMN `readAt` DATETIME NULL COMMENT 'Timestamp when notification was marked as read' AFTER `sentAt`;end
+
+CREATE INDEX `idx_readAt` ON `gibbonNotificationQueue` (`readAt`);end
+";

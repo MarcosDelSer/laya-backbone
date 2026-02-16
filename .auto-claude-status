@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "013-task-l-desktop-app",
+  "spec": "032-push-notification-wiring",
   "state": "building",
   "subtasks": {
-    "completed": 10,
-    "total": 12,
+    "completed": 4,
+    "total": 8,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Integration Verification",
+    "current": "Phase 3: Testing and Validation",
     "id": null,
-    "total": 3
+    "total": 4
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 4,
-    "started_at": "2026-02-15T05:15:00.899192"
+    "number": 2,
+    "started_at": "2026-02-16T02:44:02.995086"
   },
-  "last_update": "2026-02-15T05:19:32.125362"
+  "last_update": "2026-02-16T02:49:42.319477"
 }
