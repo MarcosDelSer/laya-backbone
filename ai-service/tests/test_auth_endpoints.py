@@ -777,6 +777,74 @@ async def test_password_reset_confirm_used_token(
 
 
 # ============================================================================
+# Password security tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_password_not_stored_plaintext(
+    db_session: AsyncSession,
+) -> None:
+    """Test that passwords are never stored in plaintext.
+
+    Verifies critical password security requirements:
+    1. Passwords are hashed using bcrypt (hash starts with $2b$)
+    2. Plain text passwords are never stored in the database
+    3. verify_password correctly validates hashed passwords
+
+    This ensures compliance with security best practices and prevents
+    credential exposure in case of database breach.
+    """
+    from app.core.security import verify_password
+
+    # Create a user with a known plain password
+    plain_password = "SecureTestPassword123!"
+    user = User(
+        id=uuid4(),
+        email="security_test@example.com",
+        password_hash=hash_password(plain_password),
+        first_name="Security",
+        last_name="Test",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    # Verify password is hashed with bcrypt (starts with $2b$)
+    assert user.password_hash.startswith("$2b$"), (
+        "Password must be hashed with bcrypt (hash should start with $2b$)"
+    )
+
+    # Verify plain password is NOT stored in database
+    assert user.password_hash != plain_password, (
+        "Plain text password must never be stored in database"
+    )
+
+    # Verify the hash is significantly different from plain password
+    # (bcrypt hashes are typically 60 characters long)
+    assert len(user.password_hash) > 50, (
+        "Bcrypt hash should be much longer than plain password"
+    )
+
+    # Verify verify_password works correctly with correct password
+    assert verify_password(plain_password, user.password_hash) is True, (
+        "verify_password should return True for correct password"
+    )
+
+    # Verify verify_password rejects incorrect password
+    assert verify_password("WrongPassword123!", user.password_hash) is False, (
+        "verify_password should return False for incorrect password"
+    )
+
+    # Verify verify_password rejects empty password
+    assert verify_password("", user.password_hash) is False, (
+        "verify_password should return False for empty password"
+    )
+
+
+# ============================================================================
 # Integration tests - Complete authentication flow
 # ============================================================================
 
