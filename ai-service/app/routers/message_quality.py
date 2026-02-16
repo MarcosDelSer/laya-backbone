@@ -20,7 +20,9 @@ from app.schemas.message_quality import (
     MessageTemplateListResponse,
     MessageTemplateRequest,
     MessageTemplateResponse,
+    QualityIssue,
     TemplateCategory,
+    TrainingExampleListResponse,
 )
 from app.services.message_quality_service import (
     AnalysisError,
@@ -223,6 +225,82 @@ async def create_template(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
+        )
+    except MessageQualityServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Message quality service error: {str(e)}",
+        )
+
+
+@router.get("/training-examples", response_model=TrainingExampleListResponse)
+async def get_training_examples(
+    language: Optional[Language] = Query(
+        default=None,
+        description="Filter training examples by language (en or fr)",
+    ),
+    issue_type: Optional[QualityIssue] = Query(
+        default=None,
+        description="Filter training examples by quality issue type demonstrated",
+    ),
+    difficulty_level: Optional[str] = Query(
+        default=None,
+        description="Filter training examples by difficulty level (beginner, intermediate, advanced)",
+    ),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of training examples to return",
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="Number of training examples to skip for pagination",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> TrainingExampleListResponse:
+    """Get training examples for educator learning.
+
+    Returns a paginated list of training examples that help educators learn
+    to write better messages following Quebec 'Bonne Message' standards.
+    Each example shows an original message with quality issues alongside
+    an improved version with explanations.
+
+    Training examples can be filtered by language, quality issue type, and
+    difficulty level to provide targeted learning experiences.
+
+    Args:
+        language: Optional filter by language (en or fr)
+        issue_type: Optional filter by quality issue type demonstrated
+        difficulty_level: Optional filter by difficulty level
+        limit: Maximum number of examples to return (default: 20, max: 100)
+        offset: Number of examples to skip for pagination (default: 0)
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        TrainingExampleListResponse containing:
+        - items: List of training examples
+        - total: Total number of examples matching filters
+        - page: Current page number
+        - page_size: Number of items per page
+        - has_more: Whether more examples are available
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessageQualityService(db)
+
+    try:
+        return await service.get_training_examples(
+            language=language,
+            issue_type=issue_type,
+            difficulty_level=difficulty_level,
+            limit=limit,
+            offset=offset,
         )
     except MessageQualityServiceError as e:
         raise HTTPException(

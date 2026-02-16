@@ -13,7 +13,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.message_quality import MessageAnalysis, MessageTemplate
+from app.models.message_quality import MessageAnalysis, MessageTemplate, TrainingExample
 from app.schemas.message_quality import (
     IssueSeverity,
     Language,
@@ -27,6 +27,8 @@ from app.schemas.message_quality import (
     QualityIssueDetail,
     RewriteSuggestion,
     TemplateCategory,
+    TrainingExampleListResponse,
+    TrainingExampleResponse,
 )
 
 
@@ -1893,4 +1895,91 @@ class MessageQualityService:
             usage_count=template.usage_count,
             created_at=template.created_at,
             updated_at=template.updated_at,
+        )
+
+    async def get_training_examples(
+        self,
+        language: Optional[Language] = None,
+        issue_type: Optional[QualityIssue] = None,
+        difficulty_level: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> TrainingExampleListResponse:
+        """Get training examples with optional filtering.
+
+        Retrieves training examples that help educators learn to write better
+        messages following Quebec 'Bonne Message' standards. Each example shows
+        an original message with quality issues alongside an improved version
+        with explanations.
+
+        Args:
+            language: Optional filter by language (en or fr)
+            issue_type: Optional filter by quality issue type demonstrated
+            difficulty_level: Optional filter by difficulty level
+            limit: Maximum number of examples to return (default: 20)
+            offset: Number of examples to skip for pagination (default: 0)
+
+        Returns:
+            TrainingExampleListResponse with paginated list of training examples
+        """
+        from sqlalchemy import select, func
+
+        # Build base query
+        query = select(TrainingExample).where(TrainingExample.is_active == True)
+
+        # Apply language filter
+        if language:
+            query = query.where(TrainingExample.language == language.value)
+
+        # Apply issue type filter (check if the issue is in the array)
+        if issue_type:
+            query = query.where(
+                TrainingExample.issues_demonstrated.contains([issue_type.value])
+            )
+
+        # Apply difficulty level filter
+        if difficulty_level:
+            query = query.where(TrainingExample.difficulty_level == difficulty_level)
+
+        # Get total count for pagination
+        count_query = select(func.count()).select_from(
+            query.subquery()
+        )
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Apply ordering, limit and offset
+        query = query.order_by(
+            TrainingExample.view_count.desc(),
+            TrainingExample.helpfulness_score.desc().nulls_last(),
+            TrainingExample.created_at.desc(),
+        ).offset(offset).limit(limit)
+
+        result = await self.db.execute(query)
+        examples = result.scalars().all()
+
+        # Convert to response models
+        items = [
+            TrainingExampleResponse(
+                id=example.id,
+                original_message=example.original_message,
+                improved_message=example.improved_message,
+                issues_demonstrated=[
+                    QualityIssue(issue) for issue in example.issues_demonstrated
+                ],
+                explanation=example.explanation,
+                language=Language(example.language),
+                difficulty_level=example.difficulty_level,
+                created_at=example.created_at,
+                updated_at=example.updated_at,
+            )
+            for example in examples
+        ]
+
+        return TrainingExampleListResponse(
+            items=items,
+            total=total,
+            page=offset // limit + 1 if limit > 0 else 1,
+            page_size=limit,
+            has_more=offset + len(items) < total,
         )
