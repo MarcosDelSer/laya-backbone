@@ -1,3 +1,8 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+import { useFormatting } from '@/lib/hooks/useFormatting';
+
 interface MessageBubbleProps {
   message: {
     id: string;
@@ -10,35 +15,10 @@ interface MessageBubbleProps {
   isCurrentUser: boolean;
 }
 
-function formatTime(timestamp: string): string {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
-function formatDate(timestamp: string): string {
-  const date = new Date(timestamp);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (date.toDateString() === today.toDateString()) {
-    return 'Today';
-  } else if (date.toDateString() === yesterday.toDateString()) {
-    return 'Yesterday';
-  } else {
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
-    });
-  }
-}
-
 export function MessageBubble({ message, isCurrentUser }: MessageBubbleProps) {
+  const t = useTranslations();
+  const { formatTime } = useFormatting();
+
   return (
     <div
       className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} mb-4`}
@@ -64,7 +44,7 @@ export function MessageBubble({ message, isCurrentUser }: MessageBubbleProps) {
               isCurrentUser ? 'text-white/70' : 'text-gray-500'
             }`}
           >
-            {formatTime(message.timestamp)}
+            {formatTime(message.timestamp, 'short')}
           </span>
           {isCurrentUser && (
             <span className="text-xs">
@@ -110,6 +90,3 @@ export function MessageBubble({ message, isCurrentUser }: MessageBubbleProps) {
     </div>
   );
 }
-
-// Export date formatting helper for use in thread headers
-export { formatDate, formatTime };

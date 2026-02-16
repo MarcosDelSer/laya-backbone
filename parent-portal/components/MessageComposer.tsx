@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 
 interface MessageComposerProps {
   onSendMessage: (content: string) => void;
@@ -11,10 +12,14 @@ interface MessageComposerProps {
 export function MessageComposer({
   onSendMessage,
   disabled = false,
-  placeholder = 'Type a message...',
+  placeholder,
 }: MessageComposerProps) {
+  const t = useTranslations();
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Use provided placeholder or default from translations
+  const placeholderText = placeholder ?? t('messages.composer.placeholder');
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -56,7 +61,7 @@ export function MessageComposer({
           type="button"
           className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary rounded-full"
           disabled={disabled}
-          title="Attach file (coming soon)"
+          title={t('messages.composer.attachFile')}
         >
           <svg
             className="h-5 w-5"
@@ -80,7 +85,7 @@ export function MessageComposer({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={placeholder}
+            placeholder={placeholderText}
             disabled={disabled}
             rows={1}
             className="w-full resize-none rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 pr-12 text-sm focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-100 disabled:text-gray-500"
@@ -119,7 +124,7 @@ export function MessageComposer({
         </button>
       </div>
       <p className="mt-2 text-xs text-gray-400 text-center">
-        Press Enter to send, Shift+Enter for new line
+        {t('messages.composer.sendHint')}
       </p>
     </form>
   );
