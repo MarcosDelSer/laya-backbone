@@ -1,25 +1,25 @@
 {
-  "active": true,
+  "active": false,
   "spec": "022-auth-ai-service-login",
-  "state": "building",
+  "state": "completed",
   "subtasks": {
-    "completed": 5,
+    "completed": 10,
     "total": 10,
-    "in_progress": 1,
+    "in_progress": 0,
     "failed": 0
   },
   "phase": {
-    "current": "Auth Endpoint Tests",
+    "current": "Final Verification",
     "id": null,
-    "total": 5
+    "total": 1
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 7,
-    "started_at": "2026-02-16T12:21:33.882489"
+    "number": 3,
+    "started_at": "2026-02-16T16:27:09.540693"
   },
-  "last_update": "2026-02-16T12:46:59.656951"
+  "last_update": "2026-02-16T16:40:00.000000"
 }
