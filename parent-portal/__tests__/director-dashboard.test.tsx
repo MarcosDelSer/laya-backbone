@@ -313,8 +313,8 @@ describe('GroupOccupancyRow Component', () => {
 
   it('displays staff info when showStaffInfo is true', () => {
     render(<GroupOccupancyRow group={mockGroup} showStaffInfo={true} />)
-    expect(screen.getByText(/3 staff/)).toBeInTheDocument()
-    expect(screen.getByText(/1:3/)).toBeInTheDocument()
+    // The staff info shows "3 staff (1:3)" in a single span
+    expect(screen.getByText(/3 staff \(1:3\)/)).toBeInTheDocument()
   })
 
   it('hides staff info when showStaffInfo is false', () => {
@@ -403,7 +403,9 @@ describe('GroupOccupancyList Component', () => {
 
   it('passes showStaffInfo to children', () => {
     render(<GroupOccupancyList groups={mockGroups} showStaffInfo={true} />)
-    expect(screen.getByText(/3 staff/)).toBeInTheDocument()
+    // Multiple groups may display staff info, use getAllByText to find at least one
+    const staffElements = screen.getAllByText(/\d+ staff/)
+    expect(staffElements.length).toBeGreaterThan(0)
   })
 
   it('passes showRoomNumber to children', () => {
