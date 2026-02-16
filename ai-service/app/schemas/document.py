@@ -600,3 +600,105 @@ class SignatureDashboardResponse(BaseResponse):
         ...,
         description="Timestamp when dashboard data was generated",
     )
+
+
+# Document Audit Log Schemas
+
+
+class DocumentAuditLogBase(BaseSchema):
+    """Base schema for document audit log data.
+
+    Attributes:
+        event_type: Type of event that occurred
+        document_id: ID of the document related to this event
+        user_id: User who triggered the event
+        signature_id: Optional ID of the signature (for signature events)
+        signature_request_id: Optional ID of the signature request
+        event_data: Additional event-specific data as dictionary
+        ip_address: IP address from which the event was triggered
+        user_agent: Browser/device user agent string
+    """
+
+    event_type: str = Field(
+        ...,
+        description="Type of audit event",
+    )
+    document_id: UUID = Field(
+        ...,
+        description="Document ID related to this event",
+    )
+    user_id: UUID = Field(
+        ...,
+        description="User who triggered the event",
+    )
+    signature_id: Optional[UUID] = Field(
+        default=None,
+        description="Signature ID (for signature events)",
+    )
+    signature_request_id: Optional[UUID] = Field(
+        default=None,
+        description="Signature request ID",
+    )
+    event_data: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Additional event-specific data",
+    )
+    ip_address: Optional[str] = Field(
+        default=None,
+        max_length=45,
+        description="IP address of the user",
+    )
+    user_agent: Optional[str] = Field(
+        default=None,
+        description="Browser/device user agent string",
+    )
+
+
+class DocumentAuditLogCreate(DocumentAuditLogBase):
+    """Schema for creating a document audit log entry.
+
+    Used internally by the service layer to create audit log records.
+    """
+
+    pass
+
+
+class DocumentAuditLogResponse(DocumentAuditLogBase, BaseResponse):
+    """Schema for document audit log response.
+
+    Includes all audit log data plus timestamps.
+
+    Attributes:
+        id: Unique identifier for the audit log entry
+        timestamp: When the event occurred
+        created_at: Timestamp when the audit record was created
+    """
+
+    id: UUID = Field(
+        ...,
+        description="Unique identifier for the audit log entry",
+    )
+    timestamp: datetime = Field(
+        ...,
+        description="When the event occurred",
+    )
+    created_at: datetime = Field(
+        ...,
+        description="When the audit record was created",
+    )
+
+
+class DocumentAuditLogListResponse(PaginatedResponse):
+    """Paginated response schema for listing document audit logs.
+
+    Attributes:
+        items: List of audit log entries
+        total: Total number of audit logs matching the query
+        skip: Number of records skipped
+        limit: Maximum number of records returned
+    """
+
+    items: list[DocumentAuditLogResponse] = Field(
+        ...,
+        description="List of audit log entries",
+    )

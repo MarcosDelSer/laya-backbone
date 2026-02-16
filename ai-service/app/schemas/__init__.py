@@ -74,6 +74,9 @@ from app.schemas.communication import (
     ReportFrequency,
 )
 from app.schemas.document import (
+    DocumentAuditLogCreate,
+    DocumentAuditLogListResponse,
+    DocumentAuditLogResponse,
     DocumentBase,
     DocumentCreate,
     DocumentListResponse,
@@ -154,6 +157,9 @@ __all__ = [
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
     # Document schemas
+    "DocumentAuditLogCreate",
+    "DocumentAuditLogListResponse",
+    "DocumentAuditLogResponse",
     "DocumentBase",
     "DocumentCreate",
     "DocumentUpdate",

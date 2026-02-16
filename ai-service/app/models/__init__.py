@@ -40,6 +40,8 @@ from app.models.communication import (
 )
 from app.models.document import (
     Document,
+    DocumentAuditEventType,
+    DocumentAuditLog,
     DocumentStatus,
     DocumentTemplate,
     DocumentType,
@@ -73,6 +75,8 @@ __all__ = [
     "CommunicationPreference",
     # Document models
     "Document",
+    "DocumentAuditEventType",
+    "DocumentAuditLog",
     "DocumentStatus",
     "DocumentTemplate",
     "DocumentType",

@@ -417,3 +417,130 @@ class SignatureRequest(Base):
     def __repr__(self) -> str:
         """Return string representation of the SignatureRequest."""
         return f"<SignatureRequest(id={self.id}, document_id={self.document_id}, signer_id={self.signer_id}, status={self.status.value})>"
+
+
+class DocumentAuditEventType(str, PyEnum):
+    """Types of audit events for document and signature workflows.
+
+    Attributes:
+        DOCUMENT_CREATED: Document was created
+        DOCUMENT_UPDATED: Document metadata was updated
+        DOCUMENT_STATUS_CHANGED: Document status was changed
+        SIGNATURE_REQUEST_SENT: Signature request was sent to signer
+        SIGNATURE_REQUEST_VIEWED: Signer viewed the document
+        SIGNATURE_REQUEST_COMPLETED: Signature request was completed
+        SIGNATURE_CREATED: Document was signed by a user
+        TEMPLATE_USED: Document was created from a template
+    """
+
+    DOCUMENT_CREATED = "document_created"
+    DOCUMENT_UPDATED = "document_updated"
+    DOCUMENT_STATUS_CHANGED = "document_status_changed"
+    SIGNATURE_REQUEST_SENT = "signature_request_sent"
+    SIGNATURE_REQUEST_VIEWED = "signature_request_viewed"
+    SIGNATURE_REQUEST_COMPLETED = "signature_request_completed"
+    SIGNATURE_CREATED = "signature_created"
+    TEMPLATE_USED = "template_used"
+
+
+class DocumentAuditLog(Base):
+    """SQLAlchemy model for document audit trail logging.
+
+    Tracks all significant events in the document and signature lifecycle
+    for compliance, security, and debugging purposes.
+
+    Attributes:
+        id: Unique identifier for the audit log entry
+        event_type: Type of event that occurred
+        document_id: ID of the document related to this event
+        user_id: User who triggered the event
+        signature_id: Optional ID of the signature (for signature events)
+        signature_request_id: Optional ID of the signature request
+        event_data: JSON object with additional event-specific data
+        ip_address: IP address from which the event was triggered
+        user_agent: Browser/device user agent string
+        timestamp: When the event occurred
+        created_at: Timestamp when the audit record was created
+    """
+
+    __tablename__ = "document_audit_logs"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    event_type: Mapped[DocumentAuditEventType] = mapped_column(
+        Enum(
+            DocumentAuditEventType,
+            name="document_audit_event_type_enum",
+            create_constraint=True,
+        ),
+        nullable=False,
+        index=True,
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    signature_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("signatures.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    signature_request_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("signature_requests.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    event_data: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="JSON object with event-specific details",
+    )
+    ip_address: Mapped[Optional[str]] = mapped_column(
+        String(45),  # IPv6 max length
+        nullable=True,
+    )
+    user_agent: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    # Relationships
+    document: Mapped["Document"] = relationship(
+        "Document",
+        foreign_keys=[document_id],
+    )
+    signature: Mapped[Optional["Signature"]] = relationship(
+        "Signature",
+        foreign_keys=[signature_id],
+    )
+    signature_request: Mapped[Optional["SignatureRequest"]] = relationship(
+        "SignatureRequest",
+        foreign_keys=[signature_request_id],
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation of the DocumentAuditLog."""
+        return f"<DocumentAuditLog(id={self.id}, event_type={self.event_type.value}, document_id={self.document_id}, user_id={self.user_id})>"

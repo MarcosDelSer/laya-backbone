@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import (
     Document,
+    DocumentAuditEventType,
+    DocumentAuditLog,
     DocumentStatus,
     DocumentTemplate,
     DocumentType,
@@ -23,6 +25,8 @@ from app.models.document import (
     SignatureRequestStatus,
 )
 from app.schemas.document import (
+    DocumentAuditLogCreate,
+    DocumentAuditLogResponse,
     DocumentCreate,
     DocumentResponse,
     DocumentTemplateCreate,
@@ -257,6 +261,19 @@ class DocumentService:
         self.db.add(document)
         await self.db.commit()
         await self.db.refresh(document)
+
+        # Create audit log entry
+        await self.create_audit_log(
+            event_type=DocumentAuditEventType.DOCUMENT_CREATED,
+            document_id=document.id,
+            user_id=document.created_by,
+            event_data={
+                "document_type": document.type.value,
+                "title": document.title,
+                "status": document.status.value,
+            },
+        )
+
         return document
 
     async def create_document_from_template(
@@ -291,6 +308,20 @@ class DocumentService:
         self.db.add(document)
         await self.db.commit()
         await self.db.refresh(document)
+
+        # Create audit log entry
+        await self.create_audit_log(
+            event_type=DocumentAuditEventType.TEMPLATE_USED,
+            document_id=document.id,
+            user_id=created_by,
+            event_data={
+                "template_id": str(template_id),
+                "template_name": template.name,
+                "document_type": document.type.value,
+                "title": title,
+            },
+        )
+
         return document
 
     async def get_document_by_id(self, document_id: UUID) -> Optional[Document]:
@@ -374,7 +405,8 @@ class DocumentService:
         if not document:
             return None
 
-        # Update fields if provided
+        # Track old values for audit logging
+        old_status = document.status
         update_dict = update_data.model_dump(exclude_unset=True)
 
         for field, value in update_dict.items():
@@ -385,6 +417,24 @@ class DocumentService:
 
         await self.db.commit()
         await self.db.refresh(document)
+
+        # Create audit log entry
+        event_type = DocumentAuditEventType.DOCUMENT_UPDATED
+        event_data = {"updated_fields": list(update_dict.keys())}
+
+        # If status changed, log it specifically
+        if "status" in update_dict and old_status != document.status:
+            event_type = DocumentAuditEventType.DOCUMENT_STATUS_CHANGED
+            event_data["old_status"] = old_status.value
+            event_data["new_status"] = document.status.value
+
+        await self.create_audit_log(
+            event_type=event_type,
+            document_id=document.id,
+            user_id=document.created_by,
+            event_data=event_data,
+        )
+
         return document
 
     def _document_to_response(self, document: Document) -> DocumentResponse:
@@ -427,6 +477,9 @@ class DocumentService:
         if not document:
             return None
 
+        # Track old status for audit
+        old_status = document.status
+
         # Create signature
         signature = Signature(
             document_id=signature_data.document_id,
@@ -443,6 +496,22 @@ class DocumentService:
 
         await self.db.commit()
         await self.db.refresh(signature)
+
+        # Create audit log entry for signature
+        await self.create_audit_log(
+            event_type=DocumentAuditEventType.SIGNATURE_CREATED,
+            document_id=signature.document_id,
+            user_id=signature.signer_id,
+            signature_id=signature.id,
+            event_data={
+                "old_status": old_status.value,
+                "new_status": DocumentStatus.SIGNED.value,
+                "document_title": document.title,
+            },
+            ip_address=signature.ip_address,
+            user_agent=signature.device_info,
+        )
+
         return signature
 
     async def get_signatures_for_document(
@@ -561,6 +630,20 @@ class DocumentService:
             f"{document.id} by requester {requester_id} to signer {request_data.signer_id}"
         )
 
+        # Create audit log entry
+        await self.create_audit_log(
+            event_type=DocumentAuditEventType.SIGNATURE_REQUEST_SENT,
+            document_id=signature_request.document_id,
+            user_id=requester_id,
+            signature_request_id=signature_request.id,
+            event_data={
+                "signer_id": str(request_data.signer_id),
+                "expires_at": signature_request.expires_at.isoformat() if signature_request.expires_at else None,
+                "notification_sent": notification_success,
+                "message": request_data.message,
+            },
+        )
+
         return signature_request
 
     async def mark_request_viewed(
@@ -594,6 +677,18 @@ class DocumentService:
             await self.db.refresh(signature_request)
 
             logger.info(f"Signature request {request_id} marked as viewed")
+
+            # Create audit log entry
+            await self.create_audit_log(
+                event_type=DocumentAuditEventType.SIGNATURE_REQUEST_VIEWED,
+                document_id=signature_request.document_id,
+                user_id=signature_request.signer_id,
+                signature_request_id=signature_request.id,
+                event_data={
+                    "requester_id": str(signature_request.requester_id),
+                    "viewed_at": signature_request.viewed_at.isoformat(),
+                },
+            )
 
         return signature_request
 
@@ -636,6 +731,19 @@ class DocumentService:
         )
 
         logger.info(f"Signature request {request_id} marked as completed")
+
+        # Create audit log entry
+        await self.create_audit_log(
+            event_type=DocumentAuditEventType.SIGNATURE_REQUEST_COMPLETED,
+            document_id=signature_request.document_id,
+            user_id=signature_request.signer_id,
+            signature_id=signature.id,
+            signature_request_id=signature_request.id,
+            event_data={
+                "requester_id": str(signature_request.requester_id),
+                "completed_at": signature_request.completed_at.isoformat(),
+            },
+        )
 
         return signature_request
 
@@ -974,3 +1082,175 @@ class DocumentService:
             "alerts": alerts,
             "generated_at": now.isoformat(),
         }
+
+    # Audit Trail Methods
+
+    async def create_audit_log(
+        self,
+        event_type: DocumentAuditEventType,
+        document_id: UUID,
+        user_id: UUID,
+        signature_id: Optional[UUID] = None,
+        signature_request_id: Optional[UUID] = None,
+        event_data: Optional[dict] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> DocumentAuditLog:
+        """Create an audit log entry for a document or signature event.
+
+        This method records all significant events in the document lifecycle
+        for compliance, security, and debugging purposes.
+
+        Args:
+            event_type: Type of event that occurred.
+            document_id: ID of the document related to this event.
+            user_id: User who triggered the event.
+            signature_id: Optional ID of the signature (for signature events).
+            signature_request_id: Optional ID of the signature request.
+            event_data: Optional dictionary with additional event-specific data.
+            ip_address: IP address from which the event was triggered.
+            user_agent: Browser/device user agent string.
+
+        Returns:
+            Created DocumentAuditLog instance.
+        """
+        # Serialize event_data to JSON if provided
+        event_data_json = None
+        if event_data:
+            event_data_json = json.dumps(event_data)
+
+        audit_log = DocumentAuditLog(
+            event_type=event_type,
+            document_id=document_id,
+            user_id=user_id,
+            signature_id=signature_id,
+            signature_request_id=signature_request_id,
+            event_data=event_data_json,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        self.db.add(audit_log)
+        await self.db.commit()
+        await self.db.refresh(audit_log)
+
+        logger.info(
+            f"Audit log created: {event_type.value} for document {document_id} "
+            f"by user {user_id}"
+        )
+
+        return audit_log
+
+    async def get_audit_logs_for_document(
+        self,
+        document_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[DocumentAuditLog], int]:
+        """Retrieve all audit logs for a specific document.
+
+        Args:
+            document_id: ID of the document.
+            skip: Number of records to skip for pagination.
+            limit: Maximum number of records to return.
+
+        Returns:
+            Tuple of (list of audit logs, total count).
+        """
+        query = select(DocumentAuditLog).where(
+            cast(DocumentAuditLog.document_id, String) == str(document_id)
+        )
+
+        # Get total count
+        count_query = select(func.count()).select_from(query.subquery())
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Apply pagination and ordering
+        query = (
+            query.offset(skip)
+            .limit(limit)
+            .order_by(DocumentAuditLog.timestamp.desc())
+        )
+
+        result = await self.db.execute(query)
+        audit_logs = list(result.scalars().all())
+
+        return audit_logs, total
+
+    async def get_audit_logs_for_user(
+        self,
+        user_id: UUID,
+        skip: int = 0,
+        limit: int = 100,
+        event_type: Optional[str] = None,
+    ) -> tuple[list[DocumentAuditLog], int]:
+        """Retrieve all audit logs for a specific user.
+
+        Args:
+            user_id: ID of the user.
+            skip: Number of records to skip for pagination.
+            limit: Maximum number of records to return.
+            event_type: Optional filter by event type.
+
+        Returns:
+            Tuple of (list of audit logs, total count).
+        """
+        query = select(DocumentAuditLog).where(
+            cast(DocumentAuditLog.user_id, String) == str(user_id)
+        )
+
+        if event_type:
+            query = query.where(
+                DocumentAuditLog.event_type == DocumentAuditEventType(event_type)
+            )
+
+        # Get total count
+        count_query = select(func.count()).select_from(query.subquery())
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Apply pagination and ordering
+        query = (
+            query.offset(skip)
+            .limit(limit)
+            .order_by(DocumentAuditLog.timestamp.desc())
+        )
+
+        result = await self.db.execute(query)
+        audit_logs = list(result.scalars().all())
+
+        return audit_logs, total
+
+    def _audit_log_to_response(
+        self, audit_log: DocumentAuditLog
+    ) -> DocumentAuditLogResponse:
+        """Convert DocumentAuditLog model to DocumentAuditLogResponse schema.
+
+        Args:
+            audit_log: The DocumentAuditLog model instance.
+
+        Returns:
+            DocumentAuditLogResponse schema instance.
+        """
+        # Deserialize event_data from JSON
+        event_data = None
+        if audit_log.event_data:
+            try:
+                event_data = json.loads(audit_log.event_data)
+            except json.JSONDecodeError:
+                event_data = {}
+
+        return DocumentAuditLogResponse(
+            id=audit_log.id,
+            event_type=audit_log.event_type.value,
+            document_id=audit_log.document_id,
+            user_id=audit_log.user_id,
+            signature_id=audit_log.signature_id,
+            signature_request_id=audit_log.signature_request_id,
+            event_data=event_data,
+            ip_address=audit_log.ip_address,
+            user_agent=audit_log.user_agent,
+            timestamp=audit_log.timestamp,
+            created_at=audit_log.created_at,
+        )

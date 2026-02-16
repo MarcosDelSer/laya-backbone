@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas.document import (
+    DocumentAuditLogListResponse,
     DocumentCreate,
     DocumentListResponse,
     DocumentResponse,
@@ -811,3 +812,138 @@ async def get_document_signature_request(
         )
 
     return service._signature_request_to_response(signature_request)
+
+
+# Audit Log Endpoints
+
+
+@router.get(
+    "/{document_id}/audit-logs",
+    response_model=DocumentAuditLogListResponse,
+    summary="Get audit logs for a document",
+    description="Retrieve the complete audit trail for a specific document. "
+    "Includes all events from creation through signatures.",
+)
+async def get_document_audit_logs(
+    document_id: UUID,
+    skip: int = Query(
+        default=0,
+        ge=0,
+        description="Number of records to skip for pagination",
+    ),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=200,
+        description="Maximum number of records to return",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> DocumentAuditLogListResponse:
+    """Get all audit logs for a specific document.
+
+    Provides complete audit trail showing all significant events in the
+    document lifecycle including creation, updates, signature requests,
+    views, and signatures.
+
+    Args:
+        document_id: ID of the document.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        DocumentAuditLogListResponse with paginated audit logs.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+
+    # Verify document exists
+    document = await service.get_document_by_id(document_id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with id {document_id} not found",
+        )
+
+    audit_logs, total = await service.get_audit_logs_for_document(
+        document_id=document_id,
+        skip=skip,
+        limit=limit,
+    )
+
+    items = [service._audit_log_to_response(log) for log in audit_logs]
+
+    return DocumentAuditLogListResponse(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/audit-logs/user/{user_id}",
+    response_model=DocumentAuditLogListResponse,
+    summary="Get audit logs for a user",
+    description="Retrieve all audit logs for a specific user across all documents.",
+)
+async def get_user_audit_logs(
+    user_id: UUID,
+    skip: int = Query(
+        default=0,
+        ge=0,
+        description="Number of records to skip for pagination",
+    ),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=200,
+        description="Maximum number of records to return",
+    ),
+    event_type: Optional[str] = Query(
+        default=None,
+        description="Filter by event type",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> DocumentAuditLogListResponse:
+    """Get all audit logs for a specific user.
+
+    Retrieves audit trail for all document and signature events
+    performed by a specific user.
+
+    Args:
+        user_id: ID of the user.
+        skip: Number of records to skip.
+        limit: Maximum number of records to return.
+        event_type: Optional filter by event type.
+        db: Async database session (injected).
+        current_user: Authenticated user information (injected).
+
+    Returns:
+        DocumentAuditLogListResponse with paginated audit logs.
+
+    Raises:
+        HTTPException: 401 if not authenticated.
+    """
+    service = DocumentService(db)
+
+    audit_logs, total = await service.get_audit_logs_for_user(
+        user_id=user_id,
+        skip=skip,
+        limit=limit,
+        event_type=event_type,
+    )
+
+    items = [service._audit_log_to_response(log) for log in audit_logs]
+
+    return DocumentAuditLogListResponse(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
