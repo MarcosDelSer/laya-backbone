@@ -18,6 +18,13 @@ import type {
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
+  EnrollmentForm,
+  EnrollmentFormSummary,
+  EnrollmentFormStatus,
+  CreateEnrollmentFormRequest,
+  UpdateEnrollmentFormRequest,
+  SignEnrollmentFormRequest,
+  SubmitEnrollmentFormRequest,
 } from './types';
 
 // ============================================================================
@@ -50,6 +57,13 @@ const ENDPOINTS = {
   DOCUMENT: (id: string) => `/api/v1/documents/${id}`,
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
+
+  // Enrollment Forms
+  ENROLLMENT_FORMS: '/api/v1/enrollment-forms',
+  ENROLLMENT_FORM: (id: string) => `/api/v1/enrollment-forms/${id}`,
+  ENROLLMENT_FORM_SIGN: (id: string) => `/api/v1/enrollment-forms/${id}/sign`,
+  ENROLLMENT_FORM_SUBMIT: (id: string) => `/api/v1/enrollment-forms/${id}/submit`,
+  ENROLLMENT_FORM_PDF: (id: string) => `/api/v1/enrollment-forms/${id}/pdf`,
 } as const;
 
 // ============================================================================
@@ -325,6 +339,127 @@ export function getDocumentPdfUrl(documentId: string): string {
  */
 export async function getPendingDocumentsCount(): Promise<number> {
   const response = await getDocuments({ status: 'pending', limit: 1 });
+  return response.total;
+}
+
+// ============================================================================
+// Enrollment Forms API
+// ============================================================================
+
+/**
+ * Parameters for fetching enrollment forms.
+ */
+export interface EnrollmentFormParams extends PaginationParams {
+  status?: EnrollmentFormStatus;
+  familyId?: string;
+  personId?: string;
+}
+
+/**
+ * Fetch enrollment forms with optional filters.
+ */
+export async function getEnrollmentForms(
+  params?: EnrollmentFormParams
+): Promise<PaginatedResponse<EnrollmentFormSummary>> {
+  return gibbonClient.get<PaginatedResponse<EnrollmentFormSummary>>(ENDPOINTS.ENROLLMENT_FORMS, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      status: params?.status,
+      family_id: params?.familyId,
+      person_id: params?.personId,
+    },
+  });
+}
+
+/**
+ * Fetch a specific enrollment form by ID with all related data.
+ */
+export async function getEnrollmentForm(formId: string): Promise<EnrollmentForm> {
+  return gibbonClient.get<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM(formId));
+}
+
+/**
+ * Create a new enrollment form.
+ */
+export async function createEnrollmentForm(
+  request: CreateEnrollmentFormRequest
+): Promise<EnrollmentForm> {
+  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORMS, request);
+}
+
+/**
+ * Update an existing enrollment form.
+ */
+export async function updateEnrollmentForm(
+  formId: string,
+  request: UpdateEnrollmentFormRequest
+): Promise<EnrollmentForm> {
+  return gibbonClient.put<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM(formId), request);
+}
+
+/**
+ * Delete an enrollment form (only draft forms can be deleted).
+ */
+export async function deleteEnrollmentForm(formId: string): Promise<void> {
+  return gibbonClient.delete<void>(ENDPOINTS.ENROLLMENT_FORM(formId));
+}
+
+/**
+ * Sign an enrollment form with e-signature.
+ */
+export async function signEnrollmentForm(
+  request: SignEnrollmentFormRequest
+): Promise<EnrollmentForm> {
+  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM_SIGN(request.formId), {
+    signature_type: request.signatureType,
+    signature_data: request.signatureData,
+    signer_name: request.signerName,
+  });
+}
+
+/**
+ * Submit an enrollment form for approval.
+ */
+export async function submitEnrollmentForm(
+  request: SubmitEnrollmentFormRequest
+): Promise<EnrollmentForm> {
+  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM_SUBMIT(request.formId));
+}
+
+/**
+ * Get the PDF download URL for an enrollment form.
+ */
+export function getEnrollmentFormPdfUrl(formId: string): string {
+  return `${process.env.NEXT_PUBLIC_GIBBON_URL || 'http://localhost:8080/gibbon'}${ENDPOINTS.ENROLLMENT_FORM_PDF(formId)}`;
+}
+
+/**
+ * Get enrollment forms for a specific family.
+ */
+export async function getFamilyEnrollmentForms(
+  familyId: string,
+  params?: Omit<EnrollmentFormParams, 'familyId'>
+): Promise<PaginatedResponse<EnrollmentFormSummary>> {
+  return getEnrollmentForms({
+    ...params,
+    familyId,
+  });
+}
+
+/**
+ * Get draft enrollment forms count.
+ */
+export async function getDraftEnrollmentFormsCount(): Promise<number> {
+  const response = await getEnrollmentForms({ status: 'Draft', limit: 1 });
+  return response.total;
+}
+
+/**
+ * Get pending submission enrollment forms count.
+ */
+export async function getSubmittedEnrollmentFormsCount(): Promise<number> {
+  const response = await getEnrollmentForms({ status: 'Submitted', limit: 1 });
   return response.total;
 }
 
