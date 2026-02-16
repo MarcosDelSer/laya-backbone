@@ -104,7 +104,24 @@ gzip -t /var/backups/mysql/laya_db_*.sql.gz
 
 ### 3. Restore from Backup
 
-To restore a backup:
+#### Using the Restore Script (Recommended)
+
+The automated restore script provides safety checks and confirmation prompts:
+
+```bash
+# Interactive restore (with confirmation prompts)
+./scripts/backup/mysql_restore.sh /var/backups/mysql/laya_db_20260215_020000.sql.gz
+
+# List available backups
+./scripts/backup/mysql_restore.sh --list
+
+# Non-interactive restore (skip confirmations - USE WITH CAUTION)
+MYSQL_PASSWORD=your_password ./scripts/backup/mysql_restore.sh /var/backups/mysql/laya_db_20260215_020000.sql.gz --yes
+```
+
+#### Manual Restore (Alternative)
+
+For manual restoration without the script:
 
 ```bash
 # Decompress and restore
@@ -425,7 +442,24 @@ gzip -t /var/backups/postgres/laya_db_*.sql.gz
 
 ### 6. Restore PostgreSQL Backup
 
-To restore a backup:
+#### Using the Restore Script (Recommended)
+
+The automated restore script provides safety checks and confirmation prompts:
+
+```bash
+# Interactive restore (with confirmation prompts)
+./scripts/backup/postgres_restore.sh /var/backups/postgres/laya_db_20260216_021500.sql.gz
+
+# List available backups
+./scripts/backup/postgres_restore.sh --list
+
+# Non-interactive restore (skip confirmations - USE WITH CAUTION)
+PGPASSWORD=your_password ./scripts/backup/postgres_restore.sh /var/backups/postgres/laya_db_20260216_021500.sql.gz --yes
+```
+
+#### Manual Restore (Alternative)
+
+For manual restoration without the script:
 
 ```bash
 # Decompress and restore
@@ -440,10 +474,140 @@ dropdb -h localhost -U postgres laya_db
 gunzip -c /var/backups/postgres/laya_db_20260216_021500.sql.gz | psql -h localhost -U postgres
 ```
 
+## Restore Scripts
+
+### MySQL Restore Script (`mysql_restore.sh`)
+
+**Features:**
+- ✅ Interactive and non-interactive modes
+- ✅ Safety confirmations before destructive operations
+- ✅ Backup file integrity verification (gzip test)
+- ✅ Pre-flight checks (connectivity, file existence, disk space)
+- ✅ Automatic database name extraction from backup filename
+- ✅ Database drop and recreate with proper character set
+- ✅ Post-restore verification (table count, database size)
+- ✅ Comprehensive error handling and logging
+- ✅ List available backups with metadata
+- ✅ Progress reporting and timing
+
+**Usage:**
+
+```bash
+# Interactive restore with confirmation prompts
+./scripts/backup/mysql_restore.sh /var/backups/mysql/laya_db_20260215_020000.sql.gz
+
+# List available backups
+./scripts/backup/mysql_restore.sh --list
+
+# Non-interactive mode (skip confirmations)
+./scripts/backup/mysql_restore.sh /var/backups/mysql/laya_db_20260215_020000.sql.gz --yes
+
+# Show help
+./scripts/backup/mysql_restore.sh --help
+```
+
+**Environment Variables:**
+```bash
+export MYSQL_HOST=localhost
+export MYSQL_PORT=3306
+export MYSQL_USER=root
+export MYSQL_PASSWORD=secure_password
+export MYSQL_DATABASE=laya_db  # Optional: extracted from filename if not set
+export BACKUP_DIR=/var/backups/mysql  # For --list option
+```
+
+**Safety Features:**
+- Warns about existing database and data loss
+- Shows current database size before dropping
+- Requires typing 'yes' to confirm in interactive mode
+- Verifies backup integrity before restore
+- Validates MySQL connectivity before starting
+- Logs all operations with timestamps
+
+### PostgreSQL Restore Script (`postgres_restore.sh`)
+
+**Features:**
+- ✅ Interactive and non-interactive modes
+- ✅ Safety confirmations before destructive operations
+- ✅ Backup file integrity verification (gzip test)
+- ✅ Pre-flight checks (connectivity, file existence, disk space)
+- ✅ Automatic database name extraction from backup filename
+- ✅ Terminates active connections before restore
+- ✅ Database drop and recreate from backup
+- ✅ Post-restore verification (table count, database size)
+- ✅ Comprehensive error handling and logging
+- ✅ List available backups with metadata
+- ✅ Progress reporting and timing
+
+**Usage:**
+
+```bash
+# Interactive restore with confirmation prompts
+./scripts/backup/postgres_restore.sh /var/backups/postgres/laya_db_20260216_021500.sql.gz
+
+# List available backups
+./scripts/backup/postgres_restore.sh --list
+
+# Non-interactive mode (skip confirmations)
+./scripts/backup/postgres_restore.sh /var/backups/postgres/laya_db_20260216_021500.sql.gz --yes
+
+# Show help
+./scripts/backup/postgres_restore.sh --help
+```
+
+**Environment Variables:**
+```bash
+export PGHOST=localhost
+export PGPORT=5432
+export PGUSER=postgres
+export PGPASSWORD=secure_password
+export PGDATABASE=laya_db  # Optional: extracted from filename if not set
+export BACKUP_DIR=/var/backups/postgres  # For --list option
+```
+
+**Safety Features:**
+- Warns about existing database and data loss
+- Shows current database size before dropping
+- Requires typing 'yes' to confirm in interactive mode
+- Terminates active connections before dropping database
+- Verifies backup integrity before restore
+- Validates PostgreSQL connectivity before starting
+- Logs all operations with timestamps
+
+## Restore Best Practices
+
+1. **Always Test Backups**
+   - Regularly test restore procedures to ensure backups are valid
+   - Use the --list option to verify backup files exist
+   - Test gzip integrity: `gzip -t /var/backups/mysql/*.sql.gz`
+
+2. **Use Interactive Mode**
+   - Always use interactive mode for production restores
+   - Review warnings about data loss before confirming
+   - Only use --yes flag in automated recovery scripts
+
+3. **Verify After Restore**
+   - Check table counts and database size after restore
+   - Run application smoke tests to verify data integrity
+   - Compare restored data with expected values
+
+4. **Disaster Recovery**
+   - Document restore procedures in runbook
+   - Practice restore process regularly (quarterly)
+   - Maintain off-site backups for disaster scenarios
+   - Keep restore scripts versioned with backups
+
+5. **Access Control**
+   - Use dedicated restore user with minimal privileges
+   - Never commit passwords to version control
+   - Use environment files or secrets management
+   - Audit restore operations in production
+
 ## Future Enhancements
 
 - [x] PostgreSQL backup script (scheduled at 2:15 AM)
 - [x] Automated backup retention/cleanup (7 daily, 4 weekly, 12 monthly)
+- [x] MySQL and PostgreSQL restore scripts with safety checks
 - [ ] Backup verification script (restore to temp DB)
 - [ ] Remote backup to S3 or rsync to remote server
 - [ ] Photo and upload file backups
