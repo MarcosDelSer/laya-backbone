@@ -1,25 +1,25 @@
 {
-  "active": false,
-  "spec": "022-auth-ai-service-login",
-  "state": "completed",
+  "active": true,
+  "spec": "045-user-onboarding-wizard",
+  "state": "building",
   "subtasks": {
-    "completed": 10,
+    "completed": 8,
     "total": 10,
-    "in_progress": 0,
+    "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Final Verification",
+    "current": "Phase 4: Documentation and Hardening",
     "id": null,
-    "total": 1
+    "total": 4
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 3,
-    "started_at": "2026-02-16T16:27:09.540693"
+    "number": 1,
+    "started_at": "2026-02-16T12:21:17.658531"
   },
-  "last_update": "2026-02-16T16:40:00.000000"
+  "last_update": "2026-02-16T12:21:17.741177"
 }
