@@ -22,7 +22,7 @@ from app.middleware.rate_limit import (
     get_auth_rate_limiter,
     get_general_rate_limiter,
 )
-from app.middleware.security import get_cors_origins, get_xss_protection_middleware, get_hsts_middleware
+from app.middleware.security import get_xss_protection_middleware, get_hsts_middleware
 from app.redis_client import close_redis
 from app.routers import coaching
 from app.routers.activities import router as activities_router
@@ -126,7 +126,7 @@ app.add_middleware(ErrorHandlerMiddleware)
 # Configure CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(),
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
