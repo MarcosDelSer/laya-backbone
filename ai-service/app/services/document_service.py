@@ -346,14 +346,20 @@ class DocumentService:
 
         return document
 
-    async def get_document_by_id(self, document_id: UUID) -> Optional[Document]:
+    async def get_document_by_id(
+        self, document_id: UUID, user_id: UUID
+    ) -> Optional[Document]:
         """Retrieve a document by ID.
 
         Args:
             document_id: Unique identifier of the document.
+            user_id: ID of the user requesting the document.
 
         Returns:
             Document if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         from sqlalchemy import cast, String
 
@@ -361,7 +367,18 @@ class DocumentService:
             cast(Document.id, String) == str(document_id)
         )
         result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+        document = result.scalar_one_or_none()
+
+        if not document:
+            return None
+
+        # Verify user has access to the document
+        if not self._user_has_document_access(document, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this document"
+            )
+
+        return document
 
     async def list_documents(
         self,
