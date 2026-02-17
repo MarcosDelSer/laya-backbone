@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any, Literal, Optional
 
 import jwt
+import redis.asyncio as redis
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,7 @@ from app.auth.audit_logger import (
     get_user_agent,
 )
 from app.config import settings
+from app.core.redis import get_redis
 from app.database import get_db
 
 # HTTPBearer security scheme for multi-source authentication
@@ -97,6 +99,7 @@ class MultiSourceTokenPayload:
 async def verify_token_from_any_source(
     credentials: HTTPAuthorizationCredentials,
     db: AsyncSession,
+    redis_client: Optional[redis.Redis] = None,
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """Verify and decode a JWT token from any supported source.
@@ -106,10 +109,12 @@ async def verify_token_from_any_source(
     and normalizes the user data.
 
     Includes comprehensive audit logging for security monitoring.
+    Uses two-tier blacklist checking: Redis (fast) then PostgreSQL (authoritative).
 
     Args:
         credentials: HTTP Authorization credentials containing the Bearer token
         db: Async database session for blacklist lookup
+        redis_client: Optional async Redis client for fast blacklist checking
         request: Optional FastAPI Request for audit logging context
 
     Returns:
@@ -133,13 +138,36 @@ async def verify_token_from_any_source(
             algorithms=[settings.jwt_algorithm],
         )
 
-        # Check if token is blacklisted
-        from app.auth.models import TokenBlacklist
-        from sqlalchemy import select
+        # Two-tier blacklist check for performance:
+        # 1. Check Redis (fast cache) first
+        # 2. If not in Redis, check PostgreSQL (authoritative source)
+        is_blacklisted = False
 
-        stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none() is not None:
+        # Check Redis first for fast lookup
+        if redis_client:
+            try:
+                redis_key = f"blacklist:{token}"
+                redis_result = await redis_client.get(redis_key)
+                if redis_result is not None:
+                    # Token found in Redis blacklist
+                    is_blacklisted = True
+            except Exception:
+                # If Redis fails, fall back to database check
+                # Don't fail the request due to Redis issues
+                pass
+
+        # If not found in Redis, check PostgreSQL
+        if not is_blacklisted:
+            from app.auth.models import TokenBlacklist
+            from sqlalchemy import select
+
+            stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
+            result = await db.execute(stmt)
+            if result.scalar_one_or_none() is not None:
+                is_blacklisted = True
+
+        # Reject if token is blacklisted
+        if is_blacklisted:
             audit_logger.log_verification_failed(
                 error_message="Token has been revoked",
                 ip_address=ip_address,
@@ -269,6 +297,7 @@ async def verify_token_from_any_source(
 async def get_current_user_multi_source(
     credentials: HTTPAuthorizationCredentials = Depends(security_multi_source),
     db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """FastAPI dependency to get current user from multi-source JWT token.
@@ -277,10 +306,12 @@ async def get_current_user_multi_source(
     from either AI service or Gibbon JWT tokens.
 
     Includes audit logging for all verification attempts.
+    Uses two-tier blacklist checking (Redis then PostgreSQL) for performance.
 
     Args:
         credentials: HTTP Authorization credentials injected by FastAPI
         db: Async database session for blacklist lookup
+        redis_client: Async Redis client for fast blacklist checking
         request: Optional FastAPI Request for audit context
 
     Returns:
@@ -300,12 +331,13 @@ async def get_current_user_multi_source(
                 "source": current_user.get("source", "ai-service")
             }
     """
-    return await verify_token_from_any_source(credentials, db, request)
+    return await verify_token_from_any_source(credentials, db, redis_client, request)
 
 
 async def get_optional_user_multi_source(
     credentials: HTTPAuthorizationCredentials | None = Depends(security_multi_source_optional),
     db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
     request: Optional[Request] = None,
 ) -> dict[str, Any] | None:
     """FastAPI dependency to optionally get current user from multi-source token.
@@ -314,9 +346,12 @@ async def get_optional_user_multi_source(
     is provided instead of raising an exception. Useful for endpoints that
     behave differently based on authentication status.
 
+    Uses two-tier blacklist checking (Redis then PostgreSQL) for performance.
+
     Args:
         credentials: Optional HTTP Authorization credentials
         db: Async database session for blacklist lookup
+        redis_client: Async Redis client for fast blacklist checking
         request: Optional FastAPI Request for audit context
 
     Returns:
@@ -335,7 +370,7 @@ async def get_optional_user_multi_source(
     if credentials is None:
         return None
 
-    return await verify_token_from_any_source(credentials, db, request)
+    return await verify_token_from_any_source(credentials, db, redis_client, request)
 
 
 def extract_user_info(payload: dict[str, Any]) -> dict[str, Any]:
