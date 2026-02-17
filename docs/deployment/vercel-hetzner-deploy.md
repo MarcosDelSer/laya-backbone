@@ -92,14 +92,14 @@ The following tasks can be done **in parallel** by different team members or in 
 
 ```bash
 # Terminal 1: Server provisioning and setup
-./Scripts/deploy/setup-hetzner-server.sh <your-server-ip>
+./scripts/deploy/setup-hetzner-server.sh <your-server-ip>
 ```
 
 ### Track B: Vercel Setup (CLI)
 
 ```bash
 # Terminal 2: Vercel project linking
-./Scripts/deploy/setup-vercel-projects.sh
+./scripts/deploy/setup-vercel-projects.sh
 ```
 
 ### Track C: Manual Setup (Browser)
@@ -136,7 +136,7 @@ Run the automated setup script:
 export SERVER_IP="your.server.ip.address"
 
 # Run the bootstrap script
-./Scripts/deploy/setup-hetzner-server.sh $SERVER_IP
+./scripts/deploy/setup-hetzner-server.sh $SERVER_IP
 ```
 
 The script will:
@@ -282,7 +282,7 @@ docker compose ps
 Run the Vercel setup script:
 
 ```bash
-./Scripts/deploy/setup-vercel-projects.sh
+./scripts/deploy/setup-vercel-projects.sh
 ```
 
 Or manually:
@@ -387,7 +387,7 @@ SSL is automatically provided by Vercel on `*.vercel.app` domains.
 
 ```bash
 # Full verification
-./Scripts/deploy/post-deploy-checks.sh https://your-backend-url https://your-frontend.vercel.app
+./scripts/deploy/post-deploy-checks.sh https://your-backend-url https://your-frontend.vercel.app
 ```
 
 ### Manual Verification Checklist
@@ -504,7 +504,7 @@ npm run build
 
 ```bash
 # Check certificate status
-./Scripts/deploy/post-deploy-checks.sh https://your-backend-url
+./scripts/deploy/post-deploy-checks.sh https://your-backend-url
 
 # For Let's Encrypt issues, check Traefik logs
 docker compose logs traefik

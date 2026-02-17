@@ -296,7 +296,7 @@ show_next_steps() {
     echo "   See docs/deployment/vercel-hetzner-deploy.md"
     echo ""
     echo "5. Run post-deploy checks:"
-    echo "   ./Scripts/deploy/post-deploy-checks.sh https://your-domain.com"
+    echo "   ./scripts/deploy/post-deploy-checks.sh https://your-domain.com"
     echo ""
     echo "=========================================="
 }
