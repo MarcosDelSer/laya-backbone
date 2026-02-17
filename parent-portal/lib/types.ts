@@ -592,153 +592,196 @@ export interface ApiErrorResponse {
 }
 
 // ============================================================================
-// RBAC Types
+// Medical Types
 // ============================================================================
 
 /**
- * Predefined role types for the RBAC system.
+ * Type of allergen.
  */
-export type RoleType = 'director' | 'teacher' | 'assistant' | 'staff' | 'parent';
+export type AllergenType =
+  | 'food'
+  | 'medication'
+  | 'environmental'
+  | 'insect'
+  | 'contact'
+  | 'other';
 
 /**
- * Types of audit log actions.
+ * Allergy severity levels.
  */
-export type AuditAction =
-  | 'role_assigned'
-  | 'role_revoked'
-  | 'permission_granted'
-  | 'permission_revoked'
-  | 'access_granted'
-  | 'access_denied'
-  | 'login'
-  | 'logout'
-  | 'data_modified'
-  | 'data_deleted';
+export type AllergySeverity = 'mild' | 'moderate' | 'severe' | 'life_threatening';
 
 /**
- * Types of permission actions.
+ * Type of medication.
  */
-export type PermissionAction = 'read' | 'write' | 'delete' | 'manage';
+export type MedicationType =
+  | 'prescription'
+  | 'over_the_counter'
+  | 'supplement'
+  | 'other';
 
 /**
- * Permission assigned to a role.
+ * Route of medication administration.
  */
-export interface Permission {
+export type MedicationRoute =
+  | 'oral'
+  | 'topical'
+  | 'injection'
+  | 'inhalation'
+  | 'drops'
+  | 'other';
+
+/**
+ * Who administers the medication.
+ */
+export type AdministeredBy = 'staff' | 'nurse' | 'self';
+
+/**
+ * Type of accommodation plan.
+ */
+export type AccommodationPlanType =
+  | 'health_plan'
+  | 'emergency_plan'
+  | 'dietary_plan'
+  | 'behavioral_plan'
+  | 'other';
+
+/**
+ * Status of an accommodation plan.
+ */
+export type AccommodationPlanStatus = 'draft' | 'pending_approval' | 'approved' | 'expired';
+
+/**
+ * Type of medical alert.
+ */
+export type AlertType =
+  | 'allergy'
+  | 'medication'
+  | 'condition'
+  | 'dietary'
+  | 'emergency'
+  | 'general';
+
+/**
+ * Severity level of medical alert.
+ */
+export type AlertLevel = 'info' | 'warning' | 'critical';
+
+/**
+ * Allergy information for a child.
+ */
+export interface AllergyInfo {
   id: string;
-  roleId: string;
-  resource: string;
-  action: string;
-  conditions?: Record<string, unknown>;
+  childId: string;
+  allergenName: string;
+  allergenType: AllergenType;
+  severity: AllergySeverity;
+  reaction?: string;
+  treatment?: string;
+  epiPenRequired: boolean;
+  epiPenLocation?: string;
+  diagnosedDate?: string;
+  diagnosedBy?: string;
+  notes?: string;
+  isVerified: boolean;
+  verifiedById?: string;
+  verifiedDate?: string;
   isActive: boolean;
-  createdAt?: string;
-}
-
-/**
- * Role with assigned permissions.
- */
-export interface Role {
-  id: string;
-  name: string;
-  displayName: string;
-  description?: string;
-  isSystemRole: boolean;
-  isActive: boolean;
-  permissions: Permission[];
   createdAt?: string;
   updatedAt?: string;
 }
 
 /**
- * User role assignment.
+ * Medication information for a child.
  */
-export interface UserRole {
+export interface MedicationInfo {
   id: string;
-  userId: string;
-  roleId: string;
-  organizationId?: string;
-  groupId?: string;
-  expiresAt?: string;
-  assignedBy?: string;
-  assignedAt: string;
+  childId: string;
+  medicationName: string;
+  medicationType: MedicationType;
+  dosage: string;
+  frequency: string;
+  route: MedicationRoute;
+  prescribedBy?: string;
+  prescriptionDate?: string;
+  expirationDate?: string;
+  purpose?: string;
+  sideEffects?: string;
+  storageLocation?: string;
+  administeredBy: AdministeredBy;
+  notes?: string;
+  parentConsent: boolean;
+  parentConsentDate?: string;
+  isVerified: boolean;
+  verifiedById?: string;
+  verifiedDate?: string;
   isActive: boolean;
-  role?: Role;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /**
- * Request payload for assigning a role to a user.
+ * Accommodation plan for a child with special needs.
  */
-export interface AssignRoleRequest {
-  userId: string;
-  roleId: string;
-  organizationId?: string;
-  groupId?: string;
-  expiresAt?: string;
-}
-
-/**
- * Request payload for revoking a role from a user.
- */
-export interface RevokeRoleRequest {
-  userId: string;
-  roleId: string;
-  organizationId?: string;
-  groupId?: string;
-}
-
-/**
- * Request payload for checking user permissions.
- */
-export interface PermissionCheckRequest {
-  userId: string;
-  resource: string;
-  action: string;
-  organizationId?: string;
-  groupId?: string;
-}
-
-/**
- * Response for permission check results.
- */
-export interface PermissionCheckResponse {
-  allowed: boolean;
-  userId: string;
-  resource: string;
-  action: string;
-  matchedRole?: string;
-  reason?: string;
-}
-
-/**
- * Response for getting all permissions for a user.
- */
-export interface UserPermissionsResponse {
-  userId: string;
-  roles: Role[];
-  permissions: Permission[];
-}
-
-/**
- * Audit log entry.
- */
-export interface AuditLog {
+export interface AccommodationPlan {
   id: string;
-  userId: string;
-  action: AuditAction;
-  resourceType: string;
-  resourceId?: string;
-  details?: Record<string, unknown>;
-  ipAddress?: string;
-  userAgent?: string;
-  createdAt: string;
+  childId: string;
+  schoolYearId?: string;
+  planType: AccommodationPlanType;
+  planName: string;
+  description: string;
+  accommodations: string;
+  emergencyProcedures?: string;
+  triggersSigns?: string;
+  staffNotifications?: string;
+  documentPath?: string;
+  effectiveDate: string;
+  expirationDate?: string;
+  reviewDate?: string;
+  notes?: string;
+  approvedById?: string;
+  approvedDate?: string;
+  status: AccommodationPlanStatus;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /**
- * Filter parameters for querying audit logs.
+ * Medical alert for staff awareness.
  */
-export interface AuditLogFilter {
-  userId?: string;
-  action?: AuditAction;
-  resourceType?: string;
-  startDate?: string;
-  endDate?: string;
+export interface MedicalAlert {
+  id: string;
+  childId: string;
+  alertType: AlertType;
+  alertLevel: AlertLevel;
+  title: string;
+  description: string;
+  actionRequired?: string;
+  displayOnDashboard: boolean;
+  displayOnAttendance: boolean;
+  displayOnReports: boolean;
+  notifyOnCheckIn: boolean;
+  relatedAllergyId?: string;
+  relatedMedicationId?: string;
+  relatedPlanId?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Summary of a child's medical information.
+ */
+export interface ChildMedicalSummary {
+  childId: string;
+  allergies: AllergyInfo[];
+  medications: MedicationInfo[];
+  accommodationPlans: AccommodationPlan[];
+  activeAlerts: MedicalAlert[];
+  hasSevereAllergies: boolean;
+  hasEpiPen: boolean;
+  hasStaffAdministeredMedications: boolean;
+  generatedAt: string;
 }

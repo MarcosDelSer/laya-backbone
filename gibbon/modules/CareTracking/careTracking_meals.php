@@ -24,8 +24,7 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\MealGateway;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
-use Gibbon\Module\AISync\AISyncService;
-use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Module\MedicalTracking\Domain\AllergyGateway;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -50,6 +49,75 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateways via DI container
     $mealGateway = $container->get(MealGateway::class);
     $attendanceGateway = $container->get(AttendanceGateway::class);
+    $allergyGateway = $container->get(AllergyGateway::class);
+
+    // Helper function to get allergy warning HTML for a child
+    $getAllergyWarningHTML = function ($gibbonPersonID) use ($allergyGateway) {
+        $allergies = $allergyGateway->selectFoodAllergiesByPerson($gibbonPersonID);
+        if ($allergies->rowCount() === 0) {
+            return '';
+        }
+
+        $allergyList = [];
+        $hasEpiPen = false;
+        $hasSevere = false;
+
+        foreach ($allergies as $allergy) {
+            $allergyList[] = htmlspecialchars($allergy['allergenName']);
+            if ($allergy['epiPenRequired'] === 'Y') {
+                $hasEpiPen = true;
+            }
+            if (in_array($allergy['severity'], ['Severe', 'Life-Threatening'])) {
+                $hasSevere = true;
+            }
+        }
+
+        $bgColor = $hasSevere ? 'bg-red-100 border-red-400' : 'bg-yellow-100 border-yellow-400';
+        $textColor = $hasSevere ? 'text-red-700' : 'text-yellow-700';
+        $icon = $hasSevere ? '&#9888;' : '&#9888;';
+
+        $html = '<div class="' . $bgColor . ' border rounded p-1 mt-1 text-xs ' . $textColor . '">';
+        $html .= '<span class="font-semibold">' . $icon . ' ' . __('Allergies') . ':</span> ';
+        $html .= implode(', ', $allergyList);
+        if ($hasEpiPen) {
+            $html .= ' <span class="bg-red-500 text-white px-1 rounded text-xs font-bold" title="' . __('EpiPen Required') . '">EpiPen</span>';
+        }
+        $html .= '</div>';
+
+        return $html;
+    };
+
+    // Helper function to get compact allergy badge for a child
+    $getAllergyBadgeHTML = function ($gibbonPersonID) use ($allergyGateway) {
+        $allergies = $allergyGateway->selectFoodAllergiesByPerson($gibbonPersonID);
+        if ($allergies->rowCount() === 0) {
+            return '';
+        }
+
+        $hasEpiPen = false;
+        $hasSevere = false;
+        $allergyNames = [];
+
+        foreach ($allergies as $allergy) {
+            $allergyNames[] = $allergy['allergenName'];
+            if ($allergy['epiPenRequired'] === 'Y') {
+                $hasEpiPen = true;
+            }
+            if (in_array($allergy['severity'], ['Severe', 'Life-Threatening'])) {
+                $hasSevere = true;
+            }
+        }
+
+        $bgColor = $hasSevere ? 'bg-red-500' : 'bg-yellow-500';
+        $title = __('Allergies') . ': ' . htmlspecialchars(implode(', ', $allergyNames));
+        if ($hasEpiPen) {
+            $title .= ' (' . __('EpiPen Required') . ')';
+        }
+
+        $html = '<span class="' . $bgColor . ' text-white text-xs px-1 rounded font-bold" title="' . $title . '">&#9888;</span>';
+
+        return $html;
+    };
 
     // Get AI Sync service for webhook notifications
     try {
@@ -257,6 +325,89 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Display formatted date
     echo '<p class="text-lg mb-4">' . __('Showing meals for') . ': <strong>' . Format::date($date) . '</strong></p>';
 
+    // Display allergy warnings for children currently checked in
+    $childrenWithAllergies = [];
+    $tempCheckedIn = $attendanceGateway->selectChildrenCurrentlyCheckedIn($gibbonSchoolYearID, $date);
+
+    foreach ($tempCheckedIn as $child) {
+        $allergies = $allergyGateway->selectFoodAllergiesByPerson($child['gibbonPersonID']);
+        if ($allergies->rowCount() > 0) {
+            $allergyData = [];
+            $hasEpiPen = false;
+            $hasSevere = false;
+
+            foreach ($allergies as $allergy) {
+                $allergyData[] = [
+                    'name' => $allergy['allergenName'],
+                    'severity' => $allergy['severity'],
+                    'epiPen' => $allergy['epiPenRequired'],
+                    'treatment' => $allergy['treatment'],
+                ];
+                if ($allergy['epiPenRequired'] === 'Y') {
+                    $hasEpiPen = true;
+                }
+                if (in_array($allergy['severity'], ['Severe', 'Life-Threatening'])) {
+                    $hasSevere = true;
+                }
+            }
+
+            $childrenWithAllergies[] = [
+                'gibbonPersonID' => $child['gibbonPersonID'],
+                'preferredName' => $child['preferredName'],
+                'surname' => $child['surname'],
+                'image_240' => $child['image_240'],
+                'allergies' => $allergyData,
+                'hasEpiPen' => $hasEpiPen,
+                'hasSevere' => $hasSevere,
+            ];
+        }
+    }
+
+    // Display allergy warning banner if there are children with allergies
+    if (!empty($childrenWithAllergies)) {
+        echo '<div class="bg-red-50 border border-red-300 rounded-lg p-4 mb-4">';
+        echo '<h3 class="text-lg font-semibold text-red-700 mb-3">&#9888; ' . __('Children with Food Allergies Present') . '</h3>';
+        echo '<p class="text-sm text-red-600 mb-3">' . __('The following children checked in today have food allergies. Please verify meal ingredients before serving.') . '</p>';
+        echo '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">';
+
+        foreach ($childrenWithAllergies as $child) {
+            $childName = Format::name('', $child['preferredName'], $child['surname'], 'Student', false, true);
+            $image = !empty($child['image_240']) ? $child['image_240'] : 'themes/Default/img/anonymous_240.jpg';
+            $cardBg = $child['hasSevere'] ? 'bg-red-100 border-red-400' : 'bg-yellow-50 border-yellow-300';
+            $borderStyle = $child['hasSevere'] ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-yellow-500';
+
+            echo '<div class="' . $cardBg . ' rounded p-3 ' . $borderStyle . '">';
+            echo '<div class="flex items-start">';
+            echo '<img src="' . $session->get('absoluteURL') . '/' . $image . '" class="w-12 h-12 rounded-full object-cover mr-3 flex-shrink-0" alt="">';
+            echo '<div class="flex-1 min-w-0">';
+            echo '<p class="font-semibold text-sm">' . htmlspecialchars($childName) . '</p>';
+
+            // List allergies
+            echo '<div class="mt-1">';
+            foreach ($child['allergies'] as $allergy) {
+                $severityColor = in_array($allergy['severity'], ['Severe', 'Life-Threatening']) ? 'text-red-700 font-bold' : 'text-orange-600';
+                echo '<span class="block text-xs ' . $severityColor . '">';
+                echo '&#8226; ' . htmlspecialchars($allergy['name']);
+                echo ' <span class="text-gray-500">(' . __($allergy['severity']) . ')</span>';
+                echo '</span>';
+            }
+            echo '</div>';
+
+            // EpiPen indicator
+            if ($child['hasEpiPen']) {
+                echo '<span class="inline-block mt-1 bg-red-600 text-white text-xs px-2 py-0.5 rounded font-bold">' . __('EpiPen Required') . '</span>';
+            }
+
+            echo '</div>';
+            echo '</div>';
+            echo '</div>';
+        }
+
+        echo '</div>';
+        echo '<p class="text-xs text-red-500 mt-3"><strong>' . __('Important') . ':</strong> ' . __('Always check meal ingredients and consult the medical tracking module for detailed allergy information and treatment protocols.') . '</p>';
+        echo '</div>';
+    }
+
     // Get summary statistics
     $summary = $mealGateway->getMealSummaryByDate($gibbonSchoolYearID, $date);
 
@@ -357,9 +508,20 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                 $mealBadges .= '</div>';
             }
 
-            echo '<div class="bg-white rounded-lg shadow p-3 text-center hover:shadow-lg transition-shadow">';
+            // Get allergy information for this child
+            $allergyWarning = $getAllergyWarningHTML($child['gibbonPersonID']);
+            $hasAllergy = !empty($allergyWarning);
+            $cardBorder = $hasAllergy ? ' border-2 border-red-400' : '';
+
+            echo '<div class="bg-white rounded-lg shadow p-3 text-center hover:shadow-lg transition-shadow' . $cardBorder . '">';
+            echo '<div class="relative">';
             echo '<img src="' . $session->get('absoluteURL') . '/' . $image . '" class="w-16 h-16 rounded-full mx-auto mb-2 object-cover" alt="' . htmlspecialchars($childName) . '">';
+            if ($hasAllergy) {
+                echo '<span class="absolute top-0 right-1/4 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold" title="' . __('Has Food Allergies') . '">&#9888;</span>';
+            }
+            echo '</div>';
             echo '<p class="text-sm font-medium truncate">' . htmlspecialchars($childName) . '</p>';
+            echo $allergyWarning;
             echo $mealBadges;
             echo '<button type="submit" name="gibbonPersonID" value="' . $child['gibbonPersonID'] . '" class="mt-2 bg-green-500 text-white text-xs px-3 py-1 rounded hover:bg-green-600">' . __('Log Meal') . '</button>';
             echo '</div>';
@@ -433,10 +595,23 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
             $childName = Format::name('', $child['preferredName'], $child['surname'], 'Student', false, true);
             $image = !empty($child['image_240']) ? $child['image_240'] : 'themes/Default/img/anonymous_240.jpg';
 
-            echo '<label class="bg-white rounded-lg shadow p-3 text-center hover:shadow-lg transition-shadow cursor-pointer">';
+            // Get allergy badge for this child
+            $allergyBadge = $getAllergyBadgeHTML($child['gibbonPersonID']);
+            $hasAllergy = !empty($allergyBadge);
+            $cardBorder = $hasAllergy ? ' border-2 border-red-400' : '';
+
+            echo '<label class="bg-white rounded-lg shadow p-3 text-center hover:shadow-lg transition-shadow cursor-pointer' . $cardBorder . '">';
             echo '<input type="checkbox" name="childIDs[]" value="' . $child['gibbonPersonID'] . '" class="childCheckbox mb-2">';
+            echo '<div class="relative inline-block">';
             echo '<img src="' . $session->get('absoluteURL') . '/' . $image . '" class="w-12 h-12 rounded-full mx-auto mb-2 object-cover" alt="' . htmlspecialchars($childName) . '">';
+            if ($hasAllergy) {
+                echo '<span class="absolute -top-1 -right-1">' . $allergyBadge . '</span>';
+            }
+            echo '</div>';
             echo '<p class="text-sm font-medium truncate">' . htmlspecialchars($childName) . '</p>';
+            if ($hasAllergy) {
+                echo '<span class="text-xs text-red-600">' . __('Has Allergies') . '</span>';
+            }
             echo '</label>';
         }
         echo '</div>';

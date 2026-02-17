@@ -24,6 +24,7 @@ namespace Gibbon\Module\CareTracking\Domain;
 use Gibbon\Domain\Traits\TableAware;
 use Gibbon\Domain\QueryCriteria;
 use Gibbon\Domain\QueryableGateway;
+use Gibbon\Module\MedicalTracking\Domain\AllergyGateway;
 
 /**
  * Care Tracking Meal Gateway
@@ -41,6 +42,33 @@ class MealGateway extends QueryableGateway
     private static $primaryKey = 'gibbonCareMealID';
 
     private static $searchableColumns = ['gibbonPerson.preferredName', 'gibbonPerson.surname', 'gibbonCareMeal.notes'];
+
+    /**
+     * @var AllergyGateway|null
+     */
+    protected $allergyGateway;
+
+    /**
+     * Set the AllergyGateway for allergy checking integration.
+     *
+     * @param AllergyGateway $allergyGateway
+     * @return self
+     */
+    public function setAllergyGateway(AllergyGateway $allergyGateway)
+    {
+        $this->allergyGateway = $allergyGateway;
+        return $this;
+    }
+
+    /**
+     * Get the AllergyGateway instance.
+     *
+     * @return AllergyGateway|null
+     */
+    public function getAllergyGateway()
+    {
+        return $this->allergyGateway;
+    }
 
     /**
      * Query meal records with criteria support.
@@ -284,6 +312,102 @@ class MealGateway extends QueryableGateway
     }
 
     /**
+     * Get food allergies for a child (for meal logging context).
+     *
+     * @param int $gibbonPersonID
+     * @return array Array of allergy records or empty array
+     */
+    public function getChildFoodAllergies($gibbonPersonID)
+    {
+        if ($this->allergyGateway === null) {
+            return [];
+        }
+
+        $result = $this->allergyGateway->selectFoodAllergiesByPerson($gibbonPersonID);
+        return $result->isNotEmpty() ? $result->fetchAll() : [];
+    }
+
+    /**
+     * Check if a child has any food allergies.
+     *
+     * @param int $gibbonPersonID
+     * @return bool
+     */
+    public function hasChildFoodAllergies($gibbonPersonID)
+    {
+        $allergies = $this->getChildFoodAllergies($gibbonPersonID);
+        return !empty($allergies);
+    }
+
+    /**
+     * Check if a child has severe or life-threatening allergies.
+     *
+     * @param int $gibbonPersonID
+     * @return array Array of severe allergies or empty array
+     */
+    public function getChildSevereAllergies($gibbonPersonID)
+    {
+        $allergies = $this->getChildFoodAllergies($gibbonPersonID);
+        return array_filter($allergies, function ($allergy) {
+            return in_array($allergy['severity'], ['Severe', 'Life-Threatening']);
+        });
+    }
+
+    /**
+     * Check if a child requires an EpiPen for any food allergy.
+     *
+     * @param int $gibbonPersonID
+     * @return bool
+     */
+    public function childRequiresEpiPen($gibbonPersonID)
+    {
+        $allergies = $this->getChildFoodAllergies($gibbonPersonID);
+        foreach ($allergies as $allergy) {
+            if ($allergy['epiPenRequired'] === 'Y') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get allergy alert summary for a child (for display during meal logging).
+     *
+     * @param int $gibbonPersonID
+     * @return array|null Allergy summary or null if no allergies
+     */
+    public function getAllergyAlertSummary($gibbonPersonID)
+    {
+        $allergies = $this->getChildFoodAllergies($gibbonPersonID);
+        if (empty($allergies)) {
+            return null;
+        }
+
+        $allergenNames = [];
+        $severeCount = 0;
+        $epiPenRequired = false;
+
+        foreach ($allergies as $allergy) {
+            $allergenNames[] = $allergy['allergenName'];
+            if (in_array($allergy['severity'], ['Severe', 'Life-Threatening'])) {
+                $severeCount++;
+            }
+            if ($allergy['epiPenRequired'] === 'Y') {
+                $epiPenRequired = true;
+            }
+        }
+
+        return [
+            'totalAllergies' => count($allergies),
+            'allergenNames' => $allergenNames,
+            'allergenList' => implode(', ', $allergenNames),
+            'hasSevereAllergies' => $severeCount > 0,
+            'severeCount' => $severeCount,
+            'epiPenRequired' => $epiPenRequired,
+        ];
+    }
+
+    /**
      * Log a meal for a child.
      *
      * @param int $gibbonPersonID
@@ -300,6 +424,19 @@ class MealGateway extends QueryableGateway
     {
         // Check if this meal type already exists for this child on this date
         $existing = $this->getMealByPersonDateAndType($gibbonPersonID, $date, $mealType);
+
+        // Check child allergies if AllergyGateway is available
+        $hasAllergies = $this->hasChildFoodAllergies($gibbonPersonID);
+
+        // If allergyAlert is not explicitly set but child has allergies, auto-flag for review
+        if (!$allergyAlert && $hasAllergies) {
+            // Get allergy summary for potential notes enhancement
+            $allergySummary = $this->getAllergyAlertSummary($gibbonPersonID);
+            if ($allergySummary && $allergySummary['hasSevereAllergies']) {
+                // Auto-set allergy alert for children with severe allergies
+                $allergyAlert = true;
+            }
+        }
 
         if ($existing) {
             // Update existing record
@@ -355,301 +492,93 @@ class MealGateway extends QueryableGateway
     }
 
     /**
-     * Log a meal for a child with a menu item reference.
+     * Select children who have not had a meal logged, with allergy information.
      *
-     * @param int $gibbonPersonID
      * @param int $gibbonSchoolYearID
      * @param string $date
      * @param string $mealType
-     * @param int|null $gibbonCareMenuItemID
-     * @param string $quantity
-     * @param int $recordedByID
-     * @param bool $allergyAlert
-     * @param string|null $notes
-     * @return int|false
-     */
-    public function logMealWithMenuItem($gibbonPersonID, $gibbonSchoolYearID, $date, $mealType, $gibbonCareMenuItemID, $quantity, $recordedByID, $allergyAlert = false, $notes = null)
-    {
-        // Check if this meal type already exists for this child on this date
-        $existing = $this->getMealByPersonDateAndType($gibbonPersonID, $date, $mealType);
-
-        if ($existing) {
-            // Update existing record
-            return $this->update($existing['gibbonCareMealID'], [
-                'gibbonCareMenuItemID' => $gibbonCareMenuItemID,
-                'quantity' => $quantity,
-                'allergyAlert' => $allergyAlert ? 'Y' : 'N',
-                'notes' => $notes,
-                'recordedByID' => $recordedByID,
-            ]) ? $existing['gibbonCareMealID'] : false;
-        }
-
-        // Create new meal record with menu item reference
-        return $this->insert([
-            'gibbonPersonID' => $gibbonPersonID,
-            'gibbonSchoolYearID' => $gibbonSchoolYearID,
-            'date' => $date,
-            'mealType' => $mealType,
-            'gibbonCareMenuItemID' => $gibbonCareMenuItemID,
-            'quantity' => $quantity,
-            'allergyAlert' => $allergyAlert ? 'Y' : 'N',
-            'notes' => $notes,
-            'recordedByID' => $recordedByID,
-        ]);
-    }
-
-    /**
-     * Get nutritional summary for a child over a date range.
-     *
-     * @param int $gibbonPersonID
-     * @param string $dateStart
-     * @param string $dateEnd
-     * @return array
-     */
-    public function selectNutritionalSummaryByChild($gibbonPersonID, $dateStart, $dateEnd)
-    {
-        $data = [
-            'gibbonPersonID' => $gibbonPersonID,
-            'dateStart' => $dateStart,
-            'dateEnd' => $dateEnd,
-        ];
-        $sql = "SELECT
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.calories) as totalCalories,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.protein) as totalProtein,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.carbohydrates) as totalCarbohydrates,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.fat) as totalFat,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.fiber) as totalFiber,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.sugar) as totalSugar,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.sodium) as totalSodium,
-                    COUNT(*) as mealCount,
-                    COUNT(DISTINCT m.date) as daysWithMeals
-                FROM gibbonCareMeal m
-                LEFT JOIN gibbonCareNutritionalInfo ni ON m.gibbonCareMenuItemID=ni.gibbonCareMenuItemID
-                WHERE m.gibbonPersonID=:gibbonPersonID
-                AND m.date >= :dateStart
-                AND m.date <= :dateEnd
-                AND m.gibbonCareMenuItemID IS NOT NULL";
-
-        $result = $this->db()->selectOne($sql, $data);
-
-        return $result ?: [
-            'totalCalories' => 0,
-            'totalProtein' => 0,
-            'totalCarbohydrates' => 0,
-            'totalFat' => 0,
-            'totalFiber' => 0,
-            'totalSugar' => 0,
-            'totalSodium' => 0,
-            'mealCount' => 0,
-            'daysWithMeals' => 0,
-        ];
-    }
-
-    /**
-     * Get daily nutritional breakdown for a date range.
-     *
-     * @param int $gibbonPersonID
-     * @param string $dateStart
-     * @param string $dateEnd
-     * @return array
-     */
-    public function selectNutritionalSummaryByDateRange($gibbonPersonID, $dateStart, $dateEnd)
-    {
-        $data = [
-            'gibbonPersonID' => $gibbonPersonID,
-            'dateStart' => $dateStart,
-            'dateEnd' => $dateEnd,
-        ];
-        $sql = "SELECT
-                    m.date,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.calories) as dailyCalories,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.protein) as dailyProtein,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.carbohydrates) as dailyCarbohydrates,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.fat) as dailyFat,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.fiber) as dailyFiber,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.sugar) as dailySugar,
-                    SUM(CASE WHEN m.quantity='All' THEN 1.0
-                             WHEN m.quantity='Most' THEN 0.75
-                             WHEN m.quantity='Some' THEN 0.5
-                             WHEN m.quantity='Little' THEN 0.25
-                             ELSE 0 END * ni.sodium) as dailySodium,
-                    COUNT(*) as mealCount
-                FROM gibbonCareMeal m
-                LEFT JOIN gibbonCareNutritionalInfo ni ON m.gibbonCareMenuItemID=ni.gibbonCareMenuItemID
-                WHERE m.gibbonPersonID=:gibbonPersonID
-                AND m.date >= :dateStart
-                AND m.date <= :dateEnd
-                AND m.gibbonCareMenuItemID IS NOT NULL
-                GROUP BY m.date
-                ORDER BY m.date ASC";
-
-        return $this->db()->select($sql, $data)->fetchAll();
-    }
-
-    /**
-     * Check if a menu item contains allergens that match a child's allergies.
-     *
-     * @param int $gibbonPersonID
-     * @param int $gibbonCareMenuItemID
-     * @return array Array of conflicting allergens with severity, or empty array if no conflicts
-     */
-    public function checkAllergenAlertForChild($gibbonPersonID, $gibbonCareMenuItemID)
-    {
-        // Get child's allergies from dietary profile
-        $childData = ['gibbonPersonID' => $gibbonPersonID];
-        $childSql = "SELECT allergies FROM gibbonCareChildDietary WHERE gibbonPersonID=:gibbonPersonID";
-
-        $childProfile = $this->db()->selectOne($childSql, $childData);
-
-        if (!$childProfile || empty($childProfile['allergies'])) {
-            return [];
-        }
-
-        $childAllergies = json_decode($childProfile['allergies'], true);
-        if (!is_array($childAllergies) || empty($childAllergies)) {
-            return [];
-        }
-
-        // Get menu item's allergens
-        $menuData = ['gibbonCareMenuItemID' => $gibbonCareMenuItemID];
-        $menuSql = "SELECT allergen, severity FROM gibbonCareMenuItemAllergen WHERE gibbonCareMenuItemID=:gibbonCareMenuItemID";
-
-        $menuAllergens = $this->db()->select($menuSql, $menuData)->fetchAll();
-
-        if (empty($menuAllergens)) {
-            return [];
-        }
-
-        // Extract child allergen names for comparison
-        $childAllergenNames = [];
-        $childAllergenSeverity = [];
-        foreach ($childAllergies as $allergy) {
-            $allergenName = is_array($allergy) && isset($allergy['allergen']) ? $allergy['allergen'] : (is_string($allergy) ? $allergy : '');
-            if (!empty($allergenName)) {
-                $childAllergenNames[] = $allergenName;
-                $childAllergenSeverity[$allergenName] = is_array($allergy) && isset($allergy['severity']) ? $allergy['severity'] : 'Moderate';
-            }
-        }
-
-        // Find conflicts
-        $conflicts = [];
-        foreach ($menuAllergens as $menuAllergen) {
-            if (in_array($menuAllergen['allergen'], $childAllergenNames)) {
-                $conflicts[] = [
-                    'allergen' => $menuAllergen['allergen'],
-                    'menuItemSeverity' => $menuAllergen['severity'],
-                    'childSeverity' => $childAllergenSeverity[$menuAllergen['allergen']] ?? 'Moderate',
-                ];
-            }
-        }
-
-        return $conflicts;
-    }
-
-    /**
-     * Get meals for a child with menu item and nutritional details.
-     *
-     * @param int $gibbonPersonID
-     * @param string $dateStart
-     * @param string $dateEnd
      * @return \Gibbon\Database\Result
      */
-    public function selectMealsWithNutritionalInfo($gibbonPersonID, $dateStart, $dateEnd)
+    public function selectChildrenWithoutMealWithAllergyInfo($gibbonSchoolYearID, $date, $mealType)
     {
-        $data = [
-            'gibbonPersonID' => $gibbonPersonID,
-            'dateStart' => $dateStart,
-            'dateEnd' => $dateEnd,
-        ];
-        $sql = "SELECT
-                    m.gibbonCareMealID,
-                    m.date,
-                    m.mealType,
-                    m.quantity,
-                    m.allergyAlert,
-                    m.notes,
-                    m.gibbonCareMenuItemID,
-                    mi.name as menuItemName,
-                    mi.category as menuItemCategory,
-                    ni.servingSize,
-                    ni.calories,
-                    ni.protein,
-                    ni.carbohydrates,
-                    ni.fat,
-                    ni.fiber,
-                    ni.sugar,
-                    ni.sodium
-                FROM gibbonCareMeal m
-                LEFT JOIN gibbonCareMenuItem mi ON m.gibbonCareMenuItemID=mi.gibbonCareMenuItemID
-                LEFT JOIN gibbonCareNutritionalInfo ni ON mi.gibbonCareMenuItemID=ni.gibbonCareMenuItemID
-                WHERE m.gibbonPersonID=:gibbonPersonID
-                AND m.date >= :dateStart
-                AND m.date <= :dateEnd
-                ORDER BY m.date ASC, FIELD(m.mealType, 'Breakfast', 'Morning Snack', 'Lunch', 'Afternoon Snack', 'Dinner')";
+        $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID, 'date' => $date, 'mealType' => $mealType];
+        $sql = "SELECT gibbonPerson.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname, gibbonPerson.image_240,
+                    (SELECT COUNT(*) FROM gibbonMedicalAllergy
+                     WHERE gibbonMedicalAllergy.gibbonPersonID=gibbonPerson.gibbonPersonID
+                     AND gibbonMedicalAllergy.allergenType='Food'
+                     AND gibbonMedicalAllergy.active='Y') as allergyCount,
+                    (SELECT GROUP_CONCAT(allergenName SEPARATOR ', ')
+                     FROM gibbonMedicalAllergy
+                     WHERE gibbonMedicalAllergy.gibbonPersonID=gibbonPerson.gibbonPersonID
+                     AND gibbonMedicalAllergy.allergenType='Food'
+                     AND gibbonMedicalAllergy.active='Y') as allergenList,
+                    (SELECT MAX(CASE WHEN severity IN ('Severe', 'Life-Threatening') THEN 1 ELSE 0 END)
+                     FROM gibbonMedicalAllergy
+                     WHERE gibbonMedicalAllergy.gibbonPersonID=gibbonPerson.gibbonPersonID
+                     AND gibbonMedicalAllergy.allergenType='Food'
+                     AND gibbonMedicalAllergy.active='Y') as hasSevereAllergy,
+                    (SELECT MAX(CASE WHEN epiPenRequired='Y' THEN 1 ELSE 0 END)
+                     FROM gibbonMedicalAllergy
+                     WHERE gibbonMedicalAllergy.gibbonPersonID=gibbonPerson.gibbonPersonID
+                     AND gibbonMedicalAllergy.allergenType='Food'
+                     AND gibbonMedicalAllergy.active='Y') as requiresEpiPen
+                FROM gibbonStudentEnrolment
+                INNER JOIN gibbonPerson ON gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID
+                INNER JOIN gibbonCareAttendance ON gibbonPerson.gibbonPersonID=gibbonCareAttendance.gibbonPersonID
+                    AND gibbonCareAttendance.date=:date
+                    AND gibbonCareAttendance.checkInTime IS NOT NULL
+                WHERE gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
+                AND gibbonPerson.status='Full'
+                AND NOT EXISTS (
+                    SELECT 1 FROM gibbonCareMeal
+                    WHERE gibbonCareMeal.gibbonPersonID=gibbonPerson.gibbonPersonID
+                    AND gibbonCareMeal.date=:date
+                    AND gibbonCareMeal.mealType=:mealType
+                )
+                ORDER BY gibbonPerson.surname, gibbonPerson.preferredName";
 
         return $this->db()->select($sql, $data);
     }
 
     /**
-     * Query meals with menu item details for a school year.
+     * Get all children with food allergies who are logged in for a date.
+     *
+     * @param int $gibbonSchoolYearID
+     * @param string $date
+     * @return \Gibbon\Database\Result
+     */
+    public function selectChildrenWithAllergiesForDate($gibbonSchoolYearID, $date)
+    {
+        $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID, 'date' => $date];
+        $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname, gibbonPerson.image_240,
+                    GROUP_CONCAT(gibbonMedicalAllergy.allergenName ORDER BY gibbonMedicalAllergy.severity DESC SEPARATOR ', ') as allergenList,
+                    MAX(CASE WHEN gibbonMedicalAllergy.severity IN ('Severe', 'Life-Threatening') THEN 1 ELSE 0 END) as hasSevereAllergy,
+                    MAX(CASE WHEN gibbonMedicalAllergy.epiPenRequired='Y' THEN 1 ELSE 0 END) as requiresEpiPen
+                FROM gibbonStudentEnrolment
+                INNER JOIN gibbonPerson ON gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID
+                INNER JOIN gibbonCareAttendance ON gibbonPerson.gibbonPersonID=gibbonCareAttendance.gibbonPersonID
+                    AND gibbonCareAttendance.date=:date
+                    AND gibbonCareAttendance.checkInTime IS NOT NULL
+                INNER JOIN gibbonMedicalAllergy ON gibbonPerson.gibbonPersonID=gibbonMedicalAllergy.gibbonPersonID
+                    AND gibbonMedicalAllergy.allergenType='Food'
+                    AND gibbonMedicalAllergy.active='Y'
+                WHERE gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
+                AND gibbonPerson.status='Full'
+                GROUP BY gibbonPerson.gibbonPersonID
+                ORDER BY hasSevereAllergy DESC, requiresEpiPen DESC, gibbonPerson.surname, gibbonPerson.preferredName";
+
+        return $this->db()->select($sql, $data);
+    }
+
+    /**
+     * Query meals for a date with allergy information included.
      *
      * @param QueryCriteria $criteria
      * @param int $gibbonSchoolYearID
+     * @param string $date
      * @return DataSet
      */
-    public function queryMealsWithMenuItems(QueryCriteria $criteria, $gibbonSchoolYearID)
+    public function queryMealsByDateWithAllergies(QueryCriteria $criteria, $gibbonSchoolYearID, $date)
     {
         $query = $this
             ->newQuery()
@@ -659,7 +588,6 @@ class MealGateway extends QueryableGateway
                 'gibbonCareMeal.gibbonPersonID',
                 'gibbonCareMeal.date',
                 'gibbonCareMeal.mealType',
-                'gibbonCareMeal.gibbonCareMenuItemID',
                 'gibbonCareMeal.quantity',
                 'gibbonCareMeal.allergyAlert',
                 'gibbonCareMeal.notes',
@@ -667,216 +595,23 @@ class MealGateway extends QueryableGateway
                 'gibbonPerson.preferredName',
                 'gibbonPerson.surname',
                 'gibbonPerson.image_240',
-                'recordedBy.preferredName as recordedByName',
-                'recordedBy.surname as recordedBySurname',
-                'gibbonCareMenuItem.name as menuItemName',
-                'gibbonCareMenuItem.category as menuItemCategory',
+                'gibbonPerson.dob',
+                "(SELECT COUNT(*) FROM gibbonMedicalAllergy
+                  WHERE gibbonMedicalAllergy.gibbonPersonID=gibbonCareMeal.gibbonPersonID
+                  AND gibbonMedicalAllergy.allergenType='Food'
+                  AND gibbonMedicalAllergy.active='Y') as allergyCount",
+                "(SELECT GROUP_CONCAT(allergenName SEPARATOR ', ')
+                  FROM gibbonMedicalAllergy
+                  WHERE gibbonMedicalAllergy.gibbonPersonID=gibbonCareMeal.gibbonPersonID
+                  AND gibbonMedicalAllergy.allergenType='Food'
+                  AND gibbonMedicalAllergy.active='Y') as allergenList",
             ])
             ->innerJoin('gibbonPerson', 'gibbonCareMeal.gibbonPersonID=gibbonPerson.gibbonPersonID')
-            ->leftJoin('gibbonPerson as recordedBy', 'gibbonCareMeal.recordedByID=recordedBy.gibbonPersonID')
-            ->leftJoin('gibbonCareMenuItem', 'gibbonCareMeal.gibbonCareMenuItemID=gibbonCareMenuItem.gibbonCareMenuItemID')
             ->where('gibbonCareMeal.gibbonSchoolYearID=:gibbonSchoolYearID')
-            ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID);
-
-        $criteria->addFilterRules([
-            'date' => function ($query, $date) {
-                return $query
-                    ->where('gibbonCareMeal.date=:date')
-                    ->bindValue('date', $date);
-            },
-            'child' => function ($query, $gibbonPersonID) {
-                return $query
-                    ->where('gibbonCareMeal.gibbonPersonID=:gibbonPersonID')
-                    ->bindValue('gibbonPersonID', $gibbonPersonID);
-            },
-            'mealType' => function ($query, $mealType) {
-                return $query
-                    ->where('gibbonCareMeal.mealType=:mealType')
-                    ->bindValue('mealType', $mealType);
-            },
-            'menuItem' => function ($query, $gibbonCareMenuItemID) {
-                return $query
-                    ->where('gibbonCareMeal.gibbonCareMenuItemID=:gibbonCareMenuItemID')
-                    ->bindValue('gibbonCareMenuItemID', $gibbonCareMenuItemID);
-            },
-            'allergyAlert' => function ($query, $value) {
-                return $query
-                    ->where('gibbonCareMeal.allergyAlert=:allergyAlert')
-                    ->bindValue('allergyAlert', $value);
-            },
-        ]);
+            ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID)
+            ->where('gibbonCareMeal.date=:date')
+            ->bindValue('date', $date);
 
         return $this->runQuery($query, $criteria);
-    }
-
-    /**
-     * Get allergen exposure log for a child over a date range.
-     *
-     * @param int $gibbonPersonID
-     * @param string $dateStart
-     * @param string $dateEnd
-     * @return array
-     */
-    public function selectAllergenExposureLog($gibbonPersonID, $dateStart, $dateEnd)
-    {
-        $data = [
-            'gibbonPersonID' => $gibbonPersonID,
-            'dateStart' => $dateStart,
-            'dateEnd' => $dateEnd,
-        ];
-        $sql = "SELECT
-                    m.gibbonCareMealID,
-                    m.date,
-                    m.mealType,
-                    m.quantity,
-                    mi.name as menuItemName,
-                    mia.allergen,
-                    mia.severity
-                FROM gibbonCareMeal m
-                INNER JOIN gibbonCareMenuItem mi ON m.gibbonCareMenuItemID=mi.gibbonCareMenuItemID
-                INNER JOIN gibbonCareMenuItemAllergen mia ON mi.gibbonCareMenuItemID=mia.gibbonCareMenuItemID
-                WHERE m.gibbonPersonID=:gibbonPersonID
-                AND m.date >= :dateStart
-                AND m.date <= :dateEnd
-                AND m.allergyAlert='Y'
-                ORDER BY m.date ASC, FIELD(m.mealType, 'Breakfast', 'Morning Snack', 'Lunch', 'Afternoon Snack', 'Dinner')";
-
-        return $this->db()->select($sql, $data)->fetchAll();
-    }
-
-    /**
-     * Get all children with allergies to a specific menu item.
-     *
-     * This method is used for allergen auto-flagging during meal logging.
-     *
-     * @param int $gibbonCareMenuItemID The menu item to check
-     * @param int|null $gibbonSchoolYearID Optional school year filter
-     * @return array Array of children with their conflicting allergens
-     */
-    public function getChildrenWithAllergyToItem($gibbonCareMenuItemID, $gibbonSchoolYearID = null)
-    {
-        // Get menu item's allergens
-        $data = ['gibbonCareMenuItemID' => $gibbonCareMenuItemID];
-        $sql = "SELECT allergen, severity
-                FROM gibbonCareMenuItemAllergen
-                WHERE gibbonCareMenuItemID=:gibbonCareMenuItemID";
-
-        $menuAllergens = $this->db()->select($sql, $data)->fetchAll();
-
-        if (empty($menuAllergens)) {
-            return [];
-        }
-
-        // Build a list of allergen names and lookup
-        $allergenNames = array_column($menuAllergens, 'allergen');
-        $menuAllergenLookup = [];
-        foreach ($menuAllergens as $ma) {
-            $menuAllergenLookup[$ma['allergen']] = $ma['severity'];
-        }
-
-        // Find all children with matching allergies
-        $childrenData = ['status' => 'Full'];
-        $childSql = "SELECT
-                    cd.gibbonCareChildDietaryID,
-                    cd.gibbonPersonID,
-                    cd.allergies,
-                    p.preferredName,
-                    p.surname,
-                    p.image_240
-                FROM gibbonCareChildDietary cd
-                INNER JOIN gibbonPerson p ON cd.gibbonPersonID=p.gibbonPersonID
-                WHERE p.status=:status
-                AND cd.allergies IS NOT NULL
-                AND cd.allergies != ''";
-
-        if ($gibbonSchoolYearID !== null) {
-            $childrenData['gibbonSchoolYearID'] = $gibbonSchoolYearID;
-            $childSql .= " AND EXISTS (
-                SELECT 1 FROM gibbonStudentEnrolment se
-                WHERE se.gibbonPersonID=p.gibbonPersonID
-                AND se.gibbonSchoolYearID=:gibbonSchoolYearID
-            )";
-        }
-
-        $childSql .= " ORDER BY p.surname, p.preferredName";
-
-        $children = $this->db()->select($childSql, $childrenData)->fetchAll();
-
-        $result = [];
-        foreach ($children as $child) {
-            $childAllergies = json_decode($child['allergies'], true);
-            if (!is_array($childAllergies)) {
-                continue;
-            }
-
-            $conflicts = [];
-            foreach ($childAllergies as $childAllergen) {
-                $allergenName = is_array($childAllergen) && isset($childAllergen['allergen']) ? $childAllergen['allergen'] : (is_string($childAllergen) ? $childAllergen : '');
-                $childSeverity = is_array($childAllergen) && isset($childAllergen['severity']) ? $childAllergen['severity'] : 'Moderate';
-
-                if (in_array($allergenName, $allergenNames)) {
-                    $conflicts[] = [
-                        'allergen' => $allergenName,
-                        'menuItemSeverity' => $menuAllergenLookup[$allergenName] ?? 'Moderate',
-                        'childSeverity' => $childSeverity,
-                    ];
-                }
-            }
-
-            if (!empty($conflicts)) {
-                $result[$child['gibbonPersonID']] = [
-                    'gibbonPersonID' => $child['gibbonPersonID'],
-                    'preferredName' => $child['preferredName'],
-                    'surname' => $child['surname'],
-                    'image_240' => $child['image_240'],
-                    'conflicts' => $conflicts,
-                ];
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * Get meal consumption summary by menu item for reporting.
-     *
-     * @param int $gibbonSchoolYearID
-     * @param string $dateStart
-     * @param string $dateEnd
-     * @return array
-     */
-    public function selectMenuItemConsumptionSummary($gibbonSchoolYearID, $dateStart, $dateEnd)
-    {
-        $data = [
-            'gibbonSchoolYearID' => $gibbonSchoolYearID,
-            'dateStart' => $dateStart,
-            'dateEnd' => $dateEnd,
-        ];
-        $sql = "SELECT
-                    mi.gibbonCareMenuItemID,
-                    mi.name as menuItemName,
-                    mi.category,
-                    COUNT(*) as totalServings,
-                    SUM(CASE WHEN m.quantity='All' THEN 1 ELSE 0 END) as ateAllCount,
-                    SUM(CASE WHEN m.quantity='Most' THEN 1 ELSE 0 END) as ateMostCount,
-                    SUM(CASE WHEN m.quantity='Some' THEN 1 ELSE 0 END) as ateSomeCount,
-                    SUM(CASE WHEN m.quantity='Little' THEN 1 ELSE 0 END) as ateLittleCount,
-                    SUM(CASE WHEN m.quantity='None' THEN 1 ELSE 0 END) as ateNoneCount,
-                    SUM(CASE WHEN m.allergyAlert='Y' THEN 1 ELSE 0 END) as allergyAlertCount,
-                    AVG(CASE WHEN m.quantity='All' THEN 100
-                             WHEN m.quantity='Most' THEN 75
-                             WHEN m.quantity='Some' THEN 50
-                             WHEN m.quantity='Little' THEN 25
-                             ELSE 0 END) as avgConsumptionPercent
-                FROM gibbonCareMeal m
-                INNER JOIN gibbonCareMenuItem mi ON m.gibbonCareMenuItemID=mi.gibbonCareMenuItemID
-                WHERE m.gibbonSchoolYearID=:gibbonSchoolYearID
-                AND m.date >= :dateStart
-                AND m.date <= :dateEnd
-                AND m.gibbonCareMenuItemID IS NOT NULL
-                GROUP BY mi.gibbonCareMenuItemID, mi.name, mi.category
-                ORDER BY mi.category, mi.name";
-
-        return $this->db()->select($sql, $data)->fetchAll();
     }
 }

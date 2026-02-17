@@ -38,12 +38,20 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
-from app.models.rbac import (
-    AuditLog,
-    Permission,
-    Role,
-    RoleType,
-    UserRole,
+from app.models.medical import (
+    AccommodationPlan,
+    AccommodationPlanStatus,
+    AccommodationPlanType,
+    AdministeredBy,
+    AlertLevel,
+    AlertType,
+    Allergy,
+    AllergenType,
+    AllergySeverity,
+    MedicalAlert,
+    Medication,
+    MedicationRoute,
+    MedicationType,
 )
 
 __all__ = [
@@ -69,10 +77,18 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
-    # RBAC models
-    "Role",
-    "RoleType",
-    "Permission",
-    "UserRole",
-    "AuditLog",
+    # Medical models
+    "Allergy",
+    "AllergenType",
+    "AllergySeverity",
+    "Medication",
+    "MedicationType",
+    "MedicationRoute",
+    "AdministeredBy",
+    "AccommodationPlan",
+    "AccommodationPlanType",
+    "AccommodationPlanStatus",
+    "MedicalAlert",
+    "AlertType",
+    "AlertLevel",
 ]

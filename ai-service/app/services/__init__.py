@@ -7,9 +7,7 @@ Modules:
     coaching_service: Service for RAG-based special needs coaching guidance
     activity_service: Service for activity intelligence and recommendations
     analytics_service: Service for business intelligence and analytics
-    rbac_service: Service for role-based access control
-    audit_service: Service for audit logging and tracking
-    notification_service: Service for unauthorized access notifications
+    medical_service: Service for medical tracking and allergen detection
 """
 
 from app.services.activity_service import ActivityService
@@ -23,24 +21,12 @@ from app.services.coaching_service import (
 )
 from app.services.activity_service import ActivityService
 from app.services.analytics_service import AnalyticsService
-from app.services.rbac_service import (
-    RBACService,
-    RBACServiceError,
-    RoleNotFoundError,
-    UserRoleNotFoundError,
-    PermissionDeniedError,
-    InvalidAssignmentError,
-)
-from app.services.audit_service import (
-    AuditService,
-    AuditServiceError,
-    AuditLogNotFoundError,
-)
-from app.services.notification_service import (
-    NotificationService,
-    NotificationServiceError,
-    NotificationDeliveryError,
-    NoRecipientsFoundError,
+from app.services.medical_service import (
+    MedicalService,
+    MedicalServiceError,
+    AllergyNotFoundError,
+    MedicationNotFoundError,
+    ChildNotFoundError,
 )
 
 __all__: list[str] = [
@@ -58,20 +44,10 @@ __all__: list[str] = [
     "ActivityService",
     # Analytics
     "AnalyticsService",
-    # RBAC
-    "RBACService",
-    "RBACServiceError",
-    "RoleNotFoundError",
-    "UserRoleNotFoundError",
-    "PermissionDeniedError",
-    "InvalidAssignmentError",
-    # Audit
-    "AuditService",
-    "AuditServiceError",
-    "AuditLogNotFoundError",
-    # Notification
-    "NotificationService",
-    "NotificationServiceError",
-    "NotificationDeliveryError",
-    "NoRecipientsFoundError",
+    # Medical
+    "MedicalService",
+    "MedicalServiceError",
+    "AllergyNotFoundError",
+    "MedicationNotFoundError",
+    "ChildNotFoundError",
 ]
