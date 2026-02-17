@@ -19,6 +19,8 @@ from app.auth.schemas import (
     PasswordResetRequestResponse,
     PasswordResetConfirm,
     PasswordResetConfirmResponse,
+    TokenRevocationRequest,
+    TokenRevocationResponse,
 )
 from app.auth.service import AuthService
 from app.auth.dependencies import get_current_user, require_role
@@ -410,3 +412,57 @@ async def financial_staff_test(
         "user": current_user.get("email", "unknown"),
         "role": current_user.get("role", "unknown"),
     }
+
+
+@router.post(
+    "/admin/revoke-token",
+    response_model=TokenRevocationResponse,
+    summary="Revoke a JWT token",
+    description="Manually revoke any JWT token (admin-only). Used for compromised account scenarios.",
+)
+async def revoke_token(
+    revocation_request: TokenRevocationRequest,
+    db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN)),
+) -> TokenRevocationResponse:
+    """Manually revoke a JWT token (admin-only).
+
+    This endpoint allows administrators to manually revoke any JWT token
+    (access or refresh) by adding it to the blacklist. This is useful for
+    handling compromised accounts or emergency token revocation scenarios.
+
+    The token is added to both PostgreSQL (persistent) and Redis (fast cache)
+    with TTL matching the token expiration time. Once revoked, the token
+    cannot be used for authentication.
+
+    Args:
+        revocation_request: Request containing the token to revoke
+        db: Async database session (injected)
+        redis_client: Async Redis client (injected)
+        current_user: Current user from JWT token (injected, must be admin)
+
+    Returns:
+        TokenRevocationResponse containing:
+            - message: Success confirmation message
+            - token_revoked: Whether the token was successfully revoked
+
+    Raises:
+        HTTPException: 401 Unauthorized if token is invalid or expired
+        HTTPException: 403 Forbidden if user is not an admin
+
+    Example:
+        POST /api/v1/auth/admin/revoke-token
+        Authorization: Bearer <admin_access_token>
+        {
+            "token": "eyJhbGc..."
+        }
+
+        Response:
+        {
+            "message": "Token has been successfully revoked",
+            "token_revoked": true
+        }
+    """
+    service = AuthService(db, redis_client)
+    return await service.revoke_token(revocation_request)

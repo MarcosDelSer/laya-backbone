@@ -24,6 +24,8 @@ from app.auth.schemas import (
     PasswordResetRequestResponse,
     PasswordResetConfirm,
     PasswordResetConfirmResponse,
+    TokenRevocationRequest,
+    TokenRevocationResponse,
 )
 from app.auth.jwt import create_token as create_jwt_token, decode_token
 from app.core.security import verify_password, hash_password, hash_token
@@ -533,4 +535,96 @@ class AuthService:
 
         return PasswordResetConfirmResponse(
             message="Password has been successfully reset",
+        )
+
+    async def revoke_token(
+        self, revocation_request: TokenRevocationRequest
+    ) -> TokenRevocationResponse:
+        """Revoke a token by adding it to the blacklist.
+
+        This method allows administrators to manually revoke any JWT token
+        (access or refresh) by adding it to the blacklist. This is useful for
+        handling compromised accounts or emergency token revocation scenarios.
+
+        The token is added to both PostgreSQL (persistent) and Redis (fast cache)
+        with TTL matching the token expiration time.
+
+        Args:
+            revocation_request: Request containing the token to revoke
+
+        Returns:
+            TokenRevocationResponse confirming successful revocation
+
+        Raises:
+            HTTPException: 401 Unauthorized if token is invalid or expired
+        """
+        # Decode and validate token
+        payload = decode_token(revocation_request.token)
+
+        # Extract user ID from token
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing subject",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        try:
+            user_id = UUID(user_id_str)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: invalid user ID",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Get token expiration timestamp
+        exp_timestamp = payload.get("exp")
+        if not exp_timestamp:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing expiration",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+
+        # Check if token is already blacklisted
+        if await self.is_token_blacklisted(revocation_request.token):
+            return TokenRevocationResponse(
+                message="Token has already been revoked",
+                token_revoked=False,
+            )
+
+        # Blacklist token in PostgreSQL
+        token_blacklist = TokenBlacklist(
+            token=revocation_request.token,
+            user_id=user_id,
+            expires_at=expires_at,
+        )
+        self.db.add(token_blacklist)
+
+        # Blacklist token in Redis with TTL
+        if self.redis_client:
+            try:
+                # Calculate TTL in seconds (time until token expires)
+                ttl_seconds = int((expires_at - datetime.now(timezone.utc)).total_seconds())
+                if ttl_seconds > 0:
+                    # Store token in Redis with key prefix for organization
+                    await self.redis_client.setex(
+                        f"blacklist:{revocation_request.token}",
+                        ttl_seconds,
+                        "1"
+                    )
+            except Exception:
+                # If Redis fails, continue - PostgreSQL blacklist is still active
+                pass
+
+        # Commit changes
+        await self.db.commit()
+
+        return TokenRevocationResponse(
+            message="Token has been successfully revoked",
+            token_revoked=True,
         )

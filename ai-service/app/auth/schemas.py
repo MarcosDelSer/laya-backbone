@@ -193,3 +193,39 @@ class PasswordResetConfirmResponse(BaseSchema):
         ...,
         description="Success message",
     )
+
+
+class TokenRevocationRequest(BaseSchema):
+    """Request schema for admin token revocation.
+
+    Used by administrators to manually revoke any JWT token.
+
+    Attributes:
+        token: JWT token to revoke (can be access or refresh token)
+    """
+
+    token: str = Field(
+        ...,
+        min_length=1,
+        description="JWT token to revoke",
+    )
+
+
+class TokenRevocationResponse(BaseSchema):
+    """Response schema for token revocation.
+
+    Contains confirmation of successful token revocation.
+
+    Attributes:
+        message: Success message
+        token_revoked: Whether the token was successfully revoked
+    """
+
+    message: str = Field(
+        ...,
+        description="Success message",
+    )
+    token_revoked: bool = Field(
+        ...,
+        description="Whether the token was successfully revoked",
+    )
