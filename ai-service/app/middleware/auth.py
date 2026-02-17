@@ -22,6 +22,7 @@ from typing import Any, Literal, Optional
 import jwt
 from fastapi import HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.audit_logger import (
     audit_logger,
@@ -94,6 +95,7 @@ class MultiSourceTokenPayload:
 
 async def verify_token_from_any_source(
     credentials: HTTPAuthorizationCredentials,
+    db: AsyncSession,
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """Verify and decode a JWT token from any supported source.
@@ -106,6 +108,7 @@ async def verify_token_from_any_source(
 
     Args:
         credentials: HTTP Authorization credentials containing the Bearer token
+        db: Async database session for blacklist lookup
         request: Optional FastAPI Request for audit logging context
 
     Returns:
@@ -245,6 +248,7 @@ async def verify_token_from_any_source(
 
 async def get_current_user_multi_source(
     credentials: HTTPAuthorizationCredentials,
+    db: AsyncSession,
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """FastAPI dependency to get current user from multi-source JWT token.
@@ -256,6 +260,7 @@ async def get_current_user_multi_source(
 
     Args:
         credentials: HTTP Authorization credentials injected by FastAPI
+        db: Async database session for blacklist lookup
         request: Optional FastAPI Request for audit context
 
     Returns:
@@ -268,6 +273,7 @@ async def get_current_user_multi_source(
         @app.get("/api/v1/profile")
         async def get_profile(
             current_user: dict = Depends(get_current_user_multi_source),
+            db: AsyncSession = Depends(get_db),
             request: Request = None
         ):
             return {
@@ -275,11 +281,12 @@ async def get_current_user_multi_source(
                 "source": current_user.get("source", "ai-service")
             }
     """
-    return await verify_token_from_any_source(credentials, request)
+    return await verify_token_from_any_source(credentials, db, request)
 
 
 async def get_optional_user_multi_source(
     credentials: HTTPAuthorizationCredentials | None,
+    db: AsyncSession,
     request: Optional[Request] = None,
 ) -> dict[str, Any] | None:
     """FastAPI dependency to optionally get current user from multi-source token.
@@ -290,6 +297,7 @@ async def get_optional_user_multi_source(
 
     Args:
         credentials: Optional HTTP Authorization credentials
+        db: Async database session for blacklist lookup
         request: Optional FastAPI Request for audit context
 
     Returns:
@@ -299,6 +307,7 @@ async def get_optional_user_multi_source(
         @app.get("/api/v1/items")
         async def get_items(
             current_user: dict | None = Depends(get_optional_user_multi_source),
+            db: AsyncSession = Depends(get_db),
             request: Request = None
         ):
             if current_user:
@@ -308,7 +317,7 @@ async def get_optional_user_multi_source(
     if credentials is None:
         return None
 
-    return await verify_token_from_any_source(credentials, request)
+    return await verify_token_from_any_source(credentials, db, request)
 
 
 def extract_user_info(payload: dict[str, Any]) -> dict[str, Any]:
