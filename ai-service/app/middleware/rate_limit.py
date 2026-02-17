@@ -4,13 +4,16 @@ This module provides rate limiting using slowapi to prevent abuse and ensure
 fair resource usage across the API. Different rate limits apply to general
 endpoints vs authentication-sensitive endpoints.
 
-Rate Limits:
-- General endpoints: 100 requests per minute
-- Auth endpoints: 10 requests per minute
+Rate limits are configurable via environment variables:
+- RATE_LIMIT_GENERAL: requests per minute for general endpoints (default: 100)
+- RATE_LIMIT_AUTH: requests per minute for auth endpoints (default: 10)
+- RATE_LIMIT_STORAGE_URI: storage backend (default: memory://, production: redis://...)
 """
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+
+from app.config import settings
 
 
 def get_rate_limit_key(request) -> str:
@@ -46,12 +49,13 @@ def get_rate_limit_key(request) -> str:
     return f"auth:{client_ip}" if is_auth else f"general:{client_ip}"
 
 
-# Create limiter instance with default rate limit
-# The actual limits are applied per-endpoint in the route definitions
+# Create limiter instance with configurable rate limits and storage
+# Storage URI from settings: memory:// for dev, redis:// for production
+# Default limits from settings: configurable per environment
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["100 per minute"],  # General default
-    storage_uri="memory://",  # In-memory storage for development
+    default_limits=[f"{settings.rate_limit_general} per minute"],
+    storage_uri=settings.rate_limit_storage_uri,
 )
 
 
@@ -59,15 +63,15 @@ def get_auth_limit() -> str:
     """Get the rate limit string for authentication endpoints.
 
     Returns:
-        str: Rate limit specification (10 requests per minute)
+        str: Rate limit specification from settings (default: 10 requests per minute)
     """
-    return "10 per minute"
+    return f"{settings.rate_limit_auth} per minute"
 
 
 def get_general_limit() -> str:
     """Get the rate limit string for general endpoints.
 
     Returns:
-        str: Rate limit specification (100 requests per minute)
+        str: Rate limit specification from settings (default: 100 requests per minute)
     """
-    return "100 per minute"
+    return f"{settings.rate_limit_general} per minute"

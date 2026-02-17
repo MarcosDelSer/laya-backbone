@@ -18,7 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 
 
-def generate_csrf_token(duration_minutes: int = 60) -> str:
+def generate_csrf_token(duration_minutes: Optional[int] = None) -> str:
     """Generate a cryptographically secure CSRF token.
 
     The token is a JWT containing:
@@ -27,11 +27,16 @@ def generate_csrf_token(duration_minutes: int = 60) -> str:
     - Token type identifier
 
     Args:
-        duration_minutes: Token validity duration in minutes (default: 60)
+        duration_minutes: Token validity duration in minutes
+                         (default: from settings.csrf_token_expire_minutes)
 
     Returns:
         str: Signed CSRF token (JWT)
     """
+    # Use configured expiration time if not specified
+    if duration_minutes is None:
+        duration_minutes = settings.csrf_token_expire_minutes
+
     # Generate a random nonce for uniqueness
     nonce = secrets.token_urlsafe(32)
 

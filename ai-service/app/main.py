@@ -92,7 +92,8 @@ async def get_csrf_token(request: Request) -> dict:
     must include in the X-CSRF-Token header for state-changing requests
     (POST, PUT, DELETE, PATCH).
 
-    Tokens are valid for 60 minutes and are signed using JWT to ensure authenticity.
+    Token expiration is configurable via CSRF_TOKEN_EXPIRE_MINUTES environment variable.
+    Tokens are signed using JWT to ensure authenticity.
 
     Rate limited to 100 requests per minute per client.
 
@@ -102,10 +103,12 @@ async def get_csrf_token(request: Request) -> dict:
     Returns:
         dict: CSRF token and metadata
     """
+    from app.config import settings
+
     token = generate_csrf_token()
     return {
         "csrf_token": token,
-        "expires_in_minutes": 60,
+        "expires_in_minutes": settings.csrf_token_expire_minutes,
         "header_name": "X-CSRF-Token",
     }
 
