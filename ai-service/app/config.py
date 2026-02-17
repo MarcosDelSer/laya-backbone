@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: str = ""
 
+    # Gibbon API configuration
+    gibbon_api_url: str = "http://localhost:80"
+    gibbon_api_timeout: int = 30
+
     @property
     def redis_url(self) -> str:
         """Construct the Redis URL.
