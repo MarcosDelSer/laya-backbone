@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { SignatureCanvas } from './SignatureCanvas';
 
 interface DocumentData {
@@ -27,6 +28,7 @@ export function DocumentSignature({
   onClose,
   onSubmit,
 }: DocumentSignatureProps) {
+  const t = useTranslations();
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -111,7 +113,7 @@ export function DocumentSignature({
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">
-                  Sign Document
+                  {t('documents.signature.title')}
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">{documentToSign.title}</p>
               </div>
@@ -173,7 +175,7 @@ export function DocumentSignature({
                     rel="noopener noreferrer"
                     className="text-sm font-medium text-primary-600 hover:text-primary-700"
                   >
-                    View PDF
+                    {t('documents.signature.viewPdf')}
                   </a>
                 </div>
               </div>
@@ -181,7 +183,7 @@ export function DocumentSignature({
               {/* Signature canvas */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Your Signature
+                  {t('documents.signature.yourSignature')}
                 </label>
                 <SignatureCanvas
                   onSignatureChange={handleSignatureChange}
@@ -201,17 +203,14 @@ export function DocumentSignature({
                     className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="text-sm text-gray-600">
-                    I acknowledge that I have read and understand this document.
-                    By signing below, I agree to be legally bound by its terms
-                    and conditions.
+                    {t('documents.signature.agreement')}
                   </span>
                 </label>
               </div>
 
               {/* Timestamp notice */}
               <p className="text-xs text-gray-400">
-                Your signature will be timestamped with the current date and
-                time for verification purposes.
+                {t('documents.signature.timestampNotice')}
               </p>
             </div>
 
@@ -224,7 +223,7 @@ export function DocumentSignature({
                   disabled={isSubmitting}
                   className="btn btn-outline"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -252,7 +251,7 @@ export function DocumentSignature({
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         />
                       </svg>
-                      Submitting...
+                      {t('documents.signature.submitting')}
                     </>
                   ) : (
                     <>
@@ -269,7 +268,7 @@ export function DocumentSignature({
                           d="M5 13l4 4L19 7"
                         />
                       </svg>
-                      Submit Signature
+                      {t('documents.signature.submitSignature')}
                     </>
                   )}
                 </button>
