@@ -111,6 +111,12 @@ class SignedUrlInvalidError(StorageServiceError):
     pass
 
 
+class UnauthorizedAccessError(StorageServiceError):
+    """Raised when the user does not have permission to access a file."""
+
+    pass
+
+
 # Thread pool for running sync S3 operations
 _s3_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="s3_")
 
@@ -296,7 +302,8 @@ class StorageService:
             Tuple of (file_content, file_record).
 
         Raises:
-            FileNotFoundError: If the file does not exist or is not accessible.
+            FileNotFoundError: If the file does not exist.
+            UnauthorizedAccessError: If the user does not have access to the file.
         """
         file_record = await self.get_file_by_id(file_id)
 
@@ -304,9 +311,8 @@ class StorageService:
             raise FileNotFoundError(f"File with ID {file_id} not found")
 
         # Check access permissions
-        if owner_id is not None and not file_record.is_public:
-            if file_record.owner_id != owner_id:
-                raise FileNotFoundError(f"File with ID {file_id} not found")
+        if owner_id is not None:
+            await self._verify_file_access(file_record, owner_id, require_ownership=False)
 
         # Retrieve file content based on backend
         if file_record.storage_backend == StorageBackend.LOCAL:
@@ -375,15 +381,16 @@ class StorageService:
             True if the file was deleted successfully.
 
         Raises:
-            FileNotFoundError: If the file does not exist or is not owned by user.
+            FileNotFoundError: If the file does not exist.
+            UnauthorizedAccessError: If the user does not own the file.
         """
         file_record = await self.get_file_by_id(file_id)
 
         if file_record is None:
             raise FileNotFoundError(f"File with ID {file_id} not found")
 
-        if file_record.owner_id != owner_id:
-            raise FileNotFoundError(f"File with ID {file_id} not found")
+        # Verify ownership (deletion requires ownership)
+        await self._verify_file_access(file_record, owner_id, require_ownership=True)
 
         file_size = file_record.size_bytes
 
@@ -681,15 +688,16 @@ class StorageService:
             Updated File record.
 
         Raises:
-            FileNotFoundError: If the file does not exist or is not owned by user.
+            FileNotFoundError: If the file does not exist.
+            UnauthorizedAccessError: If the user does not own the file.
         """
         file_record = await self.get_file_by_id(file_id)
 
         if file_record is None:
             raise FileNotFoundError(f"File with ID {file_id} not found")
 
-        if file_record.owner_id != owner_id:
-            raise FileNotFoundError(f"File with ID {file_id} not found")
+        # Verify ownership (metadata updates require ownership)
+        await self._verify_file_access(file_record, owner_id, require_ownership=True)
 
         if description is not None:
             file_record.description = description
@@ -722,7 +730,8 @@ class StorageService:
             The created FileThumbnail record.
 
         Raises:
-            FileNotFoundError: If the file does not exist or is not accessible.
+            FileNotFoundError: If the file does not exist.
+            UnauthorizedAccessError: If the user does not have access to the file.
             InvalidFileTypeError: If the file is not an image.
             StorageServiceError: If thumbnail generation fails.
         """
@@ -733,9 +742,8 @@ class StorageService:
             raise FileNotFoundError(f"File with ID {file_id} not found")
 
         # Check access permissions
-        if owner_id is not None and not file_record.is_public:
-            if file_record.owner_id != owner_id:
-                raise FileNotFoundError(f"File with ID {file_id} not found")
+        if owner_id is not None:
+            await self._verify_file_access(file_record, owner_id, require_ownership=False)
 
         # Verify file is an image
         if file_record.content_type not in IMAGE_MIME_TYPES:
@@ -884,11 +892,13 @@ class StorageService:
             raise FileNotFoundError(f"File with ID {file_id} not found")
 
         # Check access permissions - only owner can generate URLs for private files
-        if not file_record.is_public:
-            if owner_id is None:
-                raise FileNotFoundError(f"File with ID {file_id} not found")
-            if file_record.owner_id != owner_id:
-                raise FileNotFoundError(f"File with ID {file_id} not found")
+        if owner_id is not None:
+            # For private files, require ownership
+            if not file_record.is_public:
+                await self._verify_file_access(file_record, owner_id, require_ownership=True)
+            else:
+                # For public files, just verify access (owner or public)
+                await self._verify_file_access(file_record, owner_id, require_ownership=False)
 
         # Calculate expiration time
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)
@@ -1221,6 +1231,39 @@ class StorageService:
             created_at=quota.created_at,
             updated_at=quota.updated_at,
         )
+
+    async def _verify_file_access(
+        self,
+        file: File,
+        user_id: UUID,
+        require_ownership: bool = False,
+    ) -> None:
+        """Verify that a user has access to a file.
+
+        Checks if the user can access the file based on ownership and
+        public visibility settings. Raises an exception if access is denied.
+
+        Args:
+            file: The file to check access for.
+            user_id: UUID of the user requesting access.
+            require_ownership: If True, user must be the owner.
+                             If False, owner or public file is allowed.
+
+        Raises:
+            UnauthorizedAccessError: If the user does not have access to the file.
+        """
+        # Check if ownership is required
+        if require_ownership:
+            if file.owner_id != user_id:
+                raise UnauthorizedAccessError(
+                    f"User {user_id} does not have permission to access file {file.id}"
+                )
+        else:
+            # Allow access if user is owner or file is public
+            if file.owner_id != user_id and not file.is_public:
+                raise UnauthorizedAccessError(
+                    f"User {user_id} does not have permission to access file {file.id}"
+                )
 
     # Private helper methods
 

@@ -40,6 +40,7 @@ from app.services.storage_service import (
     SignedUrlInvalidError,
     StorageService,
     StorageServiceError,
+    UnauthorizedAccessError,
     FileNotFoundError as StorageFileNotFoundError,
 )
 
@@ -355,7 +356,9 @@ async def get_file(
         )
 
     # Check access permissions
-    if not file_record.is_public and file_record.owner_id != owner_id:
+    try:
+        await service._verify_file_access(file_record, owner_id, require_ownership=False)
+    except UnauthorizedAccessError:
         raise HTTPException(
             status_code=404,
             detail=f"File with id {file_id} not found",
@@ -411,6 +414,11 @@ async def download_file(
             owner_id=owner_id,
         )
     except StorageFileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"File with id {file_id} not found",
+        )
+    except UnauthorizedAccessError:
         raise HTTPException(
             status_code=404,
             detail=f"File with id {file_id} not found",
@@ -473,6 +481,11 @@ async def delete_file(
             owner_id=owner_id,
         )
     except StorageFileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"File with id {file_id} not found",
+        )
+    except UnauthorizedAccessError:
         raise HTTPException(
             status_code=404,
             detail=f"File with id {file_id} not found",
@@ -560,6 +573,11 @@ async def generate_secure_url(
             base_url=base_url,
         )
     except StorageFileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"File with id {file_id} not found",
+        )
+    except UnauthorizedAccessError:
         raise HTTPException(
             status_code=404,
             detail=f"File with id {file_id} not found",
