@@ -196,6 +196,23 @@ CREATE INDEX IF NOT EXISTS idx_participations_activity ON activity_participation
 
 # SQLite-compatible communication tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COMMUNICATION_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS children (
+    id TEXT PRIMARY KEY,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS parent_child (
+    parent_id TEXT NOT NULL,
+    child_id TEXT NOT NULL,
+    relationship_type VARCHAR(50) DEFAULT 'parent',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (parent_id, child_id)
+);
+
 CREATE TABLE IF NOT EXISTS parent_reports (
     id TEXT PRIMARY KEY,
     child_id TEXT NOT NULL,
@@ -237,6 +254,9 @@ CREATE TABLE IF NOT EXISTS communication_preferences (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_children_dob ON children(date_of_birth);
+CREATE INDEX IF NOT EXISTS idx_parent_child_parent ON parent_child(parent_id);
+CREATE INDEX IF NOT EXISTS idx_parent_child_child ON parent_child(child_id);
 CREATE INDEX IF NOT EXISTS idx_parent_reports_child ON parent_reports(child_id);
 CREATE INDEX IF NOT EXISTS idx_parent_reports_child_date ON parent_reports(child_id, report_date);
 CREATE INDEX IF NOT EXISTS idx_home_activities_child ON home_activities(child_id);
@@ -512,6 +532,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS communication_preferences"))
         await conn.execute(text("DROP TABLE IF EXISTS home_activities"))
         await conn.execute(text("DROP TABLE IF EXISTS parent_reports"))
+        await conn.execute(text("DROP TABLE IF EXISTS parent_child"))
+        await conn.execute(text("DROP TABLE IF EXISTS children"))
         # Drop activity tables
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))

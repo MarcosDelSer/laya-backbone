@@ -116,7 +116,7 @@ class TestDocumentIDORProtection:
             id=uuid4(),
             name="User A's Template",
             type=DocumentType.ENROLLMENT,
-            content="Template content",
+            template_content="Template content",
             created_by=user_a_id,
         )
         db_session.add(template)
@@ -132,9 +132,9 @@ class TestDocumentIDORProtection:
         sig_request = SignatureRequest(
             id=uuid4(),
             document_id=user_a_document.id,
-            requested_by=user_a_id,
-            signer_email="usera@example.com",
-            status=SignatureRequestStatus.PENDING,
+            requester_id=user_a_id,
+            signer_id=uuid4(),  # Another user who should sign
+            status=SignatureRequestStatus.SENT,
         )
         db_session.add(sig_request)
         await db_session.commit()
@@ -234,8 +234,8 @@ class TestMessagingIDORProtection:
         # User B attempts to access user A's preferences (IDOR attack)
         with pytest.raises(MessagingUnauthorizedError) as exc_info:
             service._verify_notification_preference_access(
-                target_user_id=user_a_id,
-                requesting_user_id=user_b_id,
+                parent_id=user_a_id,
+                user_id=user_b_id,
                 user_role="parent",
             )
 
@@ -252,8 +252,8 @@ class TestMessagingIDORProtection:
 
         # Should not raise an exception
         service._verify_notification_preference_access(
-            target_user_id=user_a_id,
-            requesting_user_id=user_a_id,
+            parent_id=user_a_id,
+            user_id=user_a_id,
             user_role="parent",
         )
 
@@ -269,8 +269,8 @@ class TestMessagingIDORProtection:
 
         # Admin should be allowed to access user A's preferences
         service._verify_notification_preference_access(
-            target_user_id=user_a_id,
-            requesting_user_id=user_b_id,
+            parent_id=user_a_id,
+            user_id=user_b_id,
             user_role="admin",
         )
 

@@ -3,23 +3,23 @@
   "spec": "087-fix-idor-vulnerabilities",
   "state": "building",
   "subtasks": {
-    "completed": 6,
+    "completed": 14,
     "total": 18,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Verify Messaging Authorization",
+    "current": "Comprehensive Authorization Testing",
     "id": null,
-    "total": 2
+    "total": 3
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 358,
-    "started_at": "2026-02-17T15:22:15.108433"
+    "number": 4,
+    "started_at": "2026-02-17T16:27:54.987235"
   },
-  "last_update": "2026-02-17T16:01:58.517295"
+  "last_update": "2026-02-17T16:38:36.269038"
 }

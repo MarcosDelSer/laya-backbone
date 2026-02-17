@@ -136,7 +136,7 @@ class TestDocumentServiceUnauthorizedAccess:
             id=uuid4(),
             name="Private Template",
             type=DocumentType.ENROLLMENT,
-            content="Private template content",
+            template_content="Private template content",
             created_by=user_a_id,
         )
         db_session.add(template)
@@ -152,9 +152,9 @@ class TestDocumentServiceUnauthorizedAccess:
         sig_request = SignatureRequest(
             id=uuid4(),
             document_id=user_a_document.id,
-            requested_by=user_a_id,
-            signer_email="signer@example.com",
-            status=SignatureRequestStatus.PENDING,
+            requester_id=user_a_id,
+            signer_id=uuid4(),  # Another user who should sign
+            status=SignatureRequestStatus.SENT,
         )
         db_session.add(sig_request)
         await db_session.commit()
@@ -280,8 +280,8 @@ class TestMessagingServiceUnauthorizedAccess:
         # User B attempting to access user A's preferences
         with pytest.raises(MessagingUnauthorizedError) as exc_info:
             service._verify_notification_preference_access(
-                target_user_id=user_a_id,
-                requesting_user_id=user_b_id,
+                parent_id=user_a_id,
+                user_id=user_b_id,
                 user_role="parent",
             )
 
@@ -299,8 +299,8 @@ class TestMessagingServiceUnauthorizedAccess:
 
         with pytest.raises(MessagingUnauthorizedError):
             service._verify_notification_preference_access(
-                target_user_id=user_a_id,
-                requesting_user_id=user_b_id,
+                parent_id=user_a_id,
+                user_id=user_b_id,
                 user_role="parent",
             )
 
@@ -316,8 +316,8 @@ class TestMessagingServiceUnauthorizedAccess:
 
         with pytest.raises(MessagingUnauthorizedError):
             service._verify_notification_preference_access(
-                target_user_id=user_a_id,
-                requesting_user_id=user_b_id,
+                parent_id=user_a_id,
+                user_id=user_b_id,
                 user_role="educator",
             )
 
@@ -333,8 +333,8 @@ class TestMessagingServiceUnauthorizedAccess:
 
         with pytest.raises(MessagingUnauthorizedError):
             service._verify_notification_preference_access(
-                target_user_id=user_a_id,
-                requesting_user_id=user_b_id,
+                parent_id=user_a_id,
+                user_id=user_b_id,
                 user_role="unknown_role",
             )
 
@@ -352,16 +352,16 @@ class TestMessagingServiceUnauthorizedAccess:
         # User B attempt
         with pytest.raises(MessagingUnauthorizedError):
             service._verify_notification_preference_access(
-                target_user_id=user_a_id,
-                requesting_user_id=user_b_id,
+                parent_id=user_a_id,
+                user_id=user_b_id,
                 user_role="parent",
             )
 
         # User C attempt
         with pytest.raises(MessagingUnauthorizedError):
             service._verify_notification_preference_access(
-                target_user_id=user_a_id,
-                requesting_user_id=user_c_id,
+                parent_id=user_a_id,
+                user_id=user_c_id,
                 user_role="parent",
             )
 
