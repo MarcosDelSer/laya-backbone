@@ -7,10 +7,10 @@ direct communication between parents and educators/directors.
 
 from datetime import datetime
 from typing import Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import JSON, UUID
+from sqlalchemy.dialects.postgresql import JSON, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -38,7 +38,7 @@ class MessageThread(Base):
     __tablename__ = "message_threads"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
@@ -52,12 +52,12 @@ class MessageThread(Base):
         default="daily_log",
     )
     child_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=True,
         index=True,
     )
     created_by: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
     )
     participants: Mapped[Optional[dict]] = mapped_column(
@@ -117,18 +117,18 @@ class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     thread_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("message_threads.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     sender_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
@@ -199,12 +199,12 @@ class MessageAttachment(Base):
     __tablename__ = "message_attachments"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     message_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("messages.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -255,7 +255,7 @@ class NotificationChannel(Base):
     __tablename__ = "notification_channels"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
@@ -308,12 +308,12 @@ class NotificationPreference(Base):
     __tablename__ = "notification_preferences"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     parent_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
