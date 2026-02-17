@@ -5,12 +5,13 @@ versioning, progress tracking, and review scheduling for special needs support.
 The service implements the 8-part intervention plan structure.
 """
 
+import logging
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -197,13 +198,22 @@ class InterventionPlanService:
                 )
                 self.db.add(consultation)
 
+        # Flush to ensure all related entities are saved
+        await self.db.flush()
+
+        # Reload plan with all relationships for snapshot
+        plan = await self._get_plan_with_relations(plan.id)
+
+        # Create snapshot of initial state
+        snapshot = await self._create_plan_snapshot(plan)
+
         # Create initial version record
         version = InterventionVersion(
             plan_id=plan.id,
             version_number=1,
             created_by=user_id,
             change_summary="Initial plan creation",
-            snapshot_data=None,  # Will be populated on subsequent versions
+            snapshot_data=snapshot,
         )
         self.db.add(version)
 
@@ -264,6 +274,23 @@ class InterventionPlanService:
 
         Updates the plan's Part 1 fields and metadata. Optionally creates
         a new version record to track changes.
+
+        Snapshot Behavior:
+            When create_version=True (default), creates a snapshot of the plan's
+            current state BEFORE applying changes. The snapshot captures:
+            - All Part 1 fields (identification, history, review schedule)
+            - All 8 plan sections (strengths, needs, goals, strategies, monitoring,
+              parent involvements, consultations) with their current data
+            - Version lineage via parent_version_id linking to previous version
+            - Metadata (timestamps, status, signatures)
+
+            After snapshot creation:
+            - Increments the plan's version number
+            - Applies the requested changes
+            - Stores the snapshot in a new InterventionVersion record
+            - Generates an automatic change summary from modified fields
+
+            This enables full audit trail and version comparison capabilities.
 
         Args:
             plan_id: ID of the intervention plan to update
@@ -442,6 +469,30 @@ class InterventionPlanService:
         Creates a version record capturing the current state of the plan
         for historical reference and audit trail.
 
+        Snapshot Behavior:
+            Captures a complete JSON snapshot of the plan's current state including:
+            - All Part 1 fields (child info, diagnosis, history, family context)
+            - Part 2: All strengths with categories and examples
+            - Part 3: All needs with priority and baseline data
+            - Part 4: All SMART goals with measurements and progress
+            - Part 5: All intervention strategies
+            - Part 6: All monitoring approaches
+            - Part 7: All parent involvement activities
+            - Part 8: All external consultations
+            - Version lineage tracking via parent_version_id
+            - All metadata (status, dates, signatures)
+
+            The snapshot is created using _create_plan_snapshot which:
+            - Loads all relationships eagerly before snapshot
+            - Validates that relationships are loaded (logs warnings if not)
+            - Serializes all data to JSON-compatible dictionary format
+            - Links to the previous version for change tracking
+
+            After snapshot creation:
+            - Increments the plan's version number
+            - Stores snapshot in new InterventionVersion record
+            - Enables version comparison and rollback capabilities
+
         Args:
             plan_id: ID of the intervention plan
             user_id: ID of the user creating the version
@@ -592,6 +643,184 @@ class InterventionPlanService:
         versions = version_result.scalars().all()
 
         return [VersionResponse.model_validate(v) for v in versions]
+
+    async def get_version(
+        self,
+        plan_id: UUID,
+        version_number: int,
+    ) -> VersionResponse:
+        """Get a specific version snapshot of the plan.
+
+        Retrieves a specific version record by version number.
+
+        Args:
+            plan_id: ID of the intervention plan
+            version_number: The version number to retrieve
+
+        Returns:
+            VersionResponse with the version snapshot
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            PlanVersionError: When the version is not found
+        """
+        # Verify plan exists
+        query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
+        result = await self.db.execute(query)
+        plan = result.scalar_one_or_none()
+
+        if not plan:
+            raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Get the specific version
+        version_query = (
+            select(InterventionVersion)
+            .where(
+                InterventionVersion.plan_id == plan_id,
+                InterventionVersion.version_number == version_number,
+            )
+        )
+        version_result = await self.db.execute(version_query)
+        version = version_result.scalar_one_or_none()
+
+        if not version:
+            raise PlanVersionError(
+                f"Version {version_number} not found for plan {plan_id}"
+            )
+
+        return VersionResponse.model_validate(version)
+
+    async def compare_versions(
+        self,
+        plan_id: UUID,
+        version1: int,
+        version2: int,
+    ) -> dict:
+        """Compare two version snapshots and highlight differences.
+
+        Compares two version snapshots of a plan and returns a detailed
+        diff showing what changed between the versions.
+
+        Args:
+            plan_id: ID of the intervention plan
+            version1: First version number to compare
+            version2: Second version number to compare
+
+        Returns:
+            Dictionary with comparison results and highlighted changes
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            PlanVersionError: When either version is not found
+        """
+        # Verify plan exists
+        query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
+        result = await self.db.execute(query)
+        plan = result.scalar_one_or_none()
+
+        if not plan:
+            raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Get both versions
+        version_query = (
+            select(InterventionVersion)
+            .where(
+                InterventionVersion.plan_id == plan_id,
+                InterventionVersion.version_number.in_([version1, version2]),
+            )
+            .order_by(InterventionVersion.version_number.asc())
+        )
+        version_result = await self.db.execute(version_query)
+        versions = version_result.scalars().all()
+
+        if len(versions) != 2:
+            missing = []
+            found_numbers = [v.version_number for v in versions]
+            if version1 not in found_numbers:
+                missing.append(version1)
+            if version2 not in found_numbers:
+                missing.append(version2)
+            raise PlanVersionError(
+                f"Version(s) {', '.join(map(str, missing))} not found for plan {plan_id}"
+            )
+
+        # Extract snapshots
+        v1 = versions[0] if versions[0].version_number == version1 else versions[1]
+        v2 = versions[1] if versions[1].version_number == version2 else versions[0]
+
+        snapshot1 = v1.snapshot_data
+        snapshot2 = v2.snapshot_data
+
+        # Compare snapshots and build diff
+        changes = {
+            "plan_id": str(plan_id),
+            "version1": version1,
+            "version2": version2,
+            "version1_date": v1.created_at.isoformat() if v1.created_at else None,
+            "version2_date": v2.created_at.isoformat() if v2.created_at else None,
+            "changes": {},
+        }
+
+        # Compare main plan fields
+        main_fields = [
+            "title", "status", "child_name", "date_of_birth", "diagnosis",
+            "medical_history", "educational_history", "family_context",
+            "review_schedule", "next_review_date", "effective_date", "end_date",
+            "parent_signed",
+        ]
+
+        for field in main_fields:
+            val1 = snapshot1.get(field)
+            val2 = snapshot2.get(field)
+            if val1 != val2:
+                changes["changes"][field] = {
+                    "from": val1,
+                    "to": val2,
+                }
+
+        # Compare relationship collections
+        collection_fields = [
+            "strengths", "needs", "goals", "strategies",
+            "monitoring", "parent_involvements", "consultations",
+        ]
+
+        for collection in collection_fields:
+            items1 = snapshot1.get(collection, [])
+            items2 = snapshot2.get(collection, [])
+
+            # Build ID-based maps for comparison
+            map1 = {item["id"]: item for item in items1}
+            map2 = {item["id"]: item for item in items2}
+
+            added = [item for item_id, item in map2.items() if item_id not in map1]
+            removed = [item for item_id, item in map1.items() if item_id not in map2]
+            modified = []
+
+            # Check for modifications in items that exist in both
+            for item_id in set(map1.keys()) & set(map2.keys()):
+                if map1[item_id] != map2[item_id]:
+                    # Find specific field changes
+                    field_changes = {}
+                    for key in map1[item_id].keys():
+                        if map1[item_id].get(key) != map2[item_id].get(key):
+                            field_changes[key] = {
+                                "from": map1[item_id].get(key),
+                                "to": map2[item_id].get(key),
+                            }
+                    if field_changes:
+                        modified.append({
+                            "id": item_id,
+                            "changes": field_changes,
+                        })
+
+            if added or removed or modified:
+                changes["changes"][collection] = {
+                    "added": added,
+                    "removed": removed,
+                    "modified": modified,
+                }
+
+        return changes
 
     async def get_plans_for_review(
         self,
@@ -910,15 +1139,98 @@ class InterventionPlanService:
     async def _create_plan_snapshot(self, plan: InterventionPlan) -> dict:
         """Create a JSON snapshot of the plan for versioning.
 
+        Creates a complete JSON-serializable snapshot capturing all plan data
+        for version history and comparison. This is the core snapshotting method
+        used by create_version and update_plan.
+
+        Snapshot Contents:
+            The snapshot includes a complete representation of:
+            - Plan metadata: id, version, status, timestamps
+            - Part 1: Child identification, diagnosis, medical/educational/family history
+            - Part 2: Strengths - all items with categories, descriptions, examples
+            - Part 3: Needs - all items with priority, baseline, categories
+            - Part 4: SMART Goals - all goals with measurements, targets, progress
+            - Part 5: Strategies - all intervention strategies with responsible parties
+            - Part 6: Monitoring - all monitoring approaches with success indicators
+            - Part 7: Parent Involvement - all parent activities and communications
+            - Part 8: Consultations - all external specialist consultations
+            - Version lineage: parent_version_id linking to previous version
+            - Review schedule and next review date
+            - Parent signature status and data
+
+        Relationship Loading Validation:
+            Before creating the snapshot, validates that all required relationships
+            (strengths, needs, goals, strategies, monitoring, parent_involvements,
+            consultations) are loaded into memory. If any relationships are unloaded,
+            logs a warning but continues with snapshot creation to prevent data loss.
+            Unloaded relationships will appear as empty arrays in the snapshot.
+
+        Version Lineage Tracking:
+            Automatically retrieves the most recent InterventionVersion record and
+            stores its ID as parent_version_id in the snapshot. This creates a
+            version chain that enables:
+            - Complete version history traversal
+            - Change tracking across versions
+            - Identifying when specific changes were introduced
+
+        Data Serialization:
+            All data is converted to JSON-compatible types:
+            - UUIDs → strings
+            - Dates → ISO format strings
+            - Enums → string values
+            - Related objects → nested dictionaries with full data
+
         Args:
-            plan: The intervention plan to snapshot
+            plan: The intervention plan to snapshot. Should have all relationships
+                  loaded via selectinload for complete snapshot data.
 
         Returns:
-            Dictionary representation of the plan
+            Dictionary representation of the complete plan state, fully serializable
+            to JSON for storage in InterventionVersion.snapshot_data
         """
+        # Validate that relationships are loaded before snapshot
+        logger = logging.getLogger(__name__)
+        plan_state = inspect(plan)
+
+        relationships_to_check = [
+            "strengths",
+            "needs",
+            "goals",
+            "strategies",
+            "monitoring",
+            "parent_involvements",
+            "consultations",
+        ]
+
+        unloaded_relationships = []
+        for rel_name in relationships_to_check:
+            if rel_name in plan_state.unloaded:
+                unloaded_relationships.append(rel_name)
+
+        if unloaded_relationships:
+            logger.warning(
+                f"Creating plan snapshot with unloaded relationships: {', '.join(unloaded_relationships)}. "
+                f"Plan ID: {plan.id}. This may result in incomplete snapshot data."
+            )
+
+        # Get the most recent version to track lineage
+        parent_version_id = None
+        version_query = (
+            select(InterventionVersion)
+            .where(InterventionVersion.plan_id == plan.id)
+            .order_by(InterventionVersion.version_number.desc())
+            .limit(1)
+        )
+        version_result = await self.db.execute(version_query)
+        latest_version = version_result.scalar_one_or_none()
+        if latest_version:
+            parent_version_id = str(latest_version.id)
+
         return {
             "id": str(plan.id),
             "child_id": str(plan.child_id),
+            "created_by": str(plan.created_by) if plan.created_by else None,
+            "parent_version_id": parent_version_id,
             "title": plan.title,
             "status": plan.status,
             "version": plan.version,
@@ -959,6 +1271,7 @@ class InterventionPlanService:
             "goals": [
                 {
                     "id": str(g.id),
+                    "need_id": str(g.need_id) if g.need_id else None,
                     "title": g.title,
                     "description": g.description,
                     "measurement_criteria": g.measurement_criteria,
@@ -976,6 +1289,7 @@ class InterventionPlanService:
             "strategies": [
                 {
                     "id": str(s.id),
+                    "goal_id": str(s.goal_id) if s.goal_id else None,
                     "title": s.title,
                     "description": s.description,
                     "responsible_party": s.responsible_party,
@@ -989,6 +1303,7 @@ class InterventionPlanService:
             "monitoring": [
                 {
                     "id": str(m.id),
+                    "goal_id": str(m.goal_id) if m.goal_id else None,
                     "method": m.method,
                     "description": m.description,
                     "frequency": m.frequency,
