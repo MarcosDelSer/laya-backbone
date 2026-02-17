@@ -16,9 +16,17 @@ import type {
   CoachingGuidanceRequest,
   CoachingGuidanceResponse,
   HealthCheckResponse,
+  MessageAnalysisRequest,
+  MessageAnalysisResponse,
+  MessageLanguage,
+  MessageTemplateRequest,
+  MessageTemplateResponse,
   PaginatedResponse,
   PaginationParams,
+  QualityIssue,
   SpecialNeedType,
+  TemplateCategory,
+  TrainingExampleResponse,
 } from './types';
 
 // ============================================================================
@@ -43,13 +51,11 @@ const ENDPOINTS = {
   CHILD_ANALYTICS: (childId: string) => `/api/v1/analytics/children/${childId}`,
   PROGRESS_REPORT: (childId: string) => `/api/v1/analytics/children/${childId}/progress`,
 
-  // Documents
-  DOCUMENTS: '/api/v1/documents',
-  DOCUMENT: (id: string) => `/api/v1/documents/${id}`,
-  DOCUMENT_SIGNATURES: (id: string) => `/api/v1/documents/${id}/signatures`,
-  DOCUMENT_DASHBOARD: '/api/v1/documents/dashboard',
-  SIGNATURE_REQUESTS: '/api/v1/documents/signature-requests',
-  SIGNATURE_REQUEST: (id: string) => `/api/v1/documents/signature-requests/${id}`,
+  // Message Quality
+  MESSAGE_QUALITY_ANALYZE: '/api/v1/message-quality/analyze',
+  MESSAGE_QUALITY_TEMPLATES: '/api/v1/message-quality/templates',
+  MESSAGE_QUALITY_TEMPLATE: (id: string) => `/api/v1/message-quality/templates/${id}`,
+  MESSAGE_QUALITY_TRAINING_EXAMPLES: '/api/v1/message-quality/training-examples',
 } as const;
 
 // ============================================================================
@@ -343,6 +349,152 @@ export async function getChildInsights(
 }
 
 // ============================================================================
+// Message Quality API
+// ============================================================================
+
+/**
+ * Parameters for fetching message templates.
+ */
+export interface MessageTemplateParams extends PaginationParams {
+  category?: TemplateCategory;
+  language?: MessageLanguage;
+  isSystem?: boolean;
+}
+
+/**
+ * Parameters for fetching training examples.
+ */
+export interface TrainingExampleParams extends PaginationParams {
+  language?: MessageLanguage;
+  issueType?: QualityIssue;
+  difficultyLevel?: string;
+}
+
+/**
+ * Analyze a message for quality issues based on Quebec 'Bonne Message' standards.
+ * Returns quality score, detected issues, and optional rewrite suggestions.
+ */
+export async function analyzeMessage(
+  request: MessageAnalysisRequest
+): Promise<MessageAnalysisResponse> {
+  return aiServiceClient.post<MessageAnalysisResponse>(
+    ENDPOINTS.MESSAGE_QUALITY_ANALYZE,
+    {
+      message_text: request.messageText,
+      language: request.language ?? 'en',
+      context: request.context,
+      child_id: request.childId,
+      include_rewrites: request.includeRewrites ?? true,
+    }
+  );
+}
+
+/**
+ * Analyze message with debounce-friendly interface.
+ * Convenience wrapper for real-time analysis during message composition.
+ */
+export async function analyzeMessageForComposer(
+  messageText: string,
+  language: MessageLanguage = 'en'
+): Promise<MessageAnalysisResponse> {
+  return analyzeMessage({
+    messageText,
+    language,
+    includeRewrites: true,
+  });
+}
+
+/**
+ * Fetch message templates with optional filters.
+ */
+export async function getMessageTemplates(
+  params?: MessageTemplateParams
+): Promise<PaginatedResponse<MessageTemplateResponse>> {
+  return aiServiceClient.get<PaginatedResponse<MessageTemplateResponse>>(
+    ENDPOINTS.MESSAGE_QUALITY_TEMPLATES,
+    {
+      params: {
+        skip: params?.skip,
+        limit: params?.limit,
+        category: params?.category,
+        language: params?.language,
+        is_system: params?.isSystem,
+      },
+    }
+  );
+}
+
+/**
+ * Create a new message template.
+ */
+export async function createMessageTemplate(
+  template: MessageTemplateRequest
+): Promise<MessageTemplateResponse> {
+  return aiServiceClient.post<MessageTemplateResponse>(
+    ENDPOINTS.MESSAGE_QUALITY_TEMPLATES,
+    {
+      title: template.title,
+      content: template.content,
+      category: template.category,
+      language: template.language ?? 'en',
+      description: template.description,
+    }
+  );
+}
+
+/**
+ * Fetch training examples for educator learning.
+ */
+export async function getTrainingExamples(
+  params?: TrainingExampleParams
+): Promise<PaginatedResponse<TrainingExampleResponse>> {
+  return aiServiceClient.get<PaginatedResponse<TrainingExampleResponse>>(
+    ENDPOINTS.MESSAGE_QUALITY_TRAINING_EXAMPLES,
+    {
+      params: {
+        skip: params?.skip,
+        limit: params?.limit,
+        language: params?.language,
+        issue_type: params?.issueType,
+        difficulty_level: params?.difficultyLevel,
+      },
+    }
+  );
+}
+
+/**
+ * Get templates by category.
+ * Convenience method for common template filtering.
+ */
+export async function getTemplatesByCategory(
+  category: TemplateCategory,
+  language: MessageLanguage = 'en'
+): Promise<MessageTemplateResponse[]> {
+  const response = await getMessageTemplates({
+    category,
+    language,
+    limit: 100,
+  });
+  return response.items;
+}
+
+/**
+ * Get training examples for a specific quality issue.
+ * Convenience method for focused learning.
+ */
+export async function getTrainingExamplesForIssue(
+  issueType: QualityIssue,
+  language: MessageLanguage = 'en'
+): Promise<TrainingExampleResponse[]> {
+  const response = await getTrainingExamples({
+    issueType,
+    language,
+    limit: 50,
+  });
+  return response.items;
+}
+
+// ============================================================================
 // Error Handling Helpers
 // ============================================================================
 
@@ -381,251 +533,4 @@ export async function withFallback<T>(
     }
     throw error;
   }
-}
-
-// ============================================================================
-// Documents API
-// ============================================================================
-
-/**
- * Document status enum.
- */
-export type DocumentStatus = 'draft' | 'pending' | 'signed' | 'expired';
-
-/**
- * Document type.
- */
-export interface Document {
-  id: string;
-  type: string;
-  title: string;
-  content_url: string;
-  status: DocumentStatus;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * Signature type.
- */
-export interface Signature {
-  id: string;
-  document_id: string;
-  signer_id: string;
-  signature_image_url: string;
-  ip_address: string;
-  device_info?: string;
-  timestamp: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * Signature request status enum.
- */
-export type SignatureRequestStatus = 'sent' | 'viewed' | 'completed' | 'cancelled' | 'expired';
-
-/**
- * Signature request type.
- */
-export interface SignatureRequest {
-  id: string;
-  document_id: string;
-  requester_id: string;
-  signer_id: string;
-  status: SignatureRequestStatus;
-  sent_at: string;
-  viewed_at?: string;
-  completed_at?: string;
-  expires_at?: string;
-  notification_sent: boolean;
-  notification_method?: string;
-  message?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * Parameters for creating a signature.
- */
-export interface CreateSignatureRequest {
-  document_id: string;
-  signer_id: string;
-  signature_image_url: string;
-  ip_address: string;
-  device_info?: string;
-}
-
-/**
- * Parameters for listing documents.
- */
-export interface DocumentParams extends PaginationParams {
-  document_type?: string;
-  status?: DocumentStatus;
-  created_by?: string;
-}
-
-/**
- * Paginated document list response.
- */
-export interface DocumentListResponse {
-  items: Document[];
-  total: number;
-  skip: number;
-  limit: number;
-}
-
-/**
- * Fetch documents with optional filters.
- */
-export async function getDocuments(
-  params?: DocumentParams
-): Promise<DocumentListResponse> {
-  return aiServiceClient.get<DocumentListResponse>(ENDPOINTS.DOCUMENTS, {
-    params: {
-      skip: params?.skip,
-      limit: params?.limit,
-      document_type: params?.document_type,
-      status: params?.status,
-      created_by: params?.created_by,
-    },
-  });
-}
-
-/**
- * Fetch a specific document by ID.
- */
-export async function getDocument(documentId: string): Promise<Document> {
-  return aiServiceClient.get<Document>(ENDPOINTS.DOCUMENT(documentId));
-}
-
-/**
- * Create a signature for a document.
- */
-export async function createSignature(
-  documentId: string,
-  signatureData: CreateSignatureRequest
-): Promise<Signature> {
-  return aiServiceClient.post<Signature>(
-    ENDPOINTS.DOCUMENT_SIGNATURES(documentId),
-    signatureData
-  );
-}
-
-/**
- * Get signatures for a document.
- */
-export async function getDocumentSignatures(
-  documentId: string
-): Promise<Signature[]> {
-  return aiServiceClient.get<Signature[]>(ENDPOINTS.DOCUMENT_SIGNATURES(documentId));
-}
-
-/**
- * Get signature requests for current user.
- */
-export async function getMySignatureRequests(
-  statusFilter?: SignatureRequestStatus
-): Promise<SignatureRequest[]> {
-  return aiServiceClient.get<SignatureRequest[]>(ENDPOINTS.SIGNATURE_REQUESTS, {
-    params: {
-      status: statusFilter,
-    },
-  });
-}
-
-/**
- * Mark a signature request as viewed.
- */
-export async function markSignatureRequestViewed(
-  requestId: string
-): Promise<SignatureRequest> {
-  return aiServiceClient.patch<SignatureRequest>(
-    `${ENDPOINTS.SIGNATURE_REQUEST(requestId)}/viewed`,
-    {}
-  );
-}
-
-/**
- * Document status count.
- */
-export interface DocumentStatusCount {
-  status: DocumentStatus;
-  count: number;
-}
-
-/**
- * Document type count with status breakdown.
- */
-export interface DocumentTypeCount {
-  type: string;
-  count: number;
-  pending: number;
-  signed: number;
-}
-
-/**
- * Recent signature activity.
- */
-export interface SignatureActivity {
-  document_id: string;
-  document_title: string;
-  signer_id: string;
-  signed_at: string;
-  document_type: string;
-}
-
-/**
- * Dashboard summary statistics.
- */
-export interface SignatureDashboardSummary {
-  total_documents: number;
-  pending_signatures: number;
-  signed_documents: number;
-  expired_documents: number;
-  draft_documents: number;
-  completion_rate: number;
-  documents_this_month: number;
-  signatures_this_month: number;
-}
-
-/**
- * Signature status dashboard response.
- */
-export interface SignatureDashboardResponse {
-  id: string;
-  summary: SignatureDashboardSummary;
-  status_breakdown: DocumentStatusCount[];
-  type_breakdown: DocumentTypeCount[];
-  recent_activity: SignatureActivity[];
-  alerts: string[];
-  generated_at: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/**
- * Parameters for fetching dashboard data.
- */
-export interface DashboardParams {
-  user_id?: string;
-  limit_recent?: number;
-}
-
-/**
- * Get signature status dashboard with aggregated statistics.
- */
-export async function getSignatureDashboard(
-  params?: DashboardParams
-): Promise<SignatureDashboardResponse> {
-  return aiServiceClient.get<SignatureDashboardResponse>(
-    ENDPOINTS.DOCUMENT_DASHBOARD,
-    {
-      params: {
-        user_id: params?.user_id,
-        limit_recent: params?.limit_recent,
-      },
-    }
-  );
 }

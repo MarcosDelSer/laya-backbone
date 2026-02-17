@@ -1,30 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { MessageThread, ThreadPreview } from '@/components/MessageThread';
-import { MessageComposer } from '@/components/MessageComposer';
-import {
-  getThreads,
-  getMessages,
-  sendTextMessage,
-  markThreadAsRead,
-} from '@/lib/messaging-client';
-import { ApiError } from '@/lib/api';
-import type {
-  MessageThread as MessageThreadType,
-  Message,
-} from '@/lib/types';
+import { EnhancedMessageComposer } from '@/components/EnhancedMessageComposer';
 
-// ============================================================================
-// Type Adapters
-// ============================================================================
-
-/**
- * Convert API Message to component-expected format.
- * Maps API field names to the format expected by UI components.
- */
-interface UIMessage {
+// Type definitions for messaging
+interface Message {
   id: string;
   threadId: string;
   senderId: string;
@@ -34,289 +16,189 @@ interface UIMessage {
   read: boolean;
 }
 
-/**
- * Convert API thread to format expected by ThreadPreview component.
- */
-interface UIThread {
+interface MessageThreadData {
   id: string;
   subject: string;
   participants: string[];
-  lastMessage: UIMessage;
+  lastMessage: Message;
   unreadCount: number;
 }
 
-/**
- * Convert API Message to UI Message format.
- */
-function toUIMessage(message: Message): UIMessage {
-  return {
-    id: message.id,
-    threadId: message.threadId,
-    senderId: message.senderId,
-    senderName: message.senderName || 'Unknown',
-    content: message.content,
-    timestamp: message.createdAt || new Date().toISOString(),
-    read: message.isRead,
-  };
-}
-
-/**
- * Convert API Thread to UI Thread format.
- */
-function toUIThread(thread: MessageThreadType, lastMessage?: UIMessage): UIThread {
-  // Extract display names from participants
-  const participantNames = thread.participants.map(
-    (p) => p.displayName || `User ${p.userId.slice(0, 8)}`
-  );
-
-  // Create a placeholder last message if none exists
-  const defaultLastMessage: UIMessage = lastMessage || {
-    id: '',
-    threadId: thread.id,
-    senderId: thread.createdBy,
-    senderName: participantNames[0] || 'Unknown',
-    content: thread.lastMessage || 'No messages yet',
-    timestamp: thread.lastMessageAt || thread.createdAt || new Date().toISOString(),
-    read: true,
-  };
-
-  return {
-    id: thread.id,
-    subject: thread.subject,
-    participants: participantNames,
-    lastMessage: defaultLastMessage,
-    unreadCount: thread.unreadCount,
-  };
-}
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * Current user ID - in a real app this would come from auth context.
- * TODO: Replace with actual auth context.
- */
+// Mock data for conversation threads - will be replaced with API calls
 const CURRENT_USER_ID = 'parent-1';
 
-// ============================================================================
-// Component
-// ============================================================================
+const mockMessages: Record<string, Message[]> = {
+  'thread-1': [
+    {
+      id: 'msg-1',
+      threadId: 'thread-1',
+      senderId: 'teacher-1',
+      senderName: 'Ms. Johnson',
+      content: 'Hi! I wanted to let you know that Emma had a wonderful day today. She really enjoyed the art activity and made a beautiful painting.',
+      timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), // 2 hours ago
+      read: true,
+    },
+    {
+      id: 'msg-2',
+      threadId: 'thread-1',
+      senderId: CURRENT_USER_ID,
+      senderName: 'You',
+      content: 'That\'s great to hear! She\'s been talking about painting at home too. Thank you for sharing!',
+      timestamp: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+      read: true,
+    },
+    {
+      id: 'msg-3',
+      threadId: 'thread-1',
+      senderId: 'teacher-1',
+      senderName: 'Ms. Johnson',
+      content: 'You\'re welcome! We\'ll be doing more art projects this week. Also, just a reminder that picture day is next Tuesday.',
+      timestamp: new Date(Date.now() - 1800000).toISOString(), // 30 min ago
+      read: false,
+    },
+  ],
+  'thread-2': [
+    {
+      id: 'msg-4',
+      threadId: 'thread-2',
+      senderId: 'admin-1',
+      senderName: 'Sunshine Daycare Admin',
+      content: 'Dear Parents, we wanted to inform you about the upcoming parent-teacher conference scheduled for February 28th. Please let us know your preferred time slot.',
+      timestamp: new Date(Date.now() - 86400000).toISOString(), // Yesterday
+      read: true,
+    },
+    {
+      id: 'msg-5',
+      threadId: 'thread-2',
+      senderId: CURRENT_USER_ID,
+      senderName: 'You',
+      content: 'Thank you for the information. Can we schedule for the afternoon, around 2 PM?',
+      timestamp: new Date(Date.now() - 43200000).toISOString(), // 12 hours ago
+      read: true,
+    },
+    {
+      id: 'msg-6',
+      threadId: 'thread-2',
+      senderId: 'admin-1',
+      senderName: 'Sunshine Daycare Admin',
+      content: 'The 2 PM slot is available. I\'ve scheduled you for February 28th at 2:00 PM. You\'ll receive a calendar invite shortly.',
+      timestamp: new Date(Date.now() - 36000000).toISOString(), // 10 hours ago
+      read: true,
+    },
+  ],
+  'thread-3': [
+    {
+      id: 'msg-7',
+      threadId: 'thread-3',
+      senderId: 'teacher-2',
+      senderName: 'Mr. Davis',
+      content: 'Hello! I\'m Emma\'s music teacher. I wanted to share that Emma has been showing great interest in learning the xylophone.',
+      timestamp: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+      read: true,
+    },
+    {
+      id: 'msg-8',
+      threadId: 'thread-3',
+      senderId: CURRENT_USER_ID,
+      senderName: 'You',
+      content: 'That\'s wonderful! She does love music. Is there anything we can do at home to encourage this?',
+      timestamp: new Date(Date.now() - 86400000).toISOString(), // Yesterday
+      read: true,
+    },
+  ],
+};
+
+const mockThreads: MessageThreadData[] = [
+  {
+    id: 'thread-1',
+    subject: 'Daily Update - Emma',
+    participants: ['Ms. Johnson', 'You'],
+    lastMessage: mockMessages['thread-1'][mockMessages['thread-1'].length - 1],
+    unreadCount: 1,
+  },
+  {
+    id: 'thread-2',
+    subject: 'Parent-Teacher Conference',
+    participants: ['Sunshine Daycare Admin', 'You'],
+    lastMessage: mockMessages['thread-2'][mockMessages['thread-2'].length - 1],
+    unreadCount: 0,
+  },
+  {
+    id: 'thread-3',
+    subject: 'Music Class Progress',
+    participants: ['Mr. Davis', 'You'],
+    lastMessage: mockMessages['thread-3'][mockMessages['thread-3'].length - 1],
+    unreadCount: 0,
+  },
+];
 
 export default function MessagesPage() {
-  // State for threads and messages
-  const [threads, setThreads] = useState<UIThread[]>([]);
-  const [messages, setMessages] = useState<Record<string, UIMessage[]>>({});
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<MessageThreadData[]>(mockThreads);
+  const [messages, setMessages] = useState<Record<string, Message[]>>(mockMessages);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
+    mockThreads[0]?.id || null
+  );
   const [showMobileThread, setShowMobileThread] = useState(false);
 
-  // Loading and error states
-  const [isLoadingThreads, setIsLoadingThreads] = useState(true);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Derived state
   const selectedThread = threads.find((t) => t.id === selectedThreadId);
   const selectedMessages = selectedThreadId ? messages[selectedThreadId] || [] : [];
+
+  // Calculate total unread count
   const totalUnread = threads.reduce((sum, t) => sum + t.unreadCount, 0);
 
-  // ============================================================================
-  // Data Fetching
-  // ============================================================================
-
-  /**
-   * Fetch all threads for the current user.
-   */
-  const fetchThreads = useCallback(async () => {
-    try {
-      setIsLoadingThreads(true);
-      setError(null);
-
-      const response = await getThreads({ isActive: true });
-      const uiThreads = response.threads.map((thread) => toUIThread(thread));
-      setThreads(uiThreads);
-
-      // Auto-select first thread if none selected
-      if (uiThreads.length > 0 && !selectedThreadId) {
-        setSelectedThreadId(uiThreads[0].id);
-      }
-    } catch (err) {
-      const apiError = err instanceof ApiError ? err : null;
-      const errorMessage = apiError?.userMessage || 'Failed to load conversations';
-      setError(errorMessage);
-    } finally {
-      setIsLoadingThreads(false);
-    }
-  }, [selectedThreadId]);
-
-  /**
-   * Fetch messages for a specific thread.
-   */
-  const fetchMessages = useCallback(async (threadId: string) => {
-    try {
-      setIsLoadingMessages(true);
-
-      const response = await getMessages(threadId);
-      const uiMessages = response.messages.map(toUIMessage);
-
-      setMessages((prev) => ({
-        ...prev,
-        [threadId]: uiMessages,
-      }));
-
-      // Update thread's last message if we have messages
-      if (uiMessages.length > 0) {
-        const lastMsg = uiMessages[uiMessages.length - 1];
-        setThreads((prev) =>
-          prev.map((t) =>
-            t.id === threadId ? { ...t, lastMessage: lastMsg } : t
-          )
-        );
-      }
-    } catch (err) {
-      const apiError = err instanceof ApiError ? err : null;
-      const errorMessage = apiError?.userMessage || 'Failed to load messages';
-      setError(errorMessage);
-    } finally {
-      setIsLoadingMessages(false);
-    }
-  }, []);
-
-  // Initial data load
-  useEffect(() => {
-    fetchThreads();
-  }, [fetchThreads]);
-
-  // Load messages when thread is selected
-  useEffect(() => {
-    if (selectedThreadId && !messages[selectedThreadId]) {
-      fetchMessages(selectedThreadId);
-    }
-  }, [selectedThreadId, messages, fetchMessages]);
-
-  // ============================================================================
-  // Event Handlers
-  // ============================================================================
-
-  /**
-   * Handle selecting a thread from the sidebar.
-   */
-  const handleSelectThread = async (threadId: string) => {
+  const handleSelectThread = (threadId: string) => {
     setSelectedThreadId(threadId);
     setShowMobileThread(true);
 
-    // Mark thread as read via API
-    try {
-      await markThreadAsRead(threadId);
+    // Mark thread as read
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId ? { ...t, unreadCount: 0 } : t
+      )
+    );
 
-      // Update local state to reflect read status
-      setThreads((prev) =>
-        prev.map((t) =>
-          t.id === threadId ? { ...t, unreadCount: 0 } : t
-        )
-      );
-
-      // Mark local messages as read
-      setMessages((prev) => ({
-        ...prev,
-        [threadId]: prev[threadId]?.map((m) => ({ ...m, read: true })) || [],
-      }));
-    } catch (err) {
-      // Non-critical error, just log it
-      // Error silently handled - marking read is not critical
-    }
+    // Mark messages as read
+    setMessages((prev) => ({
+      ...prev,
+      [threadId]: prev[threadId]?.map((m) => ({ ...m, read: true })) || [],
+    }));
   };
 
-  /**
-   * Handle sending a new message.
-   */
-  const handleSendMessage = async (content: string) => {
-    if (!selectedThreadId || isSending) return;
+  const handleSendMessage = (content: string) => {
+    if (!selectedThreadId) return;
 
-    try {
-      setIsSending(true);
+    const newMessage: Message = {
+      id: `msg-${Date.now()}`,
+      threadId: selectedThreadId,
+      senderId: CURRENT_USER_ID,
+      senderName: 'You',
+      content,
+      timestamp: new Date().toISOString(),
+      read: true,
+    };
 
-      // Send message via API
-      const newMessage = await sendTextMessage(selectedThreadId, content);
-      const uiMessage = toUIMessage(newMessage);
+    // Add message to thread
+    setMessages((prev) => ({
+      ...prev,
+      [selectedThreadId]: [...(prev[selectedThreadId] || []), newMessage],
+    }));
 
-      // Add message to local state
-      setMessages((prev) => ({
-        ...prev,
-        [selectedThreadId]: [...(prev[selectedThreadId] || []), uiMessage],
-      }));
-
-      // Update thread's last message
-      setThreads((prev) =>
-        prev.map((t) =>
-          t.id === selectedThreadId
-            ? { ...t, lastMessage: uiMessage }
-            : t
-        )
-      );
-    } catch (err) {
-      const apiError = err instanceof ApiError ? err : null;
-      const errorMessage = apiError?.userMessage || 'Failed to send message';
-      setError(errorMessage);
-    } finally {
-      setIsSending(false);
-    }
+    // Update thread's last message
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === selectedThreadId
+          ? { ...t, lastMessage: newMessage }
+          : t
+      )
+    );
   };
 
-  /**
-   * Handle going back to thread list on mobile.
-   */
   const handleBackToList = () => {
     setShowMobileThread(false);
   };
 
-  /**
-   * Dismiss error message.
-   */
-  const handleDismissError = () => {
-    setError(null);
-  };
-
-  // ============================================================================
-  // Render
-  // ============================================================================
-
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col">
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-50 border-b border-red-200 px-4 py-3">
-          <div className="mx-auto max-w-7xl flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <svg
-                className="h-5 w-5 text-red-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span className="text-sm text-red-700">{error}</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleDismissError}
-              className="text-red-400 hover:text-red-600"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-4 py-4">
         <div className="mx-auto max-w-7xl">
@@ -340,9 +222,7 @@ export default function MessagesPage() {
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Messages</h1>
                 <p className="text-sm text-gray-600">
-                  {isLoadingThreads
-                    ? 'Loading...'
-                    : totalUnread > 0
+                  {totalUnread > 0
                     ? `${totalUnread} unread message${totalUnread !== 1 ? 's' : ''}`
                     : 'All caught up'}
                 </p>
@@ -381,14 +261,7 @@ export default function MessagesPage() {
             showMobileThread ? 'hidden md:block' : 'block'
           } w-full md:w-80 lg:w-96 border-r border-gray-200 bg-white overflow-y-auto`}
         >
-          {isLoadingThreads ? (
-            <div className="flex h-full items-center justify-center p-8">
-              <div className="text-center">
-                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-primary" />
-                <p className="text-sm text-gray-500">Loading conversations...</p>
-              </div>
-            </div>
-          ) : threads.length > 0 ? (
+          {threads.length > 0 ? (
             <div>
               {threads.map((thread) => (
                 <ThreadPreview
@@ -494,25 +367,16 @@ export default function MessagesPage() {
               </div>
 
               {/* Messages */}
-              {isLoadingMessages ? (
-                <div className="flex flex-1 items-center justify-center p-8">
-                  <div className="text-center">
-                    <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-primary" />
-                    <p className="text-sm text-gray-500">Loading messages...</p>
-                  </div>
-                </div>
-              ) : (
-                <MessageThread
-                  messages={selectedMessages}
-                  currentUserId={CURRENT_USER_ID}
-                />
-              )}
+              <MessageThread
+                messages={selectedMessages}
+                currentUserId={CURRENT_USER_ID}
+              />
 
               {/* Message composer */}
-              <MessageComposer
+              <EnhancedMessageComposer
                 onSendMessage={handleSendMessage}
-                disabled={isSending}
                 placeholder="Type a message to the teacher..."
+                showQualityCoach
               />
             </>
           ) : (
@@ -534,12 +398,10 @@ export default function MessagesPage() {
                   </svg>
                 </div>
                 <h3 className="text-lg font-medium text-gray-900">
-                  {isLoadingThreads ? 'Loading...' : 'Select a conversation'}
+                  Select a conversation
                 </h3>
                 <p className="mt-2 text-sm text-gray-500">
-                  {isLoadingThreads
-                    ? 'Please wait while we load your conversations.'
-                    : 'Choose a conversation from the list to view messages.'}
+                  Choose a conversation from the list to view messages.
                 </p>
               </div>
             </div>

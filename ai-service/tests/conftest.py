@@ -245,73 +245,66 @@ CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(chi
 """
 
 
-# SQLite-compatible messaging tables (PostgreSQL types adapted for SQLite)
-SQLITE_CREATE_MESSAGING_TABLES_SQL = """
-CREATE TABLE IF NOT EXISTS message_threads (
+# SQLite-compatible message quality tables (PostgreSQL ARRAY not supported in SQLite)
+SQLITE_CREATE_MESSAGE_QUALITY_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS message_analyses (
     id TEXT PRIMARY KEY,
-    subject VARCHAR(255) NOT NULL,
-    thread_type VARCHAR(50) NOT NULL DEFAULT 'daily_log',
+    user_id TEXT NOT NULL,
     child_id TEXT,
-    created_by TEXT NOT NULL,
-    participants TEXT NOT NULL DEFAULT '[]',
-    is_active INTEGER NOT NULL DEFAULT 1,
+    message_text TEXT NOT NULL,
+    language VARCHAR(2) NOT NULL DEFAULT 'en',
+    context VARCHAR(50) NOT NULL DEFAULT 'general_update',
+    quality_score INTEGER NOT NULL DEFAULT 0,
+    is_acceptable INTEGER NOT NULL DEFAULT 0,
+    issues_detected TEXT,
+    has_positive_opening INTEGER NOT NULL DEFAULT 0,
+    has_factual_basis INTEGER NOT NULL DEFAULT 1,
+    has_solution_focus INTEGER NOT NULL DEFAULT 0,
+    rewrite_suggested INTEGER NOT NULL DEFAULT 0,
+    rewrite_accepted INTEGER,
+    analysis_notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS messages (
+CREATE TABLE IF NOT EXISTS message_templates (
     id TEXT PRIMARY KEY,
-    thread_id TEXT NOT NULL REFERENCES message_threads(id) ON DELETE CASCADE,
-    sender_id TEXT NOT NULL,
-    sender_type VARCHAR(50) NOT NULL,
+    title VARCHAR(200) NOT NULL,
     content TEXT NOT NULL,
-    content_type VARCHAR(50) NOT NULL DEFAULT 'text',
-    is_read INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS message_attachments (
-    id TEXT PRIMARY KEY,
-    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    file_url VARCHAR(500) NOT NULL,
-    file_type VARCHAR(100) NOT NULL,
-    file_name VARCHAR(255) NOT NULL,
-    file_size INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS notification_channels (
-    id TEXT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL UNIQUE,
-    display_name VARCHAR(100) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    language VARCHAR(2) NOT NULL DEFAULT 'en',
+    description TEXT,
+    is_system INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS notification_preferences (
+CREATE TABLE IF NOT EXISTS training_examples (
     id TEXT PRIMARY KEY,
-    parent_id TEXT NOT NULL,
-    notification_type VARCHAR(50) NOT NULL,
-    channel VARCHAR(50) NOT NULL,
-    is_enabled INTEGER NOT NULL DEFAULT 1,
-    frequency VARCHAR(20) NOT NULL DEFAULT 'immediate',
-    quiet_hours_start VARCHAR(5),
-    quiet_hours_end VARCHAR(5),
+    original_message TEXT NOT NULL,
+    improved_message TEXT NOT NULL,
+    issues_demonstrated TEXT NOT NULL,
+    explanation TEXT NOT NULL,
+    language VARCHAR(2) NOT NULL DEFAULT 'en',
+    difficulty_level VARCHAR(20) NOT NULL DEFAULT 'beginner',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    helpfulness_score REAL,
+    created_by TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_message_threads_created_by ON message_threads(created_by);
-CREATE INDEX IF NOT EXISTS idx_message_threads_child ON message_threads(child_id);
-CREATE INDEX IF NOT EXISTS idx_message_threads_child_type ON message_threads(child_id, thread_type);
-CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id);
-CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
-CREATE INDEX IF NOT EXISTS idx_messages_thread_created ON messages(thread_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_attachments_message ON message_attachments(message_id);
-CREATE INDEX IF NOT EXISTS idx_notification_preferences_parent ON notification_preferences(parent_id);
-CREATE INDEX IF NOT EXISTS idx_notification_preferences_parent_type ON notification_preferences(parent_id, notification_type);
+CREATE INDEX IF NOT EXISTS idx_message_analyses_user ON message_analyses(user_id);
+CREATE INDEX IF NOT EXISTS idx_message_analyses_child ON message_analyses(child_id);
+CREATE INDEX IF NOT EXISTS idx_message_analyses_language ON message_analyses(language);
+CREATE INDEX IF NOT EXISTS idx_message_templates_category ON message_templates(category);
+CREATE INDEX IF NOT EXISTS idx_message_templates_language ON message_templates(language);
+CREATE INDEX IF NOT EXISTS idx_training_examples_language ON training_examples(language);
+CREATE INDEX IF NOT EXISTS idx_training_examples_difficulty ON training_examples(difficulty_level);
 """
 
 
@@ -403,9 +396,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
-    # Create messaging tables via raw SQL (SQLite compatibility)
+    # Create message quality tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_MESSAGING_TABLES_SQL.strip().split(';'):
+        for statement in SQLITE_CREATE_MESSAGE_QUALITY_TABLES_SQL.strip().split(';'):
             statement = statement.strip()
             if statement:
                 await conn.execute(text(statement))
@@ -432,12 +425,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
-        # Drop messaging tables
-        await conn.execute(text("DROP TABLE IF EXISTS message_attachments"))
-        await conn.execute(text("DROP TABLE IF EXISTS messages"))
-        await conn.execute(text("DROP TABLE IF EXISTS message_threads"))
-        await conn.execute(text("DROP TABLE IF EXISTS notification_preferences"))
-        await conn.execute(text("DROP TABLE IF EXISTS notification_channels"))
+        # Drop message quality tables
+        await conn.execute(text("DROP TABLE IF EXISTS message_analyses"))
+        await conn.execute(text("DROP TABLE IF EXISTS message_templates"))
+        await conn.execute(text("DROP TABLE IF EXISTS training_examples"))
 
 
 @pytest_asyncio.fixture
@@ -1628,610 +1619,3 @@ async def sample_home_activities(
         activities.append(activity)
 
     return activities
-
-
-# ============================================================================
-# Messaging fixtures
-# ============================================================================
-
-
-class MockMessageThread:
-    """Mock MessageThread object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        subject,
-        thread_type,
-        child_id,
-        created_by,
-        participants,
-        is_active,
-        created_at,
-        updated_at,
-    ):
-        self.id = id
-        self.subject = subject
-        self.thread_type = thread_type
-        self.child_id = child_id
-        self.created_by = created_by
-        self.participants = participants
-        self.is_active = is_active
-        self.created_at = created_at
-        self.updated_at = updated_at
-
-    def __repr__(self) -> str:
-        return f"<MessageThread(id={self.id}, subject='{self.subject}', type={self.thread_type})>"
-
-
-class MockMessage:
-    """Mock Message object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        thread_id,
-        sender_id,
-        sender_type,
-        content,
-        content_type,
-        is_read,
-        created_at,
-        updated_at,
-    ):
-        self.id = id
-        self.thread_id = thread_id
-        self.sender_id = sender_id
-        self.sender_type = sender_type
-        self.content = content
-        self.content_type = content_type
-        self.is_read = is_read
-        self.created_at = created_at
-        self.updated_at = updated_at
-
-    def __repr__(self) -> str:
-        return f"<Message(id={self.id}, thread_id={self.thread_id}, sender_type={self.sender_type})>"
-
-
-class MockMessageAttachment:
-    """Mock MessageAttachment object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        message_id,
-        file_url,
-        file_type,
-        file_name,
-        file_size,
-        created_at,
-    ):
-        self.id = id
-        self.message_id = message_id
-        self.file_url = file_url
-        self.file_type = file_type
-        self.file_name = file_name
-        self.file_size = file_size
-        self.created_at = created_at
-
-    def __repr__(self) -> str:
-        return f"<MessageAttachment(id={self.id}, file_name='{self.file_name}')>"
-
-
-class MockNotificationPreference:
-    """Mock NotificationPreference object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        parent_id,
-        notification_type,
-        channel,
-        is_enabled,
-        quiet_hours_start,
-        quiet_hours_end,
-        created_at,
-        updated_at,
-    ):
-        self.id = id
-        self.parent_id = parent_id
-        self.notification_type = notification_type
-        self.channel = channel
-        self.is_enabled = is_enabled
-        self.quiet_hours_start = quiet_hours_start
-        self.quiet_hours_end = quiet_hours_end
-        self.created_at = created_at
-        self.updated_at = updated_at
-
-    def __repr__(self) -> str:
-        return f"<NotificationPreference(id={self.id}, type={self.notification_type}, channel={self.channel})>"
-
-
-async def create_message_thread_in_db(
-    session: AsyncSession,
-    subject: str,
-    created_by: UUID,
-    thread_type: str = "daily_log",
-    child_id: Optional[UUID] = None,
-    participants: Optional[List[str]] = None,
-    is_active: bool = True,
-) -> MockMessageThread:
-    """Helper function to create a message thread directly in SQLite database."""
-    import json
-
-    thread_id = str(uuid4())
-    participants_json = json.dumps(participants or [str(created_by)])
-    now = datetime.now(timezone.utc)
-
-    await session.execute(
-        text("""
-            INSERT INTO message_threads (
-                id, subject, thread_type, child_id, created_by,
-                participants, is_active, created_at, updated_at
-            ) VALUES (
-                :id, :subject, :thread_type, :child_id, :created_by,
-                :participants, :is_active, :created_at, :updated_at
-            )
-        """),
-        {
-            "id": thread_id,
-            "subject": subject,
-            "thread_type": thread_type,
-            "child_id": str(child_id) if child_id else None,
-            "created_by": str(created_by),
-            "participants": participants_json,
-            "is_active": 1 if is_active else 0,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockMessageThread(
-        id=UUID(thread_id),
-        subject=subject,
-        thread_type=thread_type,
-        child_id=child_id,
-        created_by=created_by,
-        participants=participants or [str(created_by)],
-        is_active=is_active,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-async def create_message_in_db(
-    session: AsyncSession,
-    thread_id: UUID,
-    sender_id: UUID,
-    content: str,
-    sender_type: str = "parent",
-    content_type: str = "text",
-    is_read: bool = False,
-) -> MockMessage:
-    """Helper function to create a message directly in SQLite database."""
-    message_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-
-    await session.execute(
-        text("""
-            INSERT INTO messages (
-                id, thread_id, sender_id, sender_type, content,
-                content_type, is_read, created_at, updated_at
-            ) VALUES (
-                :id, :thread_id, :sender_id, :sender_type, :content,
-                :content_type, :is_read, :created_at, :updated_at
-            )
-        """),
-        {
-            "id": message_id,
-            "thread_id": str(thread_id),
-            "sender_id": str(sender_id),
-            "sender_type": sender_type,
-            "content": content,
-            "content_type": content_type,
-            "is_read": 1 if is_read else 0,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockMessage(
-        id=UUID(message_id),
-        thread_id=thread_id,
-        sender_id=sender_id,
-        sender_type=sender_type,
-        content=content,
-        content_type=content_type,
-        is_read=is_read,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-async def create_message_attachment_in_db(
-    session: AsyncSession,
-    message_id: UUID,
-    file_url: str,
-    file_type: str,
-    file_name: str,
-    file_size: Optional[int] = None,
-) -> MockMessageAttachment:
-    """Helper function to create a message attachment directly in SQLite database."""
-    attachment_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-
-    await session.execute(
-        text("""
-            INSERT INTO message_attachments (
-                id, message_id, file_url, file_type, file_name,
-                file_size, created_at
-            ) VALUES (
-                :id, :message_id, :file_url, :file_type, :file_name,
-                :file_size, :created_at
-            )
-        """),
-        {
-            "id": attachment_id,
-            "message_id": str(message_id),
-            "file_url": file_url,
-            "file_type": file_type,
-            "file_name": file_name,
-            "file_size": file_size,
-            "created_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockMessageAttachment(
-        id=UUID(attachment_id),
-        message_id=message_id,
-        file_url=file_url,
-        file_type=file_type,
-        file_name=file_name,
-        file_size=file_size,
-        created_at=now,
-    )
-
-
-async def create_notification_pref_in_db(
-    session: AsyncSession,
-    parent_id: UUID,
-    notification_type: str = "message",
-    channel: str = "email",
-    is_enabled: bool = True,
-    quiet_hours_start: Optional[str] = None,
-    quiet_hours_end: Optional[str] = None,
-) -> MockNotificationPreference:
-    """Helper function to create a notification preference directly in SQLite database."""
-    pref_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-
-    await session.execute(
-        text("""
-            INSERT INTO notification_preferences (
-                id, parent_id, notification_type, channel, is_enabled,
-                quiet_hours_start, quiet_hours_end, created_at, updated_at
-            ) VALUES (
-                :id, :parent_id, :notification_type, :channel, :is_enabled,
-                :quiet_hours_start, :quiet_hours_end, :created_at, :updated_at
-            )
-        """),
-        {
-            "id": pref_id,
-            "parent_id": str(parent_id),
-            "notification_type": notification_type,
-            "channel": channel,
-            "is_enabled": 1 if is_enabled else 0,
-            "quiet_hours_start": quiet_hours_start,
-            "quiet_hours_end": quiet_hours_end,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockNotificationPreference(
-        id=UUID(pref_id),
-        parent_id=parent_id,
-        notification_type=notification_type,
-        channel=channel,
-        is_enabled=is_enabled,
-        quiet_hours_start=quiet_hours_start,
-        quiet_hours_end=quiet_hours_end,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-@pytest.fixture
-def test_educator_id() -> UUID:
-    """Generate a consistent test educator ID for messaging tests."""
-    return UUID("11111111-2222-3333-4444-555555555555")
-
-
-@pytest.fixture
-def sample_thread_data(test_user_id: UUID, test_child_id: UUID) -> Dict[str, Any]:
-    """Create sample thread data for testing."""
-    return {
-        "subject": "Daily Update for Emma",
-        "thread_type": "daily_log",
-        "child_id": test_child_id,
-        "created_by": test_user_id,
-        "participants": [str(test_user_id)],
-        "is_active": True,
-    }
-
-
-@pytest.fixture
-def sample_message_data(test_user_id: UUID) -> Dict[str, Any]:
-    """Create sample message data for testing."""
-    return {
-        "sender_id": test_user_id,
-        "sender_type": "parent",
-        "content": "Thank you for the update! How was Emma's nap today?",
-        "content_type": "text",
-        "is_read": False,
-    }
-
-
-@pytest.fixture
-def sample_notification_pref_data(test_parent_id: UUID) -> Dict[str, Any]:
-    """Create sample notification preference data for testing."""
-    return {
-        "parent_id": test_parent_id,
-        "notification_type": "message",
-        "channel": "email",
-        "is_enabled": True,
-        "quiet_hours_start": "22:00",
-        "quiet_hours_end": "07:00",
-    }
-
-
-@pytest_asyncio.fixture
-async def sample_message_thread(
-    db_session: AsyncSession,
-    test_user_id: UUID,
-    test_child_id: UUID,
-) -> MockMessageThread:
-    """Create a sample message thread in the database."""
-    return await create_message_thread_in_db(
-        db_session,
-        subject="Daily Update for Emma",
-        created_by=test_user_id,
-        thread_type="daily_log",
-        child_id=test_child_id,
-        participants=[str(test_user_id)],
-        is_active=True,
-    )
-
-
-@pytest_asyncio.fixture
-async def sample_message(
-    db_session: AsyncSession,
-    sample_message_thread: MockMessageThread,
-    test_user_id: UUID,
-) -> MockMessage:
-    """Create a sample message in the database."""
-    return await create_message_in_db(
-        db_session,
-        thread_id=sample_message_thread.id,
-        sender_id=test_user_id,
-        content="Hello! Here is today's update for Emma.",
-        sender_type="educator",
-        content_type="text",
-        is_read=False,
-    )
-
-
-@pytest_asyncio.fixture
-async def sample_message_attachment(
-    db_session: AsyncSession,
-    sample_message: MockMessage,
-) -> MockMessageAttachment:
-    """Create a sample message attachment in the database."""
-    return await create_message_attachment_in_db(
-        db_session,
-        message_id=sample_message.id,
-        file_url="https://example.com/photos/emma-art-project.jpg",
-        file_type="image/jpeg",
-        file_name="emma-art-project.jpg",
-        file_size=245678,
-    )
-
-
-@pytest_asyncio.fixture
-async def sample_notification_pref(
-    db_session: AsyncSession,
-    test_parent_id: UUID,
-) -> MockNotificationPreference:
-    """Create a sample notification preference in the database."""
-    return await create_notification_pref_in_db(
-        db_session,
-        parent_id=test_parent_id,
-        notification_type="message",
-        channel="email",
-        is_enabled=True,
-        quiet_hours_start="22:00",
-        quiet_hours_end="07:00",
-    )
-
-
-@pytest_asyncio.fixture
-async def sample_message_threads(
-    db_session: AsyncSession,
-    test_user_id: UUID,
-    test_child_id: UUID,
-    test_educator_id: UUID,
-) -> List[MockMessageThread]:
-    """Create multiple sample message threads with varied properties."""
-    threads_data = [
-        {
-            "subject": "Daily Update - Monday",
-            "thread_type": "daily_log",
-            "child_id": test_child_id,
-            "created_by": test_educator_id,
-            "participants": [str(test_educator_id), str(test_user_id)],
-        },
-        {
-            "subject": "Upcoming Field Trip",
-            "thread_type": "announcement",
-            "child_id": test_child_id,
-            "created_by": test_educator_id,
-            "participants": [str(test_educator_id), str(test_user_id)],
-        },
-        {
-            "subject": "Question about meals",
-            "thread_type": "inquiry",
-            "child_id": test_child_id,
-            "created_by": test_user_id,
-            "participants": [str(test_user_id), str(test_educator_id)],
-        },
-        {
-            "subject": "Behavioral observation",
-            "thread_type": "progress",
-            "child_id": test_child_id,
-            "created_by": test_educator_id,
-            "participants": [str(test_educator_id), str(test_user_id)],
-        },
-        {
-            "subject": "Schedule change request",
-            "thread_type": "inquiry",
-            "child_id": test_child_id,
-            "created_by": test_user_id,
-            "participants": [str(test_user_id), str(test_educator_id)],
-        },
-    ]
-
-    threads = []
-    for data in threads_data:
-        thread = await create_message_thread_in_db(db_session, **data)
-        threads.append(thread)
-
-    return threads
-
-
-@pytest_asyncio.fixture
-async def sample_messages_in_thread(
-    db_session: AsyncSession,
-    sample_message_thread: MockMessageThread,
-    test_user_id: UUID,
-    test_educator_id: UUID,
-) -> List[MockMessage]:
-    """Create multiple messages within a single thread."""
-    messages_data = [
-        {
-            "sender_id": test_educator_id,
-            "sender_type": "educator",
-            "content": "Good morning! Emma had a wonderful day today.",
-            "is_read": True,
-        },
-        {
-            "sender_id": test_user_id,
-            "sender_type": "parent",
-            "content": "That's great to hear! Did she eat her lunch?",
-            "is_read": True,
-        },
-        {
-            "sender_id": test_educator_id,
-            "sender_type": "educator",
-            "content": "Yes, she ate all her vegetables today!",
-            "is_read": True,
-        },
-        {
-            "sender_id": test_user_id,
-            "sender_type": "parent",
-            "content": "Wonderful, thank you for the update!",
-            "is_read": False,
-        },
-    ]
-
-    messages = []
-    for data in messages_data:
-        message = await create_message_in_db(
-            db_session,
-            thread_id=sample_message_thread.id,
-            **data,
-        )
-        messages.append(message)
-
-    return messages
-
-
-@pytest_asyncio.fixture
-async def sample_notification_prefs(
-    db_session: AsyncSession,
-    test_parent_id: UUID,
-) -> List[MockNotificationPreference]:
-    """Create multiple notification preferences for a parent."""
-    prefs_data = [
-        {
-            "notification_type": "message",
-            "channel": "email",
-            "is_enabled": True,
-        },
-        {
-            "notification_type": "message",
-            "channel": "push",
-            "is_enabled": True,
-        },
-        {
-            "notification_type": "daily_report",
-            "channel": "email",
-            "is_enabled": True,
-        },
-        {
-            "notification_type": "announcement",
-            "channel": "email",
-            "is_enabled": False,
-        },
-        {
-            "notification_type": "announcement",
-            "channel": "push",
-            "is_enabled": True,
-        },
-    ]
-
-    prefs = []
-    for data in prefs_data:
-        pref = await create_notification_pref_in_db(
-            db_session,
-            parent_id=test_parent_id,
-            **data,
-        )
-        prefs.append(pref)
-
-    return prefs
-
-
-@pytest.fixture
-def sample_thread_create_request(test_child_id: UUID) -> Dict[str, Any]:
-    """Create a sample thread creation request payload."""
-    return {
-        "subject": "Question about today's activities",
-        "thread_type": "inquiry",
-        "child_id": str(test_child_id),
-    }
-
-
-@pytest.fixture
-def sample_message_create_request() -> Dict[str, Any]:
-    """Create a sample message creation request payload."""
-    return {
-        "content": "Hello, I wanted to ask about Emma's progress this week.",
-        "content_type": "text",
-    }
-
-
-@pytest.fixture
-def sample_notification_pref_request(test_parent_id: UUID) -> Dict[str, Any]:
-    """Create a sample notification preference request payload."""
-    return {
-        "parent_id": str(test_parent_id),
-        "notification_type": "message",
-        "channel": "email",
-        "is_enabled": True,
-        "quiet_hours_start": "21:00",
-        "quiet_hours_end": "08:00",
-    }
