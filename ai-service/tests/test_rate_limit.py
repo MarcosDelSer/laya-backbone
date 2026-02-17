@@ -1,233 +1,399 @@
-"""Tests for rate limiting middleware."""
+"""Unit tests for rate limiting middleware.
+
+Tests for rate limiter configuration, rate limiting behavior,
+limit enforcement, and reset functionality.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
+import redis.asyncio as redis
+from fastapi import Depends, FastAPI, Request, status
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
+from httpx import ASGITransport, AsyncClient
 
-from app.main import app
+from app.config import settings
 from app.middleware.rate_limit import (
     get_auth_limit,
+    get_auth_rate_limiter,
     get_general_limit,
-    get_rate_limit_key,
-    limiter,
+    get_general_rate_limiter,
 )
 
 
-class TestRateLimitConfiguration:
-    """Test rate limit configuration and helper functions."""
+@pytest.fixture
+async def redis_connection():
+    """Create a Redis connection for testing.
 
-    def test_get_general_limit(self):
-        """Test general rate limit configuration."""
-        limit = get_general_limit()
-        assert limit == "100 per minute"
+    Returns:
+        redis.Redis: Redis connection instance
+    """
+    # Use in-memory Redis for testing
+    connection = redis.from_url(
+        "redis://localhost:6379/15",  # Use separate DB for tests
+        encoding="utf-8",
+        decode_responses=True,
+    )
 
-    def test_get_auth_limit(self):
-        """Test auth rate limit configuration."""
-        limit = get_auth_limit()
-        assert limit == "10 per minute"
+    # Initialize FastAPILimiter with test Redis connection
+    await FastAPILimiter.init(connection)
 
-    def test_limiter_instance_created(self):
-        """Test that limiter instance is properly created."""
-        assert limiter is not None
-        # Verify limiter is a Limiter instance
-        from slowapi import Limiter
-        assert isinstance(limiter, Limiter)
+    yield connection
 
-
-class TestRateLimitKey:
-    """Test rate limit key generation for different endpoint types."""
-
-    def test_get_rate_limit_key_general_endpoint(self):
-        """Test rate limit key for general endpoints."""
-        # Create a mock request
-        class MockURL:
-            path = "/api/v1/coaching/guidance"
-
-        class MockRequest:
-            url = MockURL()
-            client = type('obj', (object,), {'host': '127.0.0.1'})
-
-        request = MockRequest()
-        key = get_rate_limit_key(request)
-
-        # Should start with 'general:' for non-auth endpoints
-        assert key.startswith("general:")
-
-    def test_get_rate_limit_key_auth_endpoint(self):
-        """Test rate limit key for auth endpoints."""
-        # Create a mock request for protected endpoint
-        class MockURL:
-            path = "/protected"
-
-        class MockRequest:
-            url = MockURL()
-            client = type('obj', (object,), {'host': '127.0.0.1'})
-
-        request = MockRequest()
-        key = get_rate_limit_key(request)
-
-        # Should start with 'auth:' for auth endpoints
-        assert key.startswith("auth:")
-
-    def test_get_rate_limit_key_token_endpoint(self):
-        """Test rate limit key for token endpoint."""
-        class MockURL:
-            path = "/api/v1/token"
-
-        class MockRequest:
-            url = MockURL()
-            client = type('obj', (object,), {'host': '127.0.0.1'})
-
-        request = MockRequest()
-        key = get_rate_limit_key(request)
-
-        # Should start with 'auth:' for token endpoints
-        assert key.startswith("auth:")
+    # Cleanup: close FastAPILimiter and flush test database
+    await FastAPILimiter.close()
+    await connection.flushdb()
+    await connection.aclose()
 
 
-class TestRateLimitMiddleware:
-    """Test rate limiting middleware in action."""
+@pytest.fixture
+async def test_app(redis_connection) -> FastAPI:
+    """Create a test FastAPI app with rate limiting.
 
-    def test_health_check_within_limit(self):
-        """Test health check endpoint respects rate limit."""
-        client = TestClient(app)
+    Args:
+        redis_connection: Redis connection fixture
 
-        # Make a request within limit
-        response = client.get("/")
+    Returns:
+        FastAPI: Test application instance with rate limiting
+    """
+    app = FastAPI()
 
-        assert response.status_code == 200
-        # Check for rate limit headers
-        assert "X-RateLimit-Limit" in response.headers or response.status_code == 200
+    # Test endpoint with general rate limiting
+    @app.get("/test/general")
+    async def test_general(
+        request: Request,
+        rate_limit: RateLimiter = Depends(get_general_rate_limiter),
+    ) -> dict[str, Any]:
+        """Test endpoint with general rate limiting."""
+        return {"message": "success", "endpoint": "general"}
 
-    def test_general_endpoint_rate_limit_not_exceeded(self):
-        """Test that requests within limit are successful."""
-        client = TestClient(app)
+    # Test endpoint with auth rate limiting
+    @app.get("/test/auth")
+    async def test_auth(
+        request: Request,
+        rate_limit: RateLimiter = Depends(get_auth_rate_limiter),
+    ) -> dict[str, Any]:
+        """Test endpoint with auth rate limiting."""
+        return {"message": "success", "endpoint": "auth"}
 
-        # Make several requests (well under 100/min)
-        for _ in range(5):
-            response = client.get("/")
-            assert response.status_code == 200
+    # Test endpoint with custom rate limiting (2 per minute for testing)
+    @app.get("/test/custom")
+    async def test_custom(
+        request: Request,
+        rate_limit: RateLimiter = Depends(RateLimiter(times=2, seconds=60)),
+    ) -> dict[str, Any]:
+        """Test endpoint with custom low rate limit."""
+        return {"message": "success", "endpoint": "custom"}
 
-    def test_protected_endpoint_has_stricter_limit(self):
-        """Test that protected endpoint has auth-specific rate limit."""
-        client = TestClient(app)
-
-        # The protected endpoint should have a 10/min limit
-        # Even without auth token, the rate limiter should apply
-        # (we'll get 401 due to auth, but rate limiting still happens)
-
-        # Make a request to verify rate limiting is active
-        response = client.get("/protected")
-
-        # Either unauthorized (401) or rate limited (429), but rate limiter is active
-        assert response.status_code in [401, 429]
-
-    def test_rate_limit_headers_present(self):
-        """Test that rate limit headers are included in responses."""
-        client = TestClient(app)
-
-        response = client.get("/")
-
-        # SlowAPI adds rate limit headers to responses
-        # The exact headers depend on SlowAPI version and configuration
-        assert response.status_code == 200
-
-    def test_rate_limit_applied_to_app(self):
-        """Test that rate limiter is properly attached to app state."""
-        assert hasattr(app.state, "limiter")
-        assert app.state.limiter is limiter
+    return app
 
 
-class TestRateLimitExceeded:
-    """Test behavior when rate limits are exceeded."""
+@pytest.mark.asyncio
+async def test_get_general_limit() -> None:
+    """Test general rate limit configuration string.
 
-    def test_rate_limit_exceeded_returns_429(self):
-        """Test that exceeding rate limit returns 429 status code."""
-        # Create a new app instance with very low limit for testing
-        test_app = FastAPI()
-        test_limiter = limiter
+    Verifies that the general rate limit string is properly formatted
+    and uses the correct value from settings.
+    """
+    limit = get_general_limit()
+    assert limit == f"{settings.rate_limit_general} per minute"
+    assert limit == "100 per minute"  # Default value
 
-        # Add limiter to test app
-        test_app.state.limiter = test_limiter
 
-        from slowapi import _rate_limit_exceeded_handler
-        from slowapi.errors import RateLimitExceeded
+@pytest.mark.asyncio
+async def test_get_auth_limit() -> None:
+    """Test auth rate limit configuration string.
 
-        test_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    Verifies that the auth rate limit string is properly formatted
+    and uses the correct value from settings.
+    """
+    limit = get_auth_limit()
+    assert limit == f"{settings.rate_limit_auth} per minute"
+    assert limit == "10 per minute"  # Default value
 
-        @test_app.get("/test")
-        @test_limiter.limit("2 per minute")
-        async def test_endpoint(request: Request):
-            return {"message": "success"}
 
-        client = TestClient(test_app)
+@pytest.mark.asyncio
+async def test_get_general_rate_limiter() -> None:
+    """Test general rate limiter dependency creation.
 
-        # Make requests up to the limit
-        response1 = client.get("/test")
-        assert response1.status_code == 200
+    Verifies that the general rate limiter is properly configured
+    with the correct number of requests and time window.
+    """
+    limiter = get_general_rate_limiter()
 
-        response2 = client.get("/test")
-        assert response2.status_code == 200
+    assert isinstance(limiter, RateLimiter)
+    assert limiter.times == settings.rate_limit_general
+    assert limiter.seconds == 60
+
+
+@pytest.mark.asyncio
+async def test_get_auth_rate_limiter() -> None:
+    """Test auth rate limiter dependency creation.
+
+    Verifies that the auth rate limiter is properly configured
+    with stricter limits than general endpoints.
+    """
+    limiter = get_auth_rate_limiter()
+
+    assert isinstance(limiter, RateLimiter)
+    assert limiter.times == settings.rate_limit_auth
+    assert limiter.seconds == 60
+
+    # Auth limiter should be stricter than general
+    assert limiter.times < get_general_rate_limiter().times
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_allows_requests_within_limit(
+    test_app: FastAPI,
+) -> None:
+    """Test that requests within rate limit are allowed.
+
+    Args:
+        test_app: Test FastAPI application
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        # Make multiple requests within the limit
+        for i in range(3):
+            response = await client.get("/test/general")
+
+            assert response.status_code == status.HTTP_200_OK
+            data = response.json()
+            assert data["message"] == "success"
+            assert data["endpoint"] == "general"
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_blocks_requests_exceeding_limit(
+    test_app: FastAPI,
+) -> None:
+    """Test that requests exceeding rate limit are blocked.
+
+    Args:
+        test_app: Test FastAPI application
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        # Make requests up to the limit (2 per minute on custom endpoint)
+        response1 = await client.get("/test/custom")
+        assert response1.status_code == status.HTTP_200_OK
+
+        response2 = await client.get("/test/custom")
+        assert response2.status_code == status.HTTP_200_OK
 
         # Third request should be rate limited
-        response3 = client.get("/test")
-        assert response3.status_code == 429
-
-    def test_different_clients_have_separate_limits(self):
-        """Test that different IP addresses have separate rate limits."""
-        # This test verifies that rate limiting is per-client
-        # In practice, TestClient uses the same IP, but the middleware
-        # should track clients separately based on IP address
-
-        client = TestClient(app)
-
-        # Make request as one client
-        response1 = client.get("/")
-        assert response1.status_code == 200
-
-        # The same client making another request should share the limit
-        response2 = client.get("/")
-        assert response2.status_code == 200
-
-        # Both requests count toward the same client's limit
-        # (actual separation of clients requires different IPs in production)
+        response3 = await client.get("/test/custom")
+        assert response3.status_code == status.HTTP_429_TOO_MANY_REQUESTS
 
 
-class TestRateLimitIntegration:
-    """Test rate limiting integration with the full application."""
+@pytest.mark.asyncio
+async def test_rate_limiter_error_response_format(
+    test_app: FastAPI,
+) -> None:
+    """Test that rate limit error response has correct format.
 
-    def test_rate_limit_does_not_affect_cors(self):
-        """Test that rate limiting works alongside CORS middleware."""
-        client = TestClient(app)
+    Args:
+        test_app: Test FastAPI application
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        # Exhaust the rate limit
+        await client.get("/test/custom")
+        await client.get("/test/custom")
 
-        response = client.get(
-            "/",
-            headers={
-                "Origin": "http://localhost:3000"
-            }
+        # Get rate limited response
+        response = await client.get("/test/custom")
+
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert "detail" in response.json() or "error" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_auth_endpoint_has_stricter_limit(
+    test_app: FastAPI,
+) -> None:
+    """Test that auth endpoints have stricter rate limits.
+
+    Args:
+        test_app: Test FastAPI application
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        # Auth endpoint should allow requests but with stricter limits
+        response = await client.get("/test/auth")
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify auth limiter configuration is stricter
+        auth_limiter = get_auth_rate_limiter()
+        general_limiter = get_general_rate_limiter()
+        assert auth_limiter.times < general_limiter.times
+
+
+@pytest.mark.asyncio
+async def test_different_endpoints_have_separate_limits(
+    test_app: FastAPI,
+) -> None:
+    """Test that different endpoints have independent rate limits.
+
+    Args:
+        test_app: Test FastAPI application
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        # Exhaust limit on custom endpoint
+        await client.get("/test/custom")
+        await client.get("/test/custom")
+        response = await client.get("/test/custom")
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+        # General endpoint should still work
+        response = await client.get("/test/general")
+        assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_reset_after_window(
+    test_app: FastAPI,
+    redis_connection,
+) -> None:
+    """Test that rate limits reset after the time window expires.
+
+    Args:
+        test_app: Test FastAPI application
+        redis_connection: Redis connection for manual cleanup
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        # Exhaust the rate limit
+        await client.get("/test/custom")
+        await client.get("/test/custom")
+
+        response = await client.get("/test/custom")
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+        # Simulate time passing by clearing Redis keys
+        # In production, FastAPILimiter would automatically expire keys
+        await redis_connection.flushdb()
+
+        # Re-initialize to reset state
+        await FastAPILimiter.close()
+        await FastAPILimiter.init(redis_connection)
+
+        # After reset, requests should work again
+        response = await client.get("/test/custom")
+        assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_per_client_isolation(
+    test_app: FastAPI,
+) -> None:
+    """Test that rate limits are isolated per client.
+
+    Args:
+        test_app: Test FastAPI application
+    """
+    # Note: AsyncClient uses the same client IP by default (127.0.0.1)
+    # In production, different IPs would have independent limits
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        # Make requests from "same client" (same IP in test)
+        response1 = await client.get("/test/custom")
+        assert response1.status_code == status.HTTP_200_OK
+
+        response2 = await client.get("/test/custom")
+        assert response2.status_code == status.HTTP_200_OK
+
+        # Third request should be rate limited (same client)
+        response3 = await client.get("/test/custom")
+        assert response3.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_with_concurrent_requests(
+    test_app: FastAPI,
+) -> None:
+    """Test rate limiting with concurrent requests.
+
+    Args:
+        test_app: Test FastAPI application
+    """
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app), base_url="http://test"
+    ) as client:
+        # Make concurrent requests
+        tasks = [
+            client.get("/test/custom")
+            for _ in range(5)
+        ]
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Count successful vs rate limited responses
+        success_count = sum(
+            1 for r in responses
+            if not isinstance(r, Exception) and r.status_code == status.HTTP_200_OK
+        )
+        rate_limited_count = sum(
+            1 for r in responses
+            if not isinstance(r, Exception) and r.status_code == status.HTTP_429_TOO_MANY_REQUESTS
         )
 
-        # Should succeed with both CORS and rate limiting active
-        assert response.status_code == 200
+        # Should have 2 successes (limit is 2/min) and rest rate limited
+        assert success_count == 2
+        assert rate_limited_count == 3
 
-    def test_rate_limit_works_with_different_methods(self):
-        """Test that rate limiting works for different HTTP methods."""
-        client = TestClient(app)
 
-        # GET request
-        response_get = client.get("/")
-        assert response_get.status_code == 200
+@pytest.mark.asyncio
+async def test_fastapi_limiter_initialization() -> None:
+    """Test FastAPILimiter initialization with Redis.
 
-        # OPTIONS request (CORS preflight)
-        response_options = client.options("/")
-        assert response_options.status_code in [200, 204, 405]
+    Verifies that FastAPILimiter can be properly initialized
+    and closed with a Redis connection.
+    """
+    connection = redis.from_url(
+        "redis://localhost:6379/15",
+        encoding="utf-8",
+        decode_responses=True,
+    )
 
-        # Rate limiting should apply to both
+    # Initialize should succeed
+    await FastAPILimiter.init(connection)
 
-    def test_limiter_uses_in_memory_storage(self):
-        """Test that limiter is configured with in-memory storage for development."""
-        # Check limiter configuration
-        assert limiter is not None
+    # Cleanup
+    await FastAPILimiter.close()
+    await connection.aclose()
 
-        # In-memory storage is configured in rate_limit.py
-        # This is suitable for development but should use Redis in production
+
+@pytest.mark.asyncio
+async def test_rate_limit_configuration_from_settings() -> None:
+    """Test that rate limit configuration matches settings.
+
+    Verifies that rate limiters use the values configured in settings.
+    """
+    general_limiter = get_general_rate_limiter()
+    auth_limiter = get_auth_rate_limiter()
+
+    # Check general limiter configuration
+    assert general_limiter.times == settings.rate_limit_general
+    assert general_limiter.seconds == 60
+
+    # Check auth limiter configuration
+    assert auth_limiter.times == settings.rate_limit_auth
+    assert auth_limiter.seconds == 60
+
+    # Verify defaults
+    assert settings.rate_limit_general == 100
+    assert settings.rate_limit_auth == 10
