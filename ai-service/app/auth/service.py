@@ -25,6 +25,7 @@ from app.auth.schemas import (
     PasswordResetConfirmResponse,
 )
 from app.auth.jwt import create_token as create_jwt_token, decode_token
+from app.auth.blacklist import TokenBlacklistService
 from app.core.security import verify_password, hash_password, hash_token
 from app.config import settings
 
@@ -250,14 +251,16 @@ class AuthService:
         Returns:
             bool: True if token is blacklisted, False otherwise
         """
-        stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none() is not None
+        blacklist_service = TokenBlacklistService()
+        try:
+            return await blacklist_service.is_token_blacklisted(token)
+        finally:
+            await blacklist_service.close()
 
     async def logout(self, logout_request: LogoutRequest) -> LogoutResponse:
         """Logout user by invalidating their tokens.
 
-        This method adds the provided tokens to a blacklist to prevent their
+        This method adds the provided tokens to a Redis blacklist to prevent their
         further use. Both access and refresh tokens can be invalidated.
 
         Args:
@@ -311,38 +314,34 @@ class AuthService:
         expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
         tokens_invalidated = 0
 
-        # Blacklist access token
-        access_blacklist = TokenBlacklist(
-            token=logout_request.access_token,
-            user_id=user_id,
-            expires_at=expires_at,
-        )
-        self.db.add(access_blacklist)
-        tokens_invalidated += 1
+        # Use Redis blacklist service
+        blacklist_service = TokenBlacklistService()
+        try:
+            # Blacklist access token
+            await blacklist_service.add_token_to_blacklist(
+                logout_request.access_token, expires_at
+            )
+            tokens_invalidated += 1
 
-        # Blacklist refresh token if provided
-        if logout_request.refresh_token:
-            try:
-                refresh_payload = decode_token(logout_request.refresh_token)
-                refresh_exp_timestamp = refresh_payload.get("exp")
-                if refresh_exp_timestamp:
-                    refresh_expires_at = datetime.fromtimestamp(
-                        refresh_exp_timestamp, tz=timezone.utc
-                    )
-                    refresh_blacklist = TokenBlacklist(
-                        token=logout_request.refresh_token,
-                        user_id=user_id,
-                        expires_at=refresh_expires_at,
-                    )
-                    self.db.add(refresh_blacklist)
-                    tokens_invalidated += 1
-            except HTTPException:
-                # If refresh token is invalid, we just skip blacklisting it
-                # The access token is still blacklisted, which is sufficient
-                pass
-
-        # Commit changes
-        await self.db.commit()
+            # Blacklist refresh token if provided
+            if logout_request.refresh_token:
+                try:
+                    refresh_payload = decode_token(logout_request.refresh_token)
+                    refresh_exp_timestamp = refresh_payload.get("exp")
+                    if refresh_exp_timestamp:
+                        refresh_expires_at = datetime.fromtimestamp(
+                            refresh_exp_timestamp, tz=timezone.utc
+                        )
+                        await blacklist_service.add_token_to_blacklist(
+                            logout_request.refresh_token, refresh_expires_at
+                        )
+                        tokens_invalidated += 1
+                except HTTPException:
+                    # If refresh token is invalid, we just skip blacklisting it
+                    # The access token is still blacklisted, which is sufficient
+                    pass
+        finally:
+            await blacklist_service.close()
 
         return LogoutResponse(
             message="Successfully logged out",
