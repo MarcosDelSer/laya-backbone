@@ -20,6 +20,16 @@ from app.database import get_db
 # HTTPBearer security scheme for Swagger UI integration
 security = HTTPBearer()
 
+# MFA-related constants
+MFA_VERIFIED_CLAIM = "mfa_verified"
+MFA_REQUIRED_CLAIM = "mfa_required"
+
+
+class MFARequiredError(Exception):
+    """Raised when MFA verification is required but not completed."""
+
+    pass
+
 
 class TokenPayload:
     """Represents the decoded JWT token payload.
@@ -97,6 +107,73 @@ async def verify_token(
             detail="Invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+async def verify_mfa_token(
+    credentials: HTTPAuthorizationCredentials,
+) -> dict[str, Any]:
+    """Verify JWT token and ensure MFA verification is completed.
+
+    This function first verifies the token is valid, then checks if MFA
+    verification is required and completed. Used for endpoints that require
+    full MFA-verified authentication.
+
+    Args:
+        credentials: HTTP Authorization credentials containing the Bearer token
+
+    Returns:
+        dict[str, Any]: Decoded token payload with MFA verification confirmed
+
+    Raises:
+        HTTPException: 401 Unauthorized if token is invalid or expired
+        HTTPException: 403 Forbidden if MFA is required but not verified
+    """
+    # First verify the base token
+    payload = await verify_token(credentials)
+
+    # Check if MFA is required for this user
+    mfa_required = payload.get(MFA_REQUIRED_CLAIM, False)
+    mfa_verified = payload.get(MFA_VERIFIED_CLAIM, False)
+
+    if mfa_required and not mfa_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA verification required. Please complete MFA authentication.",
+            headers={"WWW-Authenticate": "Bearer realm='mfa'"},
+        )
+
+    return payload
+
+
+def is_mfa_verified(payload: dict[str, Any]) -> bool:
+    """Check if the token payload indicates MFA has been verified.
+
+    Args:
+        payload: Decoded JWT token payload
+
+    Returns:
+        bool: True if MFA is verified or not required, False otherwise
+    """
+    mfa_required = payload.get(MFA_REQUIRED_CLAIM, False)
+    mfa_verified = payload.get(MFA_VERIFIED_CLAIM, False)
+
+    # If MFA is not required, consider it verified
+    if not mfa_required:
+        return True
+
+    return mfa_verified
+
+
+def requires_mfa(payload: dict[str, Any]) -> bool:
+    """Check if the token payload indicates MFA is required.
+
+    Args:
+        payload: Decoded JWT token payload
+
+    Returns:
+        bool: True if MFA is required for this user, False otherwise
+    """
+    return payload.get(MFA_REQUIRED_CLAIM, False)
 
 
 def create_token(

@@ -46,6 +46,12 @@ from app.models.development_profile import (
     SkillAssessment,
     SkillStatus,
 )
+from app.models.mfa import (
+    MFABackupCode,
+    MFAIPWhitelist,
+    MFAMethod,
+    MFASettings,
+)
 
 __all__ = [
     "Base",
@@ -77,4 +83,9 @@ __all__ = [
     "SkillAssessment",
     "Observation",
     "MonthlySnapshot",
+    # MFA models
+    "MFASettings",
+    "MFABackupCode",
+    "MFAIPWhitelist",
+    "MFAMethod",
 ]

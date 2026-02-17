@@ -12,6 +12,7 @@ from app.routers.analytics import router as analytics_router
 from app.routers.communication import router as communication_router
 from app.routers.development_profile import router as development_profile_router
 from app.routers.documents import router as documents_router
+from app.routers.mfa import router as mfa_router
 from app.routers.qa_diagnostics import router as qa_diagnostics_router
 from app.routers.storage import router as storage_router
 from app.routers.webhooks import router as webhooks_router
@@ -38,9 +39,10 @@ app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(communication_router, prefix="/api/v1/communication", tags=["communication"])
 app.include_router(development_profile_router)
 app.include_router(documents_router)
+app.include_router(mfa_router)
+app.include_router(qa_diagnostics_router, prefix="/api/v1/qa/diagnostics", tags=["qa-diagnostics"])
 app.include_router(storage_router)
 app.include_router(webhooks_router, prefix="/api/v1/webhook", tags=["webhooks"])
-app.include_router(qa_diagnostics_router, prefix="/api/v1/qa/diagnostics", tags=["qa-diagnostics"])
 
 
 @app.get("/")
