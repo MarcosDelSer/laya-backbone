@@ -17,6 +17,8 @@ class Settings(BaseSettings):
         postgres_password: PostgreSQL database password
         jwt_secret_key: Secret key for JWT token signing
         jwt_algorithm: Algorithm for JWT token signing
+        jwt_issuer: JWT token issuer claim
+        jwt_audience: JWT token audience claim
     """
 
     # Database configuration
@@ -29,6 +31,8 @@ class Settings(BaseSettings):
     # JWT configuration
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
+    jwt_issuer: str = "laya-ai-service"
+    jwt_audience: str = "laya-api"
 
     # Database connection pool configuration
     db_pool_size: int = 10

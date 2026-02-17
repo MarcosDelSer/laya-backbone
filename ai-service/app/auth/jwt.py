@@ -53,6 +53,8 @@ def create_token(
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
     }
 
     if additional_claims:
@@ -88,11 +90,15 @@ def decode_token(token: str) -> dict[str, Any]:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
             options={
-                "require": ["exp", "iat", "sub"],
+                "require": ["exp", "iat", "sub", "iss", "aud"],
                 "verify_signature": True,
                 "verify_exp": True,
                 "verify_iat": True,
+                "verify_aud": True,
+                "verify_iss": True,
             },
         )
         return payload
