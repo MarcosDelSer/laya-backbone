@@ -166,6 +166,9 @@ class SessionManager
         // Generate new token
         $token = $this->csrfTokenManager->generateToken();
 
+        // Store token in session
+        $_SESSION['csrf_token'] = $token;
+
         return $token;
     }
 
