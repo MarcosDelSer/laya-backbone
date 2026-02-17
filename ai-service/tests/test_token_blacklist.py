@@ -492,6 +492,108 @@ class TestBlacklistIntegration:
         assert await service.is_token_blacklisted(token2) is False
 
 
+class TestBlacklistTTLExpiration:
+    """Tests for TTL expiration and auto-cleanup behavior."""
+
+    @pytest.mark.asyncio
+    async def test_blacklist_ttl_expiration(self):
+        """Test that tokens are automatically removed from blacklist after TTL expires.
+
+        This test verifies Redis auto-cleanup behavior:
+        1. Token is added to blacklist with short TTL
+        2. Token is blacklisted immediately after adding
+        3. After TTL expires, token is automatically removed
+        4. Token is no longer blacklisted after TTL expiration
+
+        This simulates Redis's automatic key expiration and ensures:
+        - Blacklist entries don't persist beyond JWT expiration
+        - Memory is automatically freed when tokens expire
+        - No manual cleanup is required
+        """
+        user_id = str(uuid4())
+        # Create token with 5 second expiration
+        token = create_token(
+            subject=user_id,
+            expires_delta_seconds=5,
+            additional_claims={
+                "email": "test@example.com",
+                "role": "teacher",
+                "type": "access",
+            },
+        )
+
+        # Mock Redis with TTL simulation
+        # Track when keys expire based on TTL
+        blacklist_state = {}
+        ttl_tracker = {}
+
+        async def mock_setex(key: str, ttl: int, value: str):
+            """Mock setex that tracks TTL expiration."""
+            blacklist_state[key] = value
+            # Store when this key will expire (current time + TTL)
+            ttl_tracker[key] = ttl
+            return True
+
+        async def mock_exists(key: str):
+            """Mock exists that respects TTL expiration."""
+            if key in blacklist_state:
+                # Check if TTL has expired (simulate Redis auto-cleanup)
+                if ttl_tracker.get(key, 0) > 0:
+                    return 1  # Key exists and hasn't expired
+                else:
+                    # TTL expired, remove from blacklist (auto-cleanup)
+                    del blacklist_state[key]
+                    if key in ttl_tracker:
+                        del ttl_tracker[key]
+                    return 0  # Key has been auto-removed
+            return 0  # Key doesn't exist
+
+        def simulate_ttl_expiration(key: str):
+            """Simulate TTL expiration by setting TTL to 0."""
+            if key in ttl_tracker:
+                ttl_tracker[key] = 0
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(side_effect=mock_setex)
+        mock_redis.exists = AsyncMock(side_effect=mock_exists)
+
+        service = TokenBlacklistService(redis_client=mock_redis)
+
+        # Step 1: Verify token is NOT blacklisted initially
+        is_blacklisted_before = await service.is_token_blacklisted(token)
+        assert is_blacklisted_before is False, "Token should not be blacklisted initially"
+
+        # Step 2: Add token to blacklist
+        add_result = await service.add_token_to_blacklist(token)
+        assert add_result is True, "Token should be successfully added to blacklist"
+
+        # Step 3: Verify token IS blacklisted immediately after adding
+        is_blacklisted_after_add = await service.is_token_blacklisted(token)
+        assert is_blacklisted_after_add is True, "Token should be blacklisted after adding"
+
+        # Get the blacklist key for this token
+        payload = decode_token(token)
+        jti = payload.get("jti")
+        blacklist_key = f"blacklist:{jti}"
+
+        # Verify TTL was set correctly (should be ~5 seconds)
+        call_args = mock_redis.setex.call_args[0]
+        ttl = call_args[1]
+        assert 0 < ttl <= 5, f"TTL should be 5 seconds or less, got {ttl}"
+
+        # Step 4: Simulate TTL expiration (Redis auto-cleanup)
+        simulate_ttl_expiration(blacklist_key)
+
+        # Step 5: Verify token is NO LONGER blacklisted after TTL expires
+        is_blacklisted_after_expiry = await service.is_token_blacklisted(token)
+        assert is_blacklisted_after_expiry is False, \
+            "Token should be automatically removed from blacklist after TTL expires"
+
+        # Step 6: Verify the key was removed from blacklist state (auto-cleanup)
+        assert blacklist_key not in blacklist_state, \
+            "Blacklist entry should be auto-removed from Redis after TTL expiration"
+
+
 class TestBlacklistEdgeCases:
     """Tests for edge cases and error conditions."""
 
