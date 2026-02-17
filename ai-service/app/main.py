@@ -18,6 +18,8 @@ from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
 from app.routers.communication import router as communication_router
 from app.routers.webhooks import router as webhooks_router
+from app.security import generate_csrf_token
+from app.security.csrf import CSRFProtectionMiddleware
 
 app = FastAPI(
     title="LAYA AI Service",
@@ -33,6 +35,11 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(ValidationError, validation_exception_handler)
 
+# Configure CSRF protection middleware
+# Validates CSRF tokens on state-changing requests (POST, PUT, DELETE, PATCH)
+# to prevent Cross-Site Request Forgery attacks
+app.add_middleware(CSRFProtectionMiddleware)
+
 # Configure XSS protection middleware to add security headers
 # Adds Content-Security-Policy, X-Content-Type-Options, and X-Frame-Options
 # to all responses for defense-in-depth protection against XSS attacks
@@ -45,7 +52,7 @@ app.add_middleware(
     allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
 )
 
 # Register API routers
@@ -73,6 +80,56 @@ async def health_check(request: Request) -> dict:
         "status": "healthy",
         "service": "ai-service",
         "version": "0.1.0",
+    }
+
+
+@app.get("/api/v1/csrf-token")
+@limiter.limit("100 per minute")
+async def get_csrf_token(request: Request) -> dict:
+    """Generate and return a CSRF token for form submissions.
+
+    This endpoint generates a cryptographically secure CSRF token that clients
+    must include in the X-CSRF-Token header for state-changing requests
+    (POST, PUT, DELETE, PATCH).
+
+    Tokens are valid for 60 minutes and are signed using JWT to ensure authenticity.
+
+    Rate limited to 100 requests per minute per client.
+
+    Args:
+        request: The incoming request (required for rate limiting)
+
+    Returns:
+        dict: CSRF token and metadata
+    """
+    token = generate_csrf_token()
+    return {
+        "csrf_token": token,
+        "expires_in_minutes": 60,
+        "header_name": "X-CSRF-Token",
+    }
+
+
+@app.post("/api/v1/test-csrf")
+@limiter.limit("100 per minute")
+async def test_csrf_endpoint(request: Request, data: dict[str, Any]) -> dict:
+    """Test endpoint for CSRF protection validation.
+
+    This endpoint requires a valid CSRF token in the X-CSRF-Token header.
+    Used for testing CSRF protection functionality.
+
+    Rate limited to 100 requests per minute per client.
+
+    Args:
+        request: The incoming request (required for rate limiting)
+        data: Request payload
+
+    Returns:
+        dict: Success message and received data
+    """
+    return {
+        "message": "CSRF validation passed",
+        "data": data,
     }
 
 
