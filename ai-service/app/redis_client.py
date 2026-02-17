@@ -3,7 +3,7 @@
 Provides async Redis client for caching and session management.
 """
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 import redis.asyncio as redis
 from redis.asyncio import Redis
@@ -11,7 +11,7 @@ from redis.asyncio import Redis
 from app.config import settings
 
 # Global Redis client instance
-_redis_client: Redis | None = None
+_redis_client: Optional[Redis] = None
 
 
 async def get_redis_client() -> Redis:
