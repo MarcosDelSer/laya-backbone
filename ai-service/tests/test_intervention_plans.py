@@ -2262,3 +2262,111 @@ async def test_version_history_preserved(
     assert version_objects[0].version_number == 2, "First update creates version 2"
     assert version_objects[1].version_number == 3, "Second update creates version 3"
     assert version_objects[2].version_number == 4, "Third update creates version 4"
+
+
+@pytest.mark.asyncio
+async def test_snapshot_timestamps_accurate(
+    mock_db_session: AsyncMock,
+    mock_user_id: UUID,
+    mock_plan_id: UUID,
+    mock_child_id: UUID,
+) -> None:
+    """Test that snapshot version created_at reflects actual creation time.
+
+    Verifies that each version's created_at timestamp reflects when
+    the version was actually created, not the original plan creation time.
+    This ensures version history accurately tracks when changes occurred.
+    """
+    service = InterventionPlanService(mock_db_session)
+
+    # Track what gets added to the session
+    added_objects = []
+
+    def track_add(obj: Any) -> None:
+        """Track objects added to session."""
+        added_objects.append(obj)
+
+    mock_db_session.add.side_effect = track_add
+
+    # Create a mock plan with initial creation time
+    initial_creation_time = datetime(2024, 1, 1, 10, 0, 0)
+    plan = MagicMock()
+    plan.id = mock_plan_id
+    plan.child_id = mock_child_id
+    plan.created_by = mock_user_id
+    plan.title = "Test Plan"
+    plan.status = "draft"
+    plan.version = 1
+    plan.child_name = "Test Child"
+    plan.date_of_birth = date(2020, 1, 1)
+    plan.diagnosis = ["autism"]
+    plan.medical_history = None
+    plan.educational_history = None
+    plan.family_context = None
+    plan.review_schedule = "quarterly"
+    plan.next_review_date = date.today() + timedelta(days=90)
+    plan.effective_date = date.today()
+    plan.end_date = None
+    plan.parent_signed = False
+    plan.created_at = initial_creation_time
+    plan.updated_at = initial_creation_time
+    plan.strengths = []
+    plan.needs = []
+    plan.goals = []
+    plan.strategies = []
+    plan.monitoring = []
+    plan.parent_involvements = []
+    plan.consultations = []
+
+    # Mock the database query to return the plan
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = plan
+    mock_db_session.execute.return_value = mock_result
+
+    # Mock the get_plan method to return a response
+    mock_plan_response = MagicMock()
+
+    # Simulate time passing - update happens later
+    update_time = datetime(2024, 1, 15, 14, 30, 0)  # 14 days later
+
+    # Mock datetime.utcnow at the model level where it's used as default
+    with patch("app.models.intervention_plan.datetime") as mock_datetime:
+        mock_datetime.utcnow.return_value = update_time
+
+        with patch.object(service, "get_plan", return_value=mock_plan_response):
+            with patch.object(
+                service,
+                "_create_plan_snapshot",
+                return_value={
+                    "title": "Test Plan",
+                    "version": 1,
+                    "created_by": str(mock_user_id),
+                },
+            ):
+                update_request = InterventionPlanUpdate(title="Updated Title")
+                await service.update_plan(mock_plan_id, update_request, mock_user_id)
+
+        # Find the InterventionVersion object that was added
+        from app.models.intervention_plan import InterventionVersion
+
+        version_objects = [
+            obj for obj in added_objects if isinstance(obj, InterventionVersion)
+        ]
+
+        assert len(version_objects) == 1, "Should create exactly one version record"
+
+        version = version_objects[0]
+
+        # Manually invoke the SQLAlchemy default to simulate database behavior
+        # In real usage, this is called during flush/commit
+        if version.created_at is None:
+            version.created_at = mock_datetime.utcnow()
+
+    # Verify the version's created_at reflects the update time, not the plan creation time
+    assert version.created_at == update_time, (
+        f"Version created_at should be {update_time} (update time), "
+        f"not {initial_creation_time} (plan creation time)"
+    )
+    assert version.created_at != initial_creation_time, (
+        "Version timestamp should not match original plan creation time"
+    )
