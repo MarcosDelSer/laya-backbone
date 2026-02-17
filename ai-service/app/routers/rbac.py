@@ -5,6 +5,7 @@ and audit trail access. All endpoints require authentication and appropriate
 role-based permissions.
 """
 
+from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
 
@@ -15,6 +16,8 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_role
 from app.models.rbac import RoleType
 from app.schemas.rbac import (
+    AuditLogListResponse,
+    AuditLogResponse,
     PermissionCheckRequest,
     PermissionCheckResponse,
     PermissionResponse,
@@ -511,6 +514,107 @@ async def get_user_permissions(
             group_id=group_id,
         )
         return permissions
+    except RBACServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"RBAC service error: {str(e)}",
+        )
+
+
+# =============================================================================
+# Audit Trail Endpoints
+# =============================================================================
+
+
+@router.get(
+    "/audit",
+    response_model=AuditLogListResponse,
+    summary="Get audit trail",
+    description="Returns paginated audit log entries for RBAC events (Director only)",
+)
+async def get_audit_logs(
+    user_id: Optional[UUID] = Query(
+        default=None,
+        description="Filter by user ID",
+    ),
+    action: Optional[str] = Query(
+        default=None,
+        max_length=100,
+        description="Filter by action type (e.g., 'role_assigned', 'access_denied')",
+    ),
+    resource_type: Optional[str] = Query(
+        default=None,
+        max_length=100,
+        description="Filter by resource type",
+    ),
+    start_date: Optional[datetime] = Query(
+        default=None,
+        description="Filter events after this date (ISO 8601 format)",
+    ),
+    end_date: Optional[datetime] = Query(
+        default=None,
+        description="Filter events before this date (ISO 8601 format)",
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=1000,
+        description="Maximum number of results to return",
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="Number of results to skip for pagination",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(
+        require_role([RoleType.DIRECTOR]),
+    ),
+) -> AuditLogListResponse:
+    """Get audit trail for RBAC events.
+
+    Retrieves paginated audit log entries with optional filtering by user,
+    action type, resource type, and date range. Only users with the
+    Director role can access the audit trail.
+
+    Args:
+        user_id: Filter by specific user ID
+        action: Filter by action type (e.g., 'role_assigned')
+        resource_type: Filter by resource type
+        start_date: Filter events after this date
+        end_date: Filter events before this date
+        limit: Maximum number of results (1-1000)
+        offset: Number of results to skip
+        db: Async database session (injected)
+        current_user: Authenticated user with Director role (injected)
+
+    Returns:
+        AuditLogListResponse containing paginated audit log entries
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When the user doesn't have Director role
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = RBACService(db)
+
+    try:
+        audit_logs, total = await service.get_audit_logs(
+            user_id=user_id,
+            action=action,
+            resource_type=resource_type,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset,
+        )
+
+        return AuditLogListResponse(
+            items=audit_logs,
+            total=total,
+            skip=offset,
+            limit=limit,
+        )
     except RBACServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

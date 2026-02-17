@@ -932,3 +932,91 @@ class RBACService:
             is_active=user_role.is_active,
             role=role_response,
         )
+
+    # =========================================================================
+    # Audit Log Methods
+    # =========================================================================
+
+    async def get_audit_logs(
+        self,
+        user_id: Optional[UUID] = None,
+        action: Optional[str] = None,
+        resource_type: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[AuditLogResponse], int]:
+        """Get audit logs with optional filtering.
+
+        Retrieves audit log entries with filtering by user, action,
+        resource type, and date range. Returns paginated results.
+
+        Args:
+            user_id: Filter by user ID
+            action: Filter by action type
+            resource_type: Filter by resource type
+            start_date: Filter events after this date
+            end_date: Filter events before this date
+            limit: Maximum number of results to return
+            offset: Number of results to skip
+
+        Returns:
+            Tuple of (list of audit log entries, total count)
+        """
+        from sqlalchemy import desc, func
+
+        # Build the query with filters
+        query = select(AuditLog)
+        count_query = select(func.count(AuditLog.id))
+
+        # Apply filters
+        if user_id:
+            query = query.where(AuditLog.user_id == user_id)
+            count_query = count_query.where(AuditLog.user_id == user_id)
+
+        if action:
+            query = query.where(AuditLog.action == action)
+            count_query = count_query.where(AuditLog.action == action)
+
+        if resource_type:
+            query = query.where(AuditLog.resource_type == resource_type)
+            count_query = count_query.where(AuditLog.resource_type == resource_type)
+
+        if start_date:
+            query = query.where(AuditLog.created_at >= start_date)
+            count_query = count_query.where(AuditLog.created_at >= start_date)
+
+        if end_date:
+            query = query.where(AuditLog.created_at <= end_date)
+            count_query = count_query.where(AuditLog.created_at <= end_date)
+
+        # Get total count
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Apply ordering and pagination
+        query = query.order_by(desc(AuditLog.created_at))
+        query = query.offset(offset).limit(limit)
+
+        # Execute query
+        result = await self.db.execute(query)
+        audit_logs = result.scalars().all()
+
+        # Convert to response objects
+        responses = [
+            AuditLogResponse(
+                id=log.id,
+                user_id=log.user_id,
+                action=log.action,
+                resource_type=log.resource_type,
+                resource_id=log.resource_id,
+                details=log.details,
+                ip_address=log.ip_address,
+                user_agent=log.user_agent,
+                created_at=log.created_at,
+            )
+            for log in audit_logs
+        ]
+
+        return responses, total
