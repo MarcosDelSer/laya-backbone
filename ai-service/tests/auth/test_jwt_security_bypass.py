@@ -1,23 +1,26 @@
-"""Proof-of-concept tests demonstrating JWT bypass vulnerabilities.
+"""Security verification tests confirming JWT vulnerabilities are FIXED.
 
 SECURITY NOTICE:
-These tests are designed to PASS initially, demonstrating that authentication
-bypass vulnerabilities exist in the current JWT implementation. After applying
-security fixes, these tests should FAIL, confirming the vulnerabilities are
-no longer exploitable.
+These tests verify that JWT authentication bypass vulnerabilities have been
+properly remediated. They should now FAIL when run against the vulnerable code
+and PASS when run against the fixed code.
 
-Vulnerabilities demonstrated:
-1. Tokens without 'exp' claim are accepted (no expiration enforcement)
-2. Tokens without 'sub' claim are accepted (no subject enforcement)
-3. Tokens without 'iat' claim are accepted (no issued-at enforcement)
-4. No audience (aud) claim validation
-5. No issuer (iss) claim validation
-6. Potential acceptance of 'none' algorithm tokens
+Vulnerabilities that WERE present (now FIXED):
+1. Tokens without 'exp' claim are accepted (no expiration enforcement) - FIXED
+2. Tokens without 'sub' claim are accepted (no subject enforcement) - FIXED
+3. Tokens without 'iat' claim are accepted (no issued-at enforcement) - FIXED
+4. No audience (aud) claim validation - FIXED
+5. No issuer (iss) claim validation - FIXED
+6. Potential acceptance of 'none' algorithm tokens - FIXED
 
-Root Cause:
-PyJWT's jwt.decode() does not require critical claims by default. The options
-parameter with require=['exp', 'sub', 'iat'] and verify_exp=True must be
-explicitly set to enforce these security requirements.
+Fix Applied:
+PyJWT's jwt.decode() now requires critical claims via the options parameter
+with require=['exp', 'sub', 'iat'] and verify_exp=True, plus audience and
+issuer validation.
+
+Expected Test Results POST-FIX:
+- All vulnerability tests should PASS (because they now expect HTTPException)
+- All control tests should PASS (properly formed tokens still work)
 """
 
 from datetime import datetime, timedelta, timezone
@@ -34,13 +37,13 @@ class TestJWTBypassVulnerabilities:
     """Proof-of-concept tests demonstrating JWT authentication bypass."""
 
     def test_token_without_exp_claim_accepted(self):
-        """VULNERABILITY: Token without expiration claim is accepted.
+        """FIXED: Token without expiration claim is now REJECTED.
 
-        This demonstrates a critical security flaw where tokens without
-        expiration are accepted, allowing indefinite authentication.
+        This verifies that the critical security flaw where tokens without
+        expiration were accepted has been fixed.
 
-        Expected behavior BEFORE fix: Test PASSES (vulnerability exists)
-        Expected behavior AFTER fix: Test FAILS (vulnerability patched)
+        Expected behavior BEFORE fix: Token accepted (vulnerability)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Create token without 'exp' claim
         payload = {
@@ -54,19 +57,20 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This should succeed when it shouldn't
-        decoded = decode_token(token)
-        assert decoded["sub"] == "malicious_user_123"
-        assert "exp" not in decoded  # Confirm no expiration
+        # FIXED: This is now properly rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_token_without_sub_claim_accepted(self):
-        """VULNERABILITY: Token without subject claim is accepted.
+        """FIXED: Token without subject claim is now REJECTED.
 
-        The 'sub' claim identifies the user. Accepting tokens without it
-        allows authentication without a valid user identifier.
+        The 'sub' claim identifies the user. The fix ensures tokens without
+        it are rejected, preventing authentication without user identification.
 
-        Expected behavior BEFORE fix: Test PASSES (vulnerability exists)
-        Expected behavior AFTER fix: Test FAILS (vulnerability patched)
+        Expected behavior BEFORE fix: Token accepted (vulnerability)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Create token without 'sub' claim
         now = datetime.now(timezone.utc)
@@ -81,19 +85,20 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This should succeed when it shouldn't
-        decoded = decode_token(token)
-        assert "sub" not in decoded  # Confirm no subject
-        assert decoded["exp"] > 0
+        # FIXED: This is now properly rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_token_without_iat_claim_accepted(self):
-        """VULNERABILITY: Token without issued-at claim is accepted.
+        """FIXED: Token without issued-at claim is now REJECTED.
 
-        The 'iat' claim records when the token was issued. Accepting tokens
-        without it makes replay attack detection difficult.
+        The 'iat' claim records when the token was issued. The fix ensures
+        tokens without it are rejected, enabling proper replay attack detection.
 
-        Expected behavior BEFORE fix: Test PASSES (vulnerability exists)
-        Expected behavior AFTER fix: Test FAILS (vulnerability patched)
+        Expected behavior BEFORE fix: Token accepted (vulnerability)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Create token without 'iat' claim
         now = datetime.now(timezone.utc)
@@ -108,19 +113,21 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This should succeed when it shouldn't
-        decoded = decode_token(token)
-        assert decoded["sub"] == "user_without_iat"
-        assert "iat" not in decoded  # Confirm no issued-at
+        # FIXED: This is now properly rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_token_with_far_future_expiration_accepted(self):
-        """VULNERABILITY: Token with unreasonably far future expiration accepted.
+        """EDGE CASE: Token with unreasonably far future expiration accepted.
 
-        While this has an 'exp' claim, it's set so far in the future that it's
-        effectively permanent. This demonstrates lack of expiration validation.
+        While this has all required claims, the 'exp' is set so far in the future
+        that it's effectively permanent. This test documents that max TTL validation
+        is not currently enforced (which may be acceptable).
 
-        Expected behavior BEFORE fix: Test PASSES (vulnerability exists)
-        Expected behavior AFTER fix: Test may still PASS (unless max TTL added)
+        Expected behavior BEFORE fix: Test PASSES (token accepted)
+        Expected behavior AFTER fix: Test PASSES (still accepted, max TTL not enforced)
         """
         # Create token expiring in year 2099
         now = datetime.now(timezone.utc)
@@ -129,6 +136,8 @@ class TestJWTBypassVulnerabilities:
             "sub": "user_with_permanent_token",
             "iat": int(now.timestamp()),
             "exp": int(far_future.timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
         }
         token = jwt.encode(
             payload,
@@ -136,20 +145,21 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This succeeds, allowing effectively permanent tokens
+        # This succeeds, allowing effectively permanent tokens
+        # (max TTL validation not currently enforced)
         decoded = decode_token(token)
         assert decoded["sub"] == "user_with_permanent_token"
         # Token valid for ~75 years
         assert decoded["exp"] > int((now + timedelta(days=365 * 70)).timestamp())
 
     def test_token_without_audience_claim_accepted(self):
-        """VULNERABILITY: Token without audience claim is accepted.
+        """FIXED: Token without audience claim is now REJECTED.
 
-        The 'aud' claim specifies the intended recipient. Without it,
-        tokens meant for other services could be used here.
+        The 'aud' claim specifies the intended recipient. The fix ensures
+        tokens without it are rejected, preventing cross-service token misuse.
 
-        Expected behavior BEFORE fix: Test PASSES (vulnerability exists)
-        Expected behavior AFTER fix: Test FAILS (aud validation required)
+        Expected behavior BEFORE fix: Token accepted (vulnerability)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Create token without 'aud' claim
         now = datetime.now(timezone.utc)
@@ -165,23 +175,21 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This should succeed when it shouldn't
-        decoded = decode_token(token)
-        assert decoded["sub"] == "user_without_audience"
-        assert "aud" not in decoded  # Confirm no audience
+        # FIXED: This is now properly rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_token_with_wrong_audience_accepted(self):
-        """SECURITY PROTECTION: Token with aud claim is rejected when decoder has no audience.
+        """FIXED: Token with wrong audience is now properly REJECTED.
 
-        PyJWT has a built-in protection: if a token contains an 'aud' claim
-        but the decoder doesn't specify an expected audience, it rejects the
-        token with InvalidAudienceError. This is actually good security.
+        Tokens with an 'aud' claim that doesn't match the expected audience
+        must be rejected. This prevents tokens meant for other services from
+        being accepted here.
 
-        However, the real vulnerability is that tokens WITHOUT 'aud' claim
-        are accepted (see test_token_without_audience_claim_accepted).
-
-        Expected behavior BEFORE fix: Test PASSES (PyJWT protection works)
-        Expected behavior AFTER fix: Test PASSES (protection remains)
+        Expected behavior BEFORE fix: Token rejected only if aud present (PyJWT default)
+        Expected behavior AFTER fix: Token rejected with audience validation (FIXED)
         """
         # Create token with wrong audience
         now = datetime.now(timezone.utc)
@@ -190,6 +198,7 @@ class TestJWTBypassVulnerabilities:
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(hours=1)).timestamp()),
             "aud": "different-service",  # Wrong audience
+            "iss": settings.jwt_issuer,  # Correct issuer
         }
         token = jwt.encode(
             payload,
@@ -197,20 +206,20 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # PyJWT's built-in protection: This IS rejected
+        # FIXED: Token with wrong audience is properly rejected
         with pytest.raises(HTTPException) as exc_info:
             decode_token(token)
         assert exc_info.value.status_code == 401
-        assert "Invalid audience" in exc_info.value.detail
+        assert "Invalid token" in exc_info.value.detail
 
     def test_token_without_issuer_claim_accepted(self):
-        """VULNERABILITY: Token without issuer claim is accepted.
+        """FIXED: Token without issuer claim is now REJECTED.
 
-        The 'iss' claim identifies who issued the token. Without it,
-        tokens from untrusted sources could be accepted.
+        The 'iss' claim identifies who issued the token. The fix ensures
+        tokens without it are rejected, preventing untrusted token acceptance.
 
-        Expected behavior BEFORE fix: Test PASSES (vulnerability exists)
-        Expected behavior AFTER fix: Test FAILS (iss validation required)
+        Expected behavior BEFORE fix: Token accepted (vulnerability)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Create token without 'iss' claim
         now = datetime.now(timezone.utc)
@@ -226,19 +235,20 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This should succeed when it shouldn't
-        decoded = decode_token(token)
-        assert decoded["sub"] == "user_without_issuer"
-        assert "iss" not in decoded  # Confirm no issuer
+        # FIXED: This is now properly rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_token_with_wrong_issuer_accepted(self):
-        """VULNERABILITY: Token with wrong issuer claim is accepted.
+        """FIXED: Token with wrong issuer claim is now REJECTED.
 
         Even when 'iss' is present, if it's from an untrusted issuer,
-        it should be rejected. This demonstrates lack of iss validation.
+        it must be rejected. The fix enforces issuer validation.
 
-        Expected behavior BEFORE fix: Test PASSES (vulnerability exists)
-        Expected behavior AFTER fix: Test FAILS (iss validation enforced)
+        Expected behavior BEFORE fix: Token accepted (vulnerability)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Create token with wrong issuer
         now = datetime.now(timezone.utc)
@@ -254,10 +264,11 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This should be rejected but isn't
-        decoded = decode_token(token)
-        assert decoded["sub"] == "user_with_wrong_issuer"
-        assert decoded["iss"] == "untrusted-issuer"
+        # FIXED: This is now properly rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_token_with_none_algorithm_rejected(self):
         """SECURITY TEST: Verify 'none' algorithm tokens are rejected.
@@ -290,14 +301,13 @@ class TestJWTBypassVulnerabilities:
             pass
 
     def test_token_with_minimal_claims_bypass(self):
-        """VULNERABILITY: Token with only minimal claims bypasses validation.
+        """FIXED: Token with only minimal claims is now REJECTED.
 
-        This test combines multiple vulnerabilities: a token with just one
-        claim can be successfully decoded, demonstrating insufficient
-        claim validation.
+        This verifies that tokens with insufficient claims are properly
+        rejected. All required claims must be present.
 
-        Expected behavior BEFORE fix: Test PASSES (vulnerability exists)
-        Expected behavior AFTER fix: Test FAILS (all required claims enforced)
+        Expected behavior BEFORE fix: Token accepted (vulnerability)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Create token with only 'sub' claim (missing exp, iat)
         payload = {
@@ -310,20 +320,20 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This should be rejected but isn't
-        decoded = decode_token(token)
-        assert decoded["sub"] == "minimal_claims_user"
-        assert "exp" not in decoded
-        assert "iat" not in decoded
+        # FIXED: This is now properly rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_authentication_bypass_scenario(self):
-        """VULNERABILITY: Complete authentication bypass scenario.
+        """FIXED: Complete authentication bypass scenario is now PREVENTED.
 
-        This demonstrates a real-world attack: an attacker creates a token
-        without expiration, claiming to be an admin user, and it's accepted.
+        This verifies that the real-world attack (attacker creating token
+        without expiration claiming to be admin) is now blocked.
 
-        Expected behavior BEFORE fix: Test PASSES (bypass works)
-        Expected behavior AFTER fix: Test FAILS (bypass prevented)
+        Expected behavior BEFORE fix: Attack succeeds (bypass works)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Attacker crafts a token claiming to be admin, without expiration
         malicious_payload = {
@@ -339,22 +349,22 @@ class TestJWTBypassVulnerabilities:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: Attacker gains admin access without expiration
-        decoded = decode_token(attack_token)
-        assert decoded["role"] == "admin"
-        assert "exp" not in decoded  # Permanent admin access
-        assert decoded["email"] == "attacker@malicious.com"
+        # FIXED: Authentication bypass is now prevented
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(attack_token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
 
 class TestJWTSecurityGaps:
     """Additional security gap tests for JWT implementation."""
 
     def test_token_with_all_standard_claims_works(self):
-        """CONTROL TEST: Verify tokens with all standard claims work.
+        """CONTROL TEST: Verify tokens with all required claims still work.
 
-        This is a control test to ensure our proof-of-concept tests aren't
-        just failing due to other issues. A properly formed token should
-        always work.
+        This is a control test to ensure the security fixes don't break
+        legitimate token validation. A properly formed token with all
+        required claims (exp, sub, iat, aud, iss) should work.
 
         Expected behavior: This test should PASS both before and after fix.
         """
@@ -363,6 +373,8 @@ class TestJWTSecurityGaps:
             "sub": "valid_user_123",
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
             "email": "user@example.com",
             "role": "teacher",
         }
@@ -376,15 +388,17 @@ class TestJWTSecurityGaps:
         decoded = decode_token(token)
         assert decoded["sub"] == "valid_user_123"
         assert decoded["role"] == "teacher"
+        assert decoded["aud"] == settings.jwt_audience
+        assert decoded["iss"] == settings.jwt_issuer
 
     def test_decode_does_not_enforce_required_claims(self):
-        """VULNERABILITY: decode_token doesn't enforce required claims.
+        """FIXED: decode_token now enforces required claims.
 
-        This test verifies that the current decode_token implementation
-        does not use the 'require' option in jwt.decode().
+        This verifies that decode_token implementation now properly uses
+        the 'require' option in jwt.decode() to enforce required claims.
 
-        Expected behavior BEFORE fix: Test PASSES (no enforcement)
-        Expected behavior AFTER fix: Test FAILS (enforcement added)
+        Expected behavior BEFORE fix: Token accepted (no enforcement)
+        Expected behavior AFTER fix: HTTPException 401 raised (FIXED)
         """
         # Token missing multiple required claims
         payload = {"custom_claim": "value"}
@@ -394,12 +408,11 @@ class TestJWTSecurityGaps:
             algorithm=settings.jwt_algorithm,
         )
 
-        # VULNERABILITY: This succeeds without any standard claims
-        decoded = decode_token(token)
-        assert decoded["custom_claim"] == "value"
-        assert "sub" not in decoded
-        assert "exp" not in decoded
-        assert "iat" not in decoded
+        # FIXED: This is now properly rejected (missing all required claims)
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_expired_token_is_rejected(self):
         """CONTROL TEST: Verify expired tokens are rejected.
