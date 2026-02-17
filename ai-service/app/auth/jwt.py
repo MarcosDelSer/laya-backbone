@@ -53,6 +53,8 @@ def create_token(
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
+        "aud": settings.jwt_audience,
+        "iss": settings.jwt_issuer,
     }
 
     if additional_claims:
