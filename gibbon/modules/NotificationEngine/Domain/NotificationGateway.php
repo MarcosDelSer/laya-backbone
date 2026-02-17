@@ -24,12 +24,18 @@ namespace Gibbon\Module\NotificationEngine\Domain;
 use Gibbon\Domain\Traits\TableAware;
 use Gibbon\Domain\QueryCriteria;
 use Gibbon\Domain\QueryableGateway;
+use Gibbon\Module\NotificationEngine\Service\DeliveryRulesService;
+use Gibbon\Module\NotificationEngine\Service\PreferenceService;
 
 /**
  * NotificationGateway
  *
  * Gateway for notification queue, template, preference, and FCM token operations.
- * Supports multi-channel notifications (email, push) with retry logic.
+ * Provides data access layer for notifications.
+ *
+ * Business logic has been moved to service classes:
+ * - DeliveryRulesService: Retry logic, delivery scheduling, queue health
+ * - PreferenceService: Notification preference management
  *
  * @version v1.0.00
  * @since   v1.0.00
@@ -41,6 +47,38 @@ class NotificationGateway extends QueryableGateway
     private static $tableName = 'gibbonNotificationQueue';
     private static $primaryKey = 'gibbonNotificationQueueID';
     private static $searchableColumns = ['gibbonNotificationQueue.title', 'gibbonNotificationQueue.body'];
+
+    /**
+     * @var DeliveryRulesService|null
+     */
+    private $deliveryRulesService;
+
+    /**
+     * @var PreferenceService|null
+     */
+    private $preferenceService;
+
+    /**
+     * Set the delivery rules service.
+     *
+     * @param DeliveryRulesService $service
+     * @return void
+     */
+    public function setDeliveryRulesService(DeliveryRulesService $service)
+    {
+        $this->deliveryRulesService = $service;
+    }
+
+    /**
+     * Set the preference service.
+     *
+     * @param PreferenceService $service
+     * @return void
+     */
+    public function setPreferenceService(PreferenceService $service)
+    {
+        $this->preferenceService = $service;
+    }
 
     // =========================================================================
     // QUEUE OPERATIONS
@@ -257,6 +295,8 @@ class NotificationGateway extends QueryableGateway
     /**
      * Mark notification as failed with error message.
      *
+     * Uses DeliveryRulesService to determine if retries are exhausted.
+     *
      * @param int $gibbonNotificationQueueID
      * @param string $errorMessage
      * @param int $maxAttempts Maximum retry attempts
@@ -270,8 +310,17 @@ class NotificationGateway extends QueryableGateway
             return false;
         }
 
+        // Determine if retries are exhausted (use service if available)
+        $retriesExhausted = false;
+        if ($this->deliveryRulesService) {
+            $retriesExhausted = $this->deliveryRulesService->hasExhaustedRetries($notification, $maxAttempts);
+        } else {
+            // Fallback logic for backward compatibility
+            $retriesExhausted = ($notification['attempts'] >= $maxAttempts);
+        }
+
         // If we've exhausted retries, mark as permanently failed
-        $newStatus = ($notification['attempts'] >= $maxAttempts) ? 'failed' : 'pending';
+        $newStatus = $retriesExhausted ? 'failed' : 'pending';
 
         $data = [
             'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
@@ -527,12 +576,19 @@ class NotificationGateway extends QueryableGateway
     /**
      * Check if a user has email notifications enabled for a type.
      *
+     * @deprecated Use PreferenceService::isEmailEnabled() instead
      * @param int $gibbonPersonID
      * @param string $type
      * @return bool
      */
     public function isEmailEnabled($gibbonPersonID, $type)
     {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->preferenceService) {
+            return $this->preferenceService->isEmailEnabled($gibbonPersonID, $type);
+        }
+
+        // Fallback logic for backward compatibility
         $preference = $this->getPreference($gibbonPersonID, $type);
 
         // Default to enabled if no preference exists
@@ -546,12 +602,19 @@ class NotificationGateway extends QueryableGateway
     /**
      * Check if a user has push notifications enabled for a type.
      *
+     * @deprecated Use PreferenceService::isPushEnabled() instead
      * @param int $gibbonPersonID
      * @param string $type
      * @return bool
      */
     public function isPushEnabled($gibbonPersonID, $type)
     {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->preferenceService) {
+            return $this->preferenceService->isPushEnabled($gibbonPersonID, $type);
+        }
+
+        // Fallback logic for backward compatibility
         $preference = $this->getPreference($gibbonPersonID, $type);
 
         // Default to enabled if no preference exists
@@ -765,12 +828,19 @@ class NotificationGateway extends QueryableGateway
      * - Attempt 2: retryDelayMinutes * 2 (e.g., 10 minutes)
      * - Attempt 3: retryDelayMinutes * 4 (e.g., 20 minutes)
      *
+     * @deprecated Use DeliveryRulesService::calculateRetryDelay() instead
      * @param int $attemptNumber Current attempt number (1-based)
      * @param int $retryDelayMinutes Base delay in minutes
      * @return int Delay in minutes
      */
     public function calculateRetryDelay($attemptNumber, $retryDelayMinutes = 5)
     {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->deliveryRulesService) {
+            return $this->deliveryRulesService->calculateRetryDelay($attemptNumber, $retryDelayMinutes);
+        }
+
+        // Fallback logic for backward compatibility
         if ($attemptNumber <= 0) {
             return 0; // No delay for first attempt
         }
@@ -782,12 +852,19 @@ class NotificationGateway extends QueryableGateway
     /**
      * Get the next retry timestamp for a notification.
      *
+     * @deprecated Use DeliveryRulesService::getNextRetryTime() instead
      * @param array $notification Notification data with 'attempts' and 'lastAttemptAt'
      * @param int $retryDelayMinutes Base delay in minutes
      * @return string|null ISO 8601 timestamp when retry should occur, or null if ready now
      */
     public function getNextRetryTime($notification, $retryDelayMinutes = 5)
     {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->deliveryRulesService) {
+            return $this->deliveryRulesService->getNextRetryTime($notification, $retryDelayMinutes);
+        }
+
+        // Fallback logic for backward compatibility
         $attempts = (int) ($notification['attempts'] ?? 0);
 
         // If never attempted or no delay needed
@@ -805,12 +882,19 @@ class NotificationGateway extends QueryableGateway
     /**
      * Check if a notification is ready for retry.
      *
+     * @deprecated Use DeliveryRulesService::isReadyForRetry() instead
      * @param array $notification Notification data
      * @param int $retryDelayMinutes Base delay in minutes
      * @return bool True if ready for retry
      */
     public function isReadyForRetry($notification, $retryDelayMinutes = 5)
     {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->deliveryRulesService) {
+            return $this->deliveryRulesService->isReadyForRetry($notification, $retryDelayMinutes);
+        }
+
+        // Fallback logic for backward compatibility
         $nextRetryTime = $this->getNextRetryTime($notification, $retryDelayMinutes);
 
         // If null, ready immediately
@@ -877,6 +961,7 @@ class NotificationGateway extends QueryableGateway
     /**
      * Get detailed retry information for a notification.
      *
+     * @deprecated Use DeliveryRulesService::getRetryInfo() instead
      * @param int $gibbonNotificationQueueID
      * @param int $maxAttempts Maximum retry attempts
      * @param int $retryDelayMinutes Base delay in minutes
@@ -884,6 +969,12 @@ class NotificationGateway extends QueryableGateway
      */
     public function getRetryInfo($gibbonNotificationQueueID, $maxAttempts = 3, $retryDelayMinutes = 5)
     {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->deliveryRulesService) {
+            return $this->deliveryRulesService->getRetryInfo($gibbonNotificationQueueID, $maxAttempts, $retryDelayMinutes);
+        }
+
+        // Fallback logic for backward compatibility
         $notification = $this->getNotificationByID($gibbonNotificationQueueID);
 
         if (!$notification) {
