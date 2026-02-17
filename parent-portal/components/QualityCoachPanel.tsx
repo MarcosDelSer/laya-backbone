@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import type {
   MessageAnalysisResponse,
   QualityIssueDetail,
@@ -570,6 +571,14 @@ export function QualityCoachPanel({
   language = 'en',
 }: QualityCoachPanelProps) {
   const t = translations[language];
+  const { user } = useAuth();
+
+  // RBAC: Only show Quality Coach panel for educators (teachers) and directors (admins)
+  // Parents, staff, and accountants should not see this feature
+  const allowedRoles = ['teacher', 'admin'];
+  if (!user || !allowedRoles.includes(user.role)) {
+    return null;
+  }
 
   // Sort issues by severity (critical first, then high, medium, low)
   const sortedIssues = useMemo(() => {
