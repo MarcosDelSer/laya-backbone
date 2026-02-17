@@ -361,11 +361,7 @@ class DocumentService:
         Raises:
             UnauthorizedAccessError: When the user doesn't have access.
         """
-        from sqlalchemy import cast, String
-
-        query = select(Document).where(
-            cast(Document.id, String) == str(document_id)
-        )
+        query = select(Document).where(Document.id == document_id)
         result = await self.db.execute(query)
         document = result.scalar_one_or_none()
 
