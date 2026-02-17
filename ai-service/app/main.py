@@ -2,10 +2,13 @@
 
 from typing import Any
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.dependencies import get_current_user
+from app.middleware.rate_limit import get_auth_limit, limiter
 from app.middleware.security import get_cors_origins
 from app.routers import coaching
 from app.routers.activities import router as activities_router
@@ -18,6 +21,10 @@ app = FastAPI(
     description="AI-powered features for LAYA platform including activity recommendations, coaching guidance, and analytics",
     version="0.1.0",
 )
+
+# Configure rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS middleware with security lockdown for production
 # Only allows whitelisted origins from environment configuration
@@ -38,8 +45,14 @@ app.include_router(webhooks_router, prefix="/api/v1/webhook", tags=["webhooks"])
 
 
 @app.get("/")
-async def health_check() -> dict:
+@limiter.limit("100 per minute")
+async def health_check(request: Request) -> dict:
     """Health check endpoint.
+
+    Rate limited to 100 requests per minute per client.
+
+    Args:
+        request: The incoming request (required for rate limiting)
 
     Returns:
         dict: Service status information
@@ -52,15 +65,19 @@ async def health_check() -> dict:
 
 
 @app.get("/protected")
+@limiter.limit(get_auth_limit())
 async def protected_endpoint(
+    request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict:
     """Protected endpoint requiring JWT authentication.
 
     This endpoint demonstrates JWT authentication middleware.
     Requests without a valid Bearer token will receive a 401 Unauthorized response.
+    Rate limited to 10 requests per minute per client for auth endpoints.
 
     Args:
+        request: The incoming request (required for rate limiting)
         current_user: Decoded JWT payload containing user information
 
     Returns:
