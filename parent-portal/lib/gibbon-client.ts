@@ -18,6 +18,11 @@ import type {
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
+  ServiceAgreement,
+  ServiceAgreementSummary,
+  ServiceAgreementStatus,
+  SignServiceAgreementRequest,
+  SignServiceAgreementResponse,
 } from './types';
 
 // ============================================================================
@@ -50,6 +55,12 @@ const ENDPOINTS = {
   DOCUMENT: (id: string) => `/api/v1/documents/${id}`,
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
+
+  // Service Agreements
+  SERVICE_AGREEMENTS: '/api/v1/service-agreements',
+  SERVICE_AGREEMENT: (id: string) => `/api/v1/service-agreements/${id}`,
+  SIGN_SERVICE_AGREEMENT: (id: string) => `/api/v1/service-agreements/${id}/sign`,
+  SERVICE_AGREEMENT_PDF: (id: string) => `/api/v1/service-agreements/${id}/pdf`,
 } as const;
 
 // ============================================================================
@@ -326,6 +337,98 @@ export function getDocumentPdfUrl(documentId: string): string {
 export async function getPendingDocumentsCount(): Promise<number> {
   const response = await getDocuments({ status: 'pending', limit: 1 });
   return response.total;
+}
+
+// ============================================================================
+// Service Agreements API
+// ============================================================================
+
+/**
+ * Parameters for fetching service agreements.
+ */
+export interface ServiceAgreementParams extends PaginationParams {
+  status?: ServiceAgreementStatus;
+  childId?: string;
+  schoolYearId?: string;
+}
+
+/**
+ * Fetch service agreements with optional filters.
+ */
+export async function getServiceAgreements(
+  params?: ServiceAgreementParams
+): Promise<PaginatedResponse<ServiceAgreementSummary>> {
+  return gibbonClient.get<PaginatedResponse<ServiceAgreementSummary>>(ENDPOINTS.SERVICE_AGREEMENTS, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      status: params?.status,
+      child_id: params?.childId,
+      school_year_id: params?.schoolYearId,
+    },
+  });
+}
+
+/**
+ * Fetch a specific service agreement by ID.
+ */
+export async function getServiceAgreement(agreementId: string): Promise<ServiceAgreement> {
+  return gibbonClient.get<ServiceAgreement>(ENDPOINTS.SERVICE_AGREEMENT(agreementId));
+}
+
+/**
+ * Sign a service agreement electronically.
+ */
+export async function signServiceAgreement(
+  request: SignServiceAgreementRequest
+): Promise<SignServiceAgreementResponse> {
+  return gibbonClient.post<SignServiceAgreementResponse>(
+    ENDPOINTS.SIGN_SERVICE_AGREEMENT(request.agreementId),
+    {
+      signature_data: request.signatureData,
+      signature_type: request.signatureType,
+      consumer_protection_acknowledged: request.consumerProtectionAcknowledged,
+      terms_accepted: request.termsAccepted,
+      legal_acknowledged: request.legalAcknowledged,
+      annex_signatures: request.annexSignatures?.map((a) => ({
+        annex_id: a.annexId,
+        signed: a.signed,
+      })),
+    }
+  );
+}
+
+/**
+ * Get the PDF download URL for a service agreement.
+ */
+export function getServiceAgreementPdfUrl(agreementId: string): string {
+  return `${process.env.NEXT_PUBLIC_GIBBON_URL || 'http://localhost:8080/gibbon'}${ENDPOINTS.SERVICE_AGREEMENT_PDF(agreementId)}`;
+}
+
+/**
+ * Get pending service agreements count.
+ */
+export async function getPendingServiceAgreementsCount(): Promise<number> {
+  const response = await getServiceAgreements({ status: 'pending_signature', limit: 1 });
+  return response.total;
+}
+
+/**
+ * Fetch service agreements that require parent signature.
+ */
+export async function getServiceAgreementsRequiringSignature(): Promise<ServiceAgreementSummary[]> {
+  const response = await getServiceAgreements({ status: 'pending_signature' });
+  return response.items.filter((agreement) => !agreement.parentSignedAt);
+}
+
+/**
+ * Fetch active service agreements for a child.
+ */
+export async function getActiveServiceAgreementsForChild(
+  childId: string
+): Promise<ServiceAgreementSummary[]> {
+  const response = await getServiceAgreements({ childId, status: 'active' });
+  return response.items;
 }
 
 // ============================================================================
