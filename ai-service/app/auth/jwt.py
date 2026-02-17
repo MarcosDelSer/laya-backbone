@@ -130,21 +130,24 @@ async def verify_token(
             return {"user_id": payload["sub"]}
     """
     # Import here to avoid circular dependency
-    from app.auth.models import TokenBlacklist
+    from app.auth.blacklist import TokenBlacklistService
 
     token = credentials.credentials
 
     # Decode and validate the token (handles expiration, signature, etc.)
     payload = decode_token(token)
 
-    # Check if token is blacklisted
-    stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
-    result = await db.execute(stmt)
-    if result.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # Check if token is blacklisted using Redis
+    blacklist_service = TokenBlacklistService()
+    try:
+        is_blacklisted = await blacklist_service.is_token_blacklisted(token)
+        if is_blacklisted:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    finally:
+        await blacklist_service.close()
 
     return payload
