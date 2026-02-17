@@ -3,13 +3,13 @@
   "spec": "094-fix-plan-snapshot-bug",
   "state": "building",
   "subtasks": {
-    "completed": 14,
+    "completed": 16,
     "total": 20,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Integration Tests with Real Database",
+    "current": "Data Migration for Existing Plans (if needed)",
     "id": null,
     "total": 2
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 8,
+    "number": 10,
     "started_at": "2026-02-17T15:26:57.524899"
   },
-  "last_update": "2026-02-17T15:48:03.236417"
+  "last_update": "2026-02-17T15:59:54.106610"
 }
