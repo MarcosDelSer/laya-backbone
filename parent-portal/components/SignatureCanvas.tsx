@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 
 interface SignatureCanvasProps {
   onSignatureChange: (hasSignature: boolean, dataUrl: string | null) => void;
@@ -17,6 +18,7 @@ export function SignatureCanvas({
   penColor = '#1f2937',
   penWidth = 2,
 }: SignatureCanvasProps) {
+  const t = useTranslations();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -174,7 +176,7 @@ export function SignatureCanvas({
         {/* Placeholder text */}
         {!hasSignature && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-gray-400 text-sm">Sign here</p>
+            <p className="text-gray-400 text-sm">{t('documents.signature.signHere')}</p>
           </div>
         )}
 
@@ -187,7 +189,7 @@ export function SignatureCanvas({
       {/* Controls */}
       <div className="mt-3 flex items-center justify-between">
         <p className="text-xs text-gray-500">
-          {hasSignature ? 'Signature captured' : 'Draw your signature above'}
+          {hasSignature ? t('documents.signature.signatureCaptured') : t('documents.signature.drawSignature')}
         </p>
         <button
           type="button"
@@ -195,7 +197,7 @@ export function SignatureCanvas({
           className="text-sm text-gray-600 hover:text-gray-800 underline"
           disabled={!hasSignature}
         >
-          Clear
+          {t('documents.signature.clear')}
         </button>
       </div>
     </div>

@@ -1,6 +1,8 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { PaymentStatusBadge } from './PaymentStatusBadge';
+import { useFormatting } from '@/lib/hooks/useFormatting';
 
 interface InvoiceItem {
   description: string;
@@ -22,32 +24,10 @@ export interface InvoiceCardProps {
   };
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount);
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function getDaysUntilDue(dueDate: string): number {
-  const due = new Date(dueDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  due.setHours(0, 0, 0, 0);
-  const diffTime = due.getTime() - today.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-}
-
 export function InvoiceCard({ invoice }: InvoiceCardProps) {
+  const t = useTranslations();
+  const { formatCurrency, formatDate, getDaysUntilDue } = useFormatting();
+
   const daysUntilDue = getDaysUntilDue(invoice.dueDate);
   const isPastDue = daysUntilDue < 0 && invoice.status !== 'paid';
 
@@ -56,6 +36,19 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
     // For now, we just indicate the action
     if (invoice.pdfUrl) {
       window.open(invoice.pdfUrl, '_blank');
+    }
+  };
+
+  /**
+   * Get the due date status message using translations with plural support.
+   */
+  const getDueDateStatus = () => {
+    if (isPastDue) {
+      return t('common.time.daysOverdue', { count: Math.abs(daysUntilDue) });
+    } else if (daysUntilDue === 0) {
+      return t('common.time.dueToday');
+    } else {
+      return t('common.time.daysRemaining', { count: daysUntilDue });
     }
   };
 
@@ -82,10 +75,10 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Invoice #{invoice.number}
+                {t('invoices.invoiceNumber', { number: invoice.number })}
               </h3>
               <p className="text-sm text-gray-600">
-                Issued: {formatDate(invoice.date)}
+                {t('invoices.issued', { date: formatDate(invoice.date) })}
               </p>
             </div>
           </div>
@@ -99,23 +92,19 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
         {/* Amount and Due Date */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <p className="text-sm text-gray-500">Total Amount</p>
+            <p className="text-sm text-gray-500">{t('invoices.totalAmount')}</p>
             <p className="text-2xl font-bold text-gray-900">
               {formatCurrency(invoice.amount)}
             </p>
           </div>
           <div className="text-left sm:text-right">
-            <p className="text-sm text-gray-500">Due Date</p>
+            <p className="text-sm text-gray-500">{t('invoices.dueDate')}</p>
             <p className={`font-medium ${isPastDue ? 'text-red-600' : 'text-gray-900'}`}>
               {formatDate(invoice.dueDate)}
             </p>
             {invoice.status !== 'paid' && (
               <p className={`text-xs ${isPastDue ? 'text-red-500' : 'text-gray-500'}`}>
-                {isPastDue
-                  ? `${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''} overdue`
-                  : daysUntilDue === 0
-                    ? 'Due today'
-                    : `${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''} remaining`}
+                {getDueDateStatus()}
               </p>
             )}
           </div>
@@ -124,22 +113,22 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
         {/* Invoice Items */}
         {invoice.items.length > 0 && (
           <div className="mb-6">
-            <h4 className="font-medium text-gray-900 mb-3">Invoice Details</h4>
+            <h4 className="font-medium text-gray-900 mb-3">{t('invoices.invoiceDetails')}</h4>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Description
+                      {t('invoices.table.description')}
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Qty
+                      {t('invoices.table.qty')}
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Unit Price
+                      {t('invoices.table.unitPrice')}
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total
+                      {t('invoices.table.total')}
                     </th>
                   </tr>
                 </thead>
@@ -164,7 +153,7 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
                 <tfoot className="bg-gray-50">
                   <tr>
                     <td colSpan={3} className="px-3 py-2 text-sm font-medium text-gray-900 text-right">
-                      Total
+                      {t('invoices.table.total')}
                     </td>
                     <td className="px-3 py-2 text-sm font-bold text-gray-900 text-right">
                       {formatCurrency(invoice.amount)}
@@ -196,7 +185,7 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
                 d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
               />
             </svg>
-            Download PDF
+            {t('invoices.actions.downloadPdf')}
           </button>
           {invoice.status !== 'paid' && (
             <button
@@ -217,7 +206,7 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
                   d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
                 />
               </svg>
-              Pay Now
+              {t('invoices.actions.payNow')}
             </button>
           )}
         </div>

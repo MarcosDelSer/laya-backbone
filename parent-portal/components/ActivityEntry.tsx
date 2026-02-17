@@ -1,3 +1,7 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 interface ActivityEntryProps {
   activity: {
     id: string;
@@ -8,6 +12,10 @@ interface ActivityEntryProps {
 }
 
 export function ActivityEntry({ activity }: ActivityEntryProps) {
+  // Note: ActivityEntry doesn't have translatable strings in the current implementation
+  // since activity.name and activity.description are dynamic data from the backend.
+  // The 'use client' directive is added for consistency with other entry components.
+
   return (
     <div className="flex items-start space-x-3">
       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-purple-100">

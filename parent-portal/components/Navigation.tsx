@@ -2,18 +2,20 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { ChildSelector } from './ChildSelector';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface NavItem {
   href: string;
-  label: string;
+  labelKey: 'dashboard' | 'dailyReports' | 'invoices' | 'messages' | 'documents';
   icon: React.ReactNode;
 }
 
-const navItems: NavItem[] = [
+const navItemConfigs: NavItem[] = [
   {
     href: '/',
-    label: 'Dashboard',
+    labelKey: 'dashboard',
     icon: (
       <svg
         className="h-5 w-5"
@@ -32,7 +34,7 @@ const navItems: NavItem[] = [
   },
   {
     href: '/daily-reports',
-    label: 'Daily Reports',
+    labelKey: 'dailyReports',
     icon: (
       <svg
         className="h-5 w-5"
@@ -51,7 +53,7 @@ const navItems: NavItem[] = [
   },
   {
     href: '/invoices',
-    label: 'Invoices',
+    labelKey: 'invoices',
     icon: (
       <svg
         className="h-5 w-5"
@@ -70,7 +72,7 @@ const navItems: NavItem[] = [
   },
   {
     href: '/messages',
-    label: 'Messages',
+    labelKey: 'messages',
     icon: (
       <svg
         className="h-5 w-5"
@@ -89,7 +91,7 @@ const navItems: NavItem[] = [
   },
   {
     href: '/documents',
-    label: 'Documents',
+    labelKey: 'documents',
     icon: (
       <svg
         className="h-5 w-5"
@@ -129,6 +131,7 @@ const navItems: NavItem[] = [
 
 export function Navigation() {
   const pathname = usePathname();
+  const t = useTranslations();
 
   return (
     <nav className="bg-white border-b border-gray-200">
@@ -148,7 +151,7 @@ export function Navigation() {
 
           {/* Navigation Links */}
           <div className="hidden md:flex md:items-center md:space-x-1">
-            {navItems.map((item) => {
+            {navItemConfigs.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -161,15 +164,16 @@ export function Navigation() {
                   }`}
                 >
                   {item.icon}
-                  <span>{item.label}</span>
+                  <span>{t(`navigation.${item.labelKey}`)}</span>
                 </Link>
               );
             })}
           </div>
 
-          {/* Right side - Child Selector */}
+          {/* Right side - Child Selector and Language Switcher */}
           <div className="flex items-center space-x-4">
             <ChildSelector />
+            <LanguageSwitcher />
           </div>
         </div>
       </div>
@@ -177,7 +181,7 @@ export function Navigation() {
       {/* Mobile Navigation */}
       <div className="border-t border-gray-200 md:hidden">
         <div className="flex justify-around py-2">
-          {navItems.map((item) => {
+          {navItemConfigs.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
@@ -190,7 +194,7 @@ export function Navigation() {
                 }`}
               >
                 {item.icon}
-                <span className="mt-1">{item.label}</span>
+                <span className="mt-1">{t(`navigation.${item.labelKey}`)}</span>
               </Link>
             );
           })}

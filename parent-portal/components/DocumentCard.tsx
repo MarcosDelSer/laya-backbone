@@ -1,6 +1,7 @@
 'use client';
 
-import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { useFormatting } from '@/lib/hooks/useFormatting';
 
 interface Document {
   id: string;
@@ -16,27 +17,6 @@ interface Document {
 interface DocumentCardProps {
   document: Document;
   onSign: (documentId: string) => void;
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function formatDateTime(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
 }
 
 function getDocumentTypeIcon(type: string): React.ReactNode {
@@ -129,6 +109,9 @@ function getDocumentTypeIcon(type: string): React.ReactNode {
 }
 
 export function DocumentCard({ document, onSign }: DocumentCardProps) {
+  const t = useTranslations();
+  const { formatDate, formatDateTime } = useFormatting();
+
   const handleDownload = () => {
     if (document.pdfUrl) {
       window.open(document.pdfUrl, '_blank');
@@ -157,7 +140,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                 {document.type}
               </p>
               <p className="mt-1 text-xs text-gray-400">
-                Uploaded: {formatDate(document.uploadDate)}
+                {t('documents.card.uploaded', { date: formatDate(document.uploadDate) })}
               </p>
 
               {/* Signed info */}
@@ -176,7 +159,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                       d="M5 13l4 4L19 7"
                     />
                   </svg>
-                  Signed on {formatDateTime(document.signedAt)}
+                  {t('documents.card.signedOn', { date: formatDateTime(document.signedAt) })}
                 </div>
               )}
             </div>
@@ -199,7 +182,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                     d="M5 13l4 4L19 7"
                   />
                 </svg>
-                Signed
+                {t('common.status.signed')}
               </span>
             ) : (
               <span className="badge badge-warning">
@@ -216,7 +199,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                Pending
+                {t('common.status.pending')}
               </span>
             )}
           </div>
@@ -224,9 +207,10 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
 
         {/* Actions */}
         <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
-          {/* View Details */}
-          <Link
-            href={`/documents/${document.id}`}
+          {/* View/Download PDF */}
+          <button
+            type="button"
+            onClick={handleDownload}
             className="btn btn-outline text-sm"
           >
             <svg
@@ -248,29 +232,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                 d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
               />
             </svg>
-            View Details
-          </Link>
-
-          {/* View/Download PDF */}
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="btn btn-outline text-sm"
-          >
-            <svg
-              className="mr-2 h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-              />
-            </svg>
-            Download PDF
+            {t('documents.card.viewDocument')}
           </button>
 
           {/* Sign button (only for pending documents) */}
@@ -293,7 +255,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                   d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                 />
               </svg>
-              Sign Document
+              {t('documents.card.signDocument')}
             </button>
           )}
 
@@ -317,7 +279,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                   d="M5 13l4 4L19 7"
                 />
               </svg>
-              View Signature
+              {t('documents.card.viewSignature')}
             </button>
           )}
         </div>

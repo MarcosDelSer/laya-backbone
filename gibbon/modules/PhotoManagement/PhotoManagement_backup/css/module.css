@@ -1,0 +1,358 @@
+/**
+ * Photo Management Module Styles
+ * LAYA Kindergarten Platform
+ *
+ * Styles for photo gallery, upload forms, and child tagging UI
+ */
+
+/* =============================================
+   Photo Gallery Grid
+   ============================================= */
+
+.photo-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+.photo-gallery-item {
+    position: relative;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.photo-gallery-item:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.photo-gallery-item img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    display: block;
+}
+
+.photo-gallery-item .photo-caption {
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    color: #4b5563;
+    border-top: 1px solid #e5e7eb;
+}
+
+.photo-gallery-item .photo-meta {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.photo-gallery-item .photo-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.photo-gallery-item:hover .photo-actions {
+    opacity: 1;
+}
+
+.photo-gallery-item .photo-action-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+
+.photo-gallery-item .photo-action-btn:hover {
+    background: #fff;
+}
+
+/* =============================================
+   Photo Upload
+   ============================================= */
+
+.photo-upload-zone {
+    border: 2px dashed #d1d5db;
+    border-radius: 8px;
+    padding: 3rem;
+    text-align: center;
+    background: #f9fafb;
+    transition: border-color 0.2s ease, background 0.2s ease;
+    cursor: pointer;
+}
+
+.photo-upload-zone:hover,
+.photo-upload-zone.drag-over {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.photo-upload-zone .upload-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 1rem;
+    color: #9ca3af;
+}
+
+.photo-upload-zone .upload-text {
+    font-size: 1rem;
+    color: #4b5563;
+    margin-bottom: 0.5rem;
+}
+
+.photo-upload-zone .upload-subtext {
+    font-size: 0.875rem;
+    color: #9ca3af;
+}
+
+.photo-upload-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.photo-upload-preview-item {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.photo-upload-preview-item img {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+}
+
+.photo-upload-preview-item .remove-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.9);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+/* =============================================
+   Child Tagging
+   ============================================= */
+
+.photo-tag-container {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.photo-tag-preview {
+    flex: 1;
+    min-width: 300px;
+    max-width: 500px;
+}
+
+.photo-tag-preview img {
+    width: 100%;
+    border-radius: 8px;
+}
+
+.photo-tag-selector {
+    flex: 1;
+    min-width: 300px;
+}
+
+.child-tag-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.child-tag-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.child-tag-item:hover {
+    background: #f9fafb;
+}
+
+.child-tag-item.selected {
+    background: #eff6ff;
+    border-color: #3b82f6;
+}
+
+.child-tag-item .child-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: #6b7280;
+}
+
+.child-tag-item .child-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.child-tag-item .child-class {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+/* Tagged children badges */
+.tagged-children {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.tagged-child-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background: #e5e7eb;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    color: #374151;
+}
+
+.tagged-child-badge .remove {
+    cursor: pointer;
+    color: #9ca3af;
+}
+
+.tagged-child-badge .remove:hover {
+    color: #ef4444;
+}
+
+/* =============================================
+   Empty States
+   ============================================= */
+
+.photo-empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #6b7280;
+}
+
+.photo-empty-state .empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem;
+    color: #d1d5db;
+}
+
+.photo-empty-state h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #374151;
+}
+
+.photo-empty-state p {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+/* =============================================
+   Photo Lightbox Modal
+   ============================================= */
+
+.photo-lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.photo-lightbox-content {
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.photo-lightbox-content img {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+}
+
+.photo-lightbox-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.photo-lightbox-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* =============================================
+   Responsive Adjustments
+   ============================================= */
+
+@media (max-width: 768px) {
+    .photo-gallery {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    .photo-gallery-item img {
+        height: 150px;
+    }
+
+    .photo-tag-container {
+        flex-direction: column;
+    }
+
+    .photo-tag-preview,
+    .photo-tag-selector {
+        max-width: none;
+    }
+}

@@ -1,3 +1,7 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 interface PaymentStatusBadgeProps {
   status: 'paid' | 'pending' | 'overdue';
   size?: 'sm' | 'md';
@@ -5,7 +9,7 @@ interface PaymentStatusBadgeProps {
 
 const statusConfig = {
   paid: {
-    label: 'Paid',
+    translationKey: 'common.status.paid',
     className: 'badge-success',
     icon: (
       <svg className="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -18,7 +22,7 @@ const statusConfig = {
     ),
   },
   pending: {
-    label: 'Pending',
+    translationKey: 'common.status.pending',
     className: 'badge-warning',
     icon: (
       <svg className="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -31,7 +35,7 @@ const statusConfig = {
     ),
   },
   overdue: {
-    label: 'Overdue',
+    translationKey: 'common.status.overdue',
     className: 'badge-error',
     icon: (
       <svg className="mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -46,6 +50,7 @@ const statusConfig = {
 };
 
 export function PaymentStatusBadge({ status, size = 'md' }: PaymentStatusBadgeProps) {
+  const t = useTranslations();
   const config = statusConfig[status];
   const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-sm px-2.5 py-1';
 
@@ -54,7 +59,7 @@ export function PaymentStatusBadge({ status, size = 'md' }: PaymentStatusBadgePr
       className={`badge ${config.className} ${sizeClasses} inline-flex items-center`}
     >
       {config.icon}
-      {config.label}
+      {t(config.translationKey)}
     </span>
   );
 }

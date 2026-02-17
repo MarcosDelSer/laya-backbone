@@ -1,0 +1,224 @@
+{
+  "common": {
+    "appName": "LAYA",
+    "loading": "Loading...",
+    "back": "Back",
+    "backToDashboard": "Back to Dashboard",
+    "viewAll": "View all",
+    "filter": "Filter",
+    "export": "Export",
+    "cancel": "Cancel",
+    "submit": "Submit",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "all": "All",
+    "clear": "Clear",
+    "loadMore": "Load More",
+    "selectChild": "Select Child",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "justNow": "Just now",
+    "minutesAgo": "{count}m ago",
+    "status": {
+      "checkedIn": "Checked In",
+      "checkedOut": "Checked Out",
+      "absent": "Absent",
+      "pending": "Pending",
+      "signed": "Signed",
+      "paid": "Paid",
+      "overdue": "Overdue"
+    },
+    "time": {
+      "since": "Since {time}",
+      "daysOverdue": "{count, plural, one {# day} other {# days}} overdue",
+      "daysRemaining": "{count, plural, one {# day} other {# days}} remaining",
+      "dueToday": "Due today"
+    },
+    "entry": "{count, plural, one {# entry} other {# entries}}",
+    "photo": "Photo",
+    "photos": "Photos",
+    "viewPhotoNumber": "View photo {number}"
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "dailyReports": "Daily Reports",
+    "invoices": "Invoices",
+    "messages": "Messages",
+    "documents": "Documents"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Good morning!",
+      "afternoon": "Good afternoon!",
+      "evening": "Good evening!"
+    },
+    "viewFullReport": "View Full Report",
+    "childStatus": "Child Status",
+    "quickStats": {
+      "mealsToday": "Meals Today",
+      "napTime": "Nap Time",
+      "activities": "Activities",
+      "photos": "Photos",
+      "new": "{count} new"
+    },
+    "sections": {
+      "todaysActivities": "Today's Activities",
+      "meals": "Meals",
+      "napTime": "Nap Time",
+      "recentPhotos": "Recent Photos",
+      "quickLinks": "Quick Links"
+    },
+    "quickLinks": {
+      "viewInvoices": "View Invoices",
+      "pendingPayment": "{count} pending payment",
+      "messages": "Messages",
+      "unreadMessages": "{count} unread messages",
+      "documents": "Documents",
+      "awaitingSignature": "{count} awaiting signature"
+    },
+    "mealAmount": {
+      "all": "Ate all",
+      "most": "Ate most",
+      "some": "Ate some",
+      "none": "Did not eat"
+    },
+    "napQuality": {
+      "good": "Good sleep",
+      "fair": "Fair sleep",
+      "poor": "Poor sleep"
+    }
+  },
+  "dailyReports": {
+    "title": "Daily Reports",
+    "description": "View your child's daily activities, meals, and photos",
+    "showingRecentReports": "Showing recent reports",
+    "dailyReport": "Daily Report",
+    "loadMoreReports": "Load More Reports",
+    "noReportsTitle": "No reports available",
+    "noReportsDescription": "Daily reports will appear here once they are created by your child's teacher.",
+    "sections": {
+      "photos": "Photos",
+      "meals": "Meals",
+      "napTime": "Nap Time",
+      "activities": "Activities"
+    },
+    "emptyStates": {
+      "noMealsRecorded": "No meals recorded",
+      "noNapsRecorded": "No naps recorded",
+      "noActivitiesRecorded": "No activities recorded",
+      "noPhotosForThisDay": "No photos for this day"
+    },
+    "mealTypes": {
+      "breakfast": "Breakfast",
+      "lunch": "Lunch",
+      "snack": "Snack"
+    },
+    "badges": {
+      "meal": "{count} {count, plural, one {Meal} other {Meals}}",
+      "nap": "{count} {count, plural, one {Nap} other {Naps}}",
+      "activity": "{count} {count, plural, one {Activity} other {Activities}}"
+    }
+  },
+  "invoices": {
+    "title": "Invoices",
+    "description": "View and manage your billing history",
+    "invoiceNumber": "Invoice #{number}",
+    "issued": "Issued: {date}",
+    "summary": {
+      "pending": "Pending",
+      "overdue": "Overdue",
+      "paidThisYear": "Paid (This Year)"
+    },
+    "invoiceCount": "{count} {count, plural, one {invoice} other {invoices}}",
+    "paymentHistory": "Payment History",
+    "totalAmount": "Total Amount",
+    "dueDate": "Due Date",
+    "invoiceDetails": "Invoice Details",
+    "table": {
+      "description": "Description",
+      "qty": "Qty",
+      "unitPrice": "Unit Price",
+      "total": "Total"
+    },
+    "actions": {
+      "downloadPdf": "Download PDF",
+      "payNow": "Pay Now"
+    },
+    "loadMoreInvoices": "Load More Invoices",
+    "noInvoicesTitle": "No invoices yet",
+    "noInvoicesDescription": "Your invoices will appear here once they are generated."
+  },
+  "messages": {
+    "title": "Messages",
+    "unreadCount": "{count} unread {count, plural, one {message} other {messages}}",
+    "allCaughtUp": "All caught up",
+    "newMessage": "New Message",
+    "noMessagesTitle": "No messages yet",
+    "noMessagesDescription": "Start a conversation with your child's teacher.",
+    "selectConversation": "Select a conversation",
+    "selectConversationDescription": "Choose a conversation from the list to view messages.",
+    "noMessagesInThread": "No messages yet",
+    "startConversation": "Start the conversation by sending a message below.",
+    "composer": {
+      "placeholder": "Type a message...",
+      "placeholderTeacher": "Type a message to the teacher...",
+      "attachFile": "Attach file (coming soon)",
+      "sendHint": "Press Enter to send, Shift+Enter for new line"
+    },
+    "moreOptions": "More options"
+  },
+  "documents": {
+    "title": "Documents",
+    "description": "Review and sign required documents for your child",
+    "summary": {
+      "totalDocuments": "Total Documents",
+      "pendingSignatures": "Pending Signatures",
+      "signedDocuments": "Signed Documents"
+    },
+    "documentLibrary": "Document Library",
+    "filters": {
+      "all": "All",
+      "pending": "Pending",
+      "signed": "Signed"
+    },
+    "actionRequired": {
+      "title": "Action Required",
+      "description": "You have {count} {count, plural, one {document} other {documents}} requiring your signature. Please review and sign them at your earliest convenience."
+    },
+    "card": {
+      "uploaded": "Uploaded: {date}",
+      "signedOn": "Signed on {date}",
+      "viewDocument": "View Document",
+      "signDocument": "Sign Document",
+      "viewSignature": "View Signature"
+    },
+    "noDocumentsTitle": "No documents found",
+    "noDocumentsDescription": {
+      "pending": "Great job! You've signed all required documents.",
+      "signed": "You haven't signed any documents yet.",
+      "all": "No documents are available at this time."
+    },
+    "viewAllDocuments": "View All Documents",
+    "signature": {
+      "title": "Sign Document",
+      "viewPdf": "View PDF",
+      "yourSignature": "Your Signature",
+      "signHere": "Sign here",
+      "signatureCaptured": "Signature captured",
+      "drawSignature": "Draw your signature above",
+      "clear": "Clear",
+      "agreement": "I acknowledge that I have read and understand this document. By signing below, I agree to be legally bound by its terms and conditions.",
+      "timestampNotice": "Your signature will be timestamped with the current date and time for verification purposes.",
+      "submitting": "Submitting...",
+      "submitSignature": "Submit Signature"
+    }
+  },
+  "errors": {
+    "title": "Something went wrong!",
+    "description": "We apologize for the inconvenience. An unexpected error has occurred. Please try again or contact support if the problem persists.",
+    "tryAgain": "Try Again",
+    "errorId": "Error ID: {id}"
+  }
+}
