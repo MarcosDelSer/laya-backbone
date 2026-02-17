@@ -380,7 +380,16 @@ class ActivityService:
         Returns:
             Activity if found, None otherwise.
         """
-        query = select(Activity).where(Activity.id == activity_id)
+        # Use direct UUID comparison for PostgreSQL (performant with indexes)
+        # Use cast() for SQLite test compatibility (stores UUIDs as TEXT)
+        dialect_name = self.db.bind.dialect.name if self.db.bind else 'postgresql'
+
+        if dialect_name == 'sqlite':
+            from sqlalchemy import cast, String
+            query = select(Activity).where(cast(Activity.id, String) == str(activity_id))
+        else:
+            query = select(Activity).where(Activity.id == activity_id)
+
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
@@ -542,7 +551,15 @@ class ActivityService:
         if isinstance(activity_id, str):
             activity_id = UUID(activity_id)
 
-        query = select(Activity).where(Activity.id == activity_id)
+        # Use direct UUID comparison for PostgreSQL (performant with indexes)
+        # Use cast() for SQLite test compatibility (stores UUIDs as TEXT)
+        dialect_name = self.db.bind.dialect.name if self.db.bind else 'postgresql'
+
+        if dialect_name == 'sqlite':
+            from sqlalchemy import cast, String
+            query = select(Activity).where(cast(Activity.id, String) == str(activity_id))
+        else:
+            query = select(Activity).where(Activity.id == activity_id)
 
         # Apply eager loading to prevent N+1 queries
         query = eager_load_activity_relationships(query)
