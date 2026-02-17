@@ -391,7 +391,7 @@ class DocumentService:
 
     async def update_document(
         self, document_id: UUID, update_data: DocumentUpdate
-    ) -> Optional[Document | str]:
+    ) -> Optional[Document]:
         """Update a document.
 
         Signed documents are immutable and cannot be updated.
