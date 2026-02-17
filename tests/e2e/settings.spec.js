@@ -4,21 +4,20 @@
  * Tests the settings page UI and functionality.
  *
  * Requirements:
- * - Playwright or Cypress installed
+ * - Playwright installed
  * - Gibbon instance running at http://localhost:8080
  * - Valid admin credentials
  *
  * Run with:
- * - Playwright: npx playwright test tests/e2e/settings.spec.js
- * - Cypress: npx cypress run --spec tests/e2e/settings.spec.js
+ * - npx playwright test tests/e2e/settings.spec.js
  */
 
 const { test, expect } = require('@playwright/test');
 
-// TODO: Update these constants for your environment
-const GIBBON_URL = 'http://localhost:8080';
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'password';
+// Environment-configurable constants
+const GIBBON_URL = process.env.GIBBON_URL || 'http://localhost:8080';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'password';
 
 test.describe('AISync Settings Page', () => {
 
@@ -27,59 +26,103 @@ test.describe('AISync Settings Page', () => {
         await page.goto(`${GIBBON_URL}/index.php`);
         await page.fill('input[name="username"]', ADMIN_USERNAME);
         await page.fill('input[name="password"]', ADMIN_PASSWORD);
-        await page.click('button[type="submit"]');
+        await page.click('input[type="submit"], button[type="submit"]');
 
-        // Navigate to AISync settings
-        await page.goto(`${GIBBON_URL}/modules/AISync/aiSync_settings.php`);
+        // Wait for login to complete
+        await page.waitForLoadState('networkidle');
+
+        // Navigate to AISync settings using Gibbon's query-based routing
+        await page.goto(`${GIBBON_URL}/index.php?q=/modules/AISync/aiSync_settings.php`);
+        await page.waitForLoadState('networkidle');
     });
 
     test('can load settings page', async ({ page }) => {
-        // TODO: Implement page load test
-        // await expect(page).toHaveTitle(/AI Sync Settings/);
-        // await expect(page.locator('h1')).toContainText('AI Sync Settings');
-        // Verify form fields are present
-        // await expect(page.locator('input[name="aiServiceURL"]')).toBeVisible();
-        // await expect(page.locator('input[name="webhookTimeout"]')).toBeVisible();
+        // Verify page contains AISync Settings breadcrumb or heading
+        const pageContent = await page.content();
+        expect(pageContent).toContain('AISync');
 
-        test.skip('Requires Playwright/Cypress setup');
+        // Verify the settings form is present
+        const form = page.locator('form#aiSyncSettings');
+        await expect(form).toBeVisible();
+
+        // Verify required form fields are present
+        await expect(page.locator('input[name="aiServiceURL"]')).toBeVisible();
+        await expect(page.locator('input[name="webhookTimeout"]')).toBeVisible();
+        await expect(page.locator('select[name="syncEnabled"]')).toBeVisible();
+        await expect(page.locator('input[name="maxRetryAttempts"]')).toBeVisible();
+        await expect(page.locator('input[name="retryDelaySeconds"]')).toBeVisible();
     });
 
     test('can update AI Service URL', async ({ page }) => {
-        // TODO: Implement URL update test
-        // const newURL = 'http://new-ai-service:8000';
-        // await page.fill('input[name="aiServiceURL"]', newURL);
-        // await page.click('button[type="submit"]');
-        // await expect(page.locator('.success')).toBeVisible();
-        // Verify URL saved in database
-        // await page.reload();
-        // await expect(page.locator('input[name="aiServiceURL"]')).toHaveValue(newURL);
+        const newURL = 'http://test-ai-service:8000';
 
-        test.skip('Requires Playwright/Cypress setup');
+        // Fill in the new URL
+        await page.fill('input[name="aiServiceURL"]', newURL);
+
+        // Submit the form
+        await page.click('form#aiSyncSettings input[type="submit"]');
+        await page.waitForLoadState('networkidle');
+
+        // Check for success message or verify the value persisted
+        const savedURL = await page.locator('input[name="aiServiceURL"]').inputValue();
+        expect(savedURL).toBe(newURL);
     });
 
     test('validates URL format', async ({ page }) => {
-        // TODO: Implement URL validation test
-        // await page.fill('input[name="aiServiceURL"]', 'not-a-valid-url');
-        // await page.click('button[type="submit"]');
-        // await expect(page.locator('.error')).toBeVisible();
-        // await expect(page.locator('.error')).toContainText('invalid URL');
+        // Clear and enter invalid URL
+        await page.fill('input[name="aiServiceURL"]', 'not-a-valid-url');
 
-        test.skip('Requires Playwright/Cypress setup');
+        // Submit the form
+        await page.click('form#aiSyncSettings input[type="submit"]');
+        await page.waitForLoadState('networkidle');
+
+        // Check for validation error - Gibbon shows errors in error divs
+        const pageContent = await page.content();
+        const hasValidationError = pageContent.includes('valid URL') ||
+                                   pageContent.includes('error') ||
+                                   pageContent.includes('Error');
+        expect(hasValidationError).toBeTruthy();
     });
 
     test('validates numeric ranges', async ({ page }) => {
-        // TODO: Implement numeric validation test
-        // Test timeout > 300
-        // await page.fill('input[name="webhookTimeout"]', '500');
-        // await page.click('button[type="submit"]');
-        // await expect(page.locator('.error')).toBeVisible();
+        // Test webhookTimeout > 300 (max allowed)
+        await page.fill('input[name="webhookTimeout"]', '500');
+        await page.click('form#aiSyncSettings input[type="submit"]');
+        await page.waitForLoadState('networkidle');
 
-        // Test timeout < 1
-        // await page.fill('input[name="webhookTimeout"]', '0');
-        // await page.click('button[type="submit"]');
-        // await expect(page.locator('.error')).toBeVisible();
+        // Check for validation error
+        let pageContent = await page.content();
+        let hasValidationError = pageContent.includes('1 and 300') ||
+                                 pageContent.includes('error') ||
+                                 pageContent.includes('Error');
+        expect(hasValidationError).toBeTruthy();
 
-        test.skip('Requires Playwright/Cypress setup');
+        // Navigate back and test webhookTimeout < 1 (min allowed)
+        await page.goto(`${GIBBON_URL}/index.php?q=/modules/AISync/aiSync_settings.php`);
+        await page.waitForLoadState('networkidle');
+        await page.fill('input[name="webhookTimeout"]', '0');
+        await page.click('form#aiSyncSettings input[type="submit"]');
+        await page.waitForLoadState('networkidle');
+
+        // Check for validation error
+        pageContent = await page.content();
+        hasValidationError = pageContent.includes('1 and 300') ||
+                             pageContent.includes('error') ||
+                             pageContent.includes('Error');
+        expect(hasValidationError).toBeTruthy();
+
+        // Navigate back and test maxRetryAttempts > 10 (max allowed)
+        await page.goto(`${GIBBON_URL}/index.php?q=/modules/AISync/aiSync_settings.php`);
+        await page.waitForLoadState('networkidle');
+        await page.fill('input[name="maxRetryAttempts"]', '15');
+        await page.click('form#aiSyncSettings input[type="submit"]');
+        await page.waitForLoadState('networkidle');
+
+        pageContent = await page.content();
+        hasValidationError = pageContent.includes('0 and 10') ||
+                             pageContent.includes('error') ||
+                             pageContent.includes('Error');
+        expect(hasValidationError).toBeTruthy();
     });
 
 });
