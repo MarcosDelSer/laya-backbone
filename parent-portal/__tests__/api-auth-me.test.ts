@@ -6,8 +6,7 @@ import * as auth from '@/lib/auth';
 // Mock the auth module
 vi.mock('@/lib/auth', () => ({
   getServerToken: vi.fn(),
-  getUserFromToken: vi.fn(),
-  decodeToken: vi.fn(),
+  getValidatedUserFromToken: vi.fn(),
 }));
 
 describe('GET /api/auth/me', () => {
@@ -25,7 +24,7 @@ describe('GET /api/auth/me', () => {
     };
 
     vi.mocked(auth.getServerToken).mockResolvedValue('valid-token');
-    vi.mocked(auth.getUserFromToken).mockReturnValue(mockUser);
+    vi.mocked(auth.getValidatedUserFromToken).mockReturnValue(mockUser);
 
     const request = new NextRequest('http://localhost:3000/api/auth/me');
     const response = await GET(request);
@@ -38,7 +37,7 @@ describe('GET /api/auth/me', () => {
     });
 
     expect(auth.getServerToken).toHaveBeenCalled();
-    expect(auth.getUserFromToken).toHaveBeenCalledWith('valid-token');
+    expect(auth.getValidatedUserFromToken).toHaveBeenCalledWith('valid-token');
   });
 
   it('returns user with minimal fields', async () => {
@@ -49,7 +48,7 @@ describe('GET /api/auth/me', () => {
     };
 
     vi.mocked(auth.getServerToken).mockResolvedValue('valid-token');
-    vi.mocked(auth.getUserFromToken).mockReturnValue(mockUser);
+    vi.mocked(auth.getValidatedUserFromToken).mockReturnValue(mockUser);
 
     const request = new NextRequest('http://localhost:3000/api/auth/me');
     const response = await GET(request);
@@ -74,7 +73,7 @@ describe('GET /api/auth/me', () => {
     });
 
     expect(auth.getServerToken).toHaveBeenCalled();
-    expect(auth.getUserFromToken).not.toHaveBeenCalled();
+    expect(auth.getValidatedUserFromToken).not.toHaveBeenCalled();
   });
 
   it('returns 401 when token is empty string', async () => {
@@ -91,7 +90,7 @@ describe('GET /api/auth/me', () => {
 
   it('returns 401 when token is invalid', async () => {
     vi.mocked(auth.getServerToken).mockResolvedValue('invalid-token');
-    vi.mocked(auth.getUserFromToken).mockReturnValue(null);
+    vi.mocked(auth.getValidatedUserFromToken).mockReturnValue(null);
 
     const request = new NextRequest('http://localhost:3000/api/auth/me');
     const response = await GET(request);
@@ -100,11 +99,11 @@ describe('GET /api/auth/me', () => {
 
     const data = await response.json();
     expect(data).toEqual({
-      error: 'Invalid token',
+      error: 'Invalid or expired token',
     });
 
     expect(auth.getServerToken).toHaveBeenCalled();
-    expect(auth.getUserFromToken).toHaveBeenCalledWith('invalid-token');
+    expect(auth.getValidatedUserFromToken).toHaveBeenCalledWith('invalid-token');
   });
 
   it('returns 500 when getServerToken throws error', async () => {
@@ -128,7 +127,7 @@ describe('GET /api/auth/me', () => {
 
   it('returns 500 when getUserFromToken throws error', async () => {
     vi.mocked(auth.getServerToken).mockResolvedValue('valid-token');
-    vi.mocked(auth.getUserFromToken).mockImplementation(() => {
+    vi.mocked(auth.getValidatedUserFromToken).mockImplementation(() => {
       throw new Error('Token decoding error');
     });
 
@@ -159,7 +158,7 @@ describe('GET /api/auth/me', () => {
       };
 
       vi.mocked(auth.getServerToken).mockResolvedValue('valid-token');
-      vi.mocked(auth.getUserFromToken).mockReturnValue(mockUser);
+      vi.mocked(auth.getValidatedUserFromToken).mockReturnValue(mockUser);
 
       const request = new NextRequest('http://localhost:3000/api/auth/me');
       const response = await GET(request);

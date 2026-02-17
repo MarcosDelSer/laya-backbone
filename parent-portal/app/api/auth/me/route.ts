@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerToken, decodeToken, getUserFromToken } from '@/lib/auth';
+import { getServerToken, getValidatedUserFromToken } from '@/lib/auth';
 
 /**
  * GET /api/auth/me
@@ -40,12 +40,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get user from token
-    const user = getUserFromToken(token);
+    // Get user from validated token (checks expiration)
+    const user = getValidatedUserFromToken(token);
 
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid token' },
+        { error: 'Invalid or expired token' },
         { status: 401 }
       );
     }
