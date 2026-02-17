@@ -8,12 +8,15 @@ recommendations for fixing configuration issues.
 
 Usage:
     python3 scripts/verify-jwt-config.py
+    python3 scripts/verify-jwt-config.py --help
+    python3 scripts/verify-jwt-config.py --verbose
 """
 
+import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 
 class Colors:
@@ -84,19 +87,27 @@ def load_env_file(file_path: Path) -> Optional[str]:
 def get_ai_service_secret() -> Tuple[Optional[str], str]:
     """Get the AI Service JWT secret.
 
+    Prioritizes service-specific .env file over global environment variable
+    to ensure accurate per-service configuration verification.
+
     Returns:
         Tuple of (secret_value, source_description)
     """
-    # Try environment variable
-    secret = os.getenv('JWT_SECRET_KEY')
-    if secret:
-        return secret, "Environment variable JWT_SECRET_KEY"
-
-    # Try .env file
+    # Try service-specific .env file first (more accurate for comparison)
     env_path = Path('ai-service/.env')
     secret = load_env_file(env_path)
     if secret:
         return secret, f"{env_path}"
+
+    # Try service-specific environment variable
+    secret = os.getenv('AI_SERVICE_JWT_SECRET_KEY')
+    if secret:
+        return secret, "Environment variable AI_SERVICE_JWT_SECRET_KEY"
+
+    # Fallback to global environment variable
+    secret = os.getenv('JWT_SECRET_KEY')
+    if secret:
+        return secret, "Environment variable JWT_SECRET_KEY (shared)"
 
     # Try .env.example (should not be used in production!)
     env_example_path = Path('ai-service/.env.example')
@@ -110,19 +121,27 @@ def get_ai_service_secret() -> Tuple[Optional[str], str]:
 def get_gibbon_secret() -> Tuple[Optional[str], str]:
     """Get the Gibbon JWT secret.
 
+    Prioritizes service-specific .env file over global environment variable
+    to ensure accurate per-service configuration verification.
+
     Returns:
         Tuple of (secret_value, source_description)
     """
-    # Try environment variable
-    secret = os.getenv('JWT_SECRET_KEY')
-    if secret:
-        return secret, "Environment variable JWT_SECRET_KEY"
-
-    # Try .env file
+    # Try service-specific .env file first (more accurate for comparison)
     env_path = Path('gibbon/.env')
     secret = load_env_file(env_path)
     if secret:
         return secret, f"{env_path}"
+
+    # Try service-specific environment variable
+    secret = os.getenv('GIBBON_JWT_SECRET_KEY')
+    if secret:
+        return secret, "Environment variable GIBBON_JWT_SECRET_KEY"
+
+    # Fallback to global environment variable
+    secret = os.getenv('JWT_SECRET_KEY')
+    if secret:
+        return secret, "Environment variable JWT_SECRET_KEY (shared)"
 
     # Try .env.example (should not be used in production!)
     env_example_path = Path('gibbon/.env.example')
@@ -273,5 +292,31 @@ def main() -> int:
         return 1
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Returns:
+        Parsed arguments namespace
+    """
+    parser = argparse.ArgumentParser(
+        description='Verify JWT configuration between Gibbon and AI Service.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    python3 scripts/verify-jwt-config.py
+    python3 scripts/verify-jwt-config.py --verbose
+
+For detailed setup instructions, see: docs/JWT_SHARED_SECRET_SETUP.md
+        """,
+    )
+    parser.add_argument(
+        '--verbose', '-v',
+        action='store_true',
+        help='Show detailed output including secret lengths and sources'
+    )
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+    args = parse_args()
     sys.exit(main())

@@ -250,10 +250,18 @@ verify_mysql_backup() {
 
     # Restore backup to temporary database
     debug "Restoring backup to temporary database..."
-    if ! gunzip -c "$backup_file" | mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$temp_db_name" 2>&1 | tee -a "$LOG_FILE" | grep -v "^$" > /dev/null; then
+    local restore_output
+    # Capture mysql output and check exit code directly instead of relying on grep
+    # (grep -v would fail with exit code 1 on silent success with no output)
+    if ! restore_output=$(gunzip -c "$backup_file" | mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$temp_db_name" 2>&1); then
         error "Failed to restore backup to temporary database"
+        [ -n "$restore_output" ] && echo "$restore_output" >> "$LOG_FILE"
         cleanup_temp_db "mysql" "$temp_db_name"
         return 1
+    fi
+    # Log any output (warnings, etc.) even on success
+    if [ -n "$restore_output" ]; then
+        echo "$restore_output" >> "$LOG_FILE"
     fi
 
     # Run integrity checks
@@ -589,10 +597,16 @@ parse_args() {
     done
 }
 
+# Ensure log directory exists before any logging (moved here to handle early error paths)
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+
 # Main function
 main() {
-    # Create log directory if it doesn't exist
-    mkdir -p "$LOG_DIR" || error_exit "Failed to create log directory"
+    # Verify log directory exists (fail early with clear error if creation silently failed)
+    if [ ! -d "$LOG_DIR" ]; then
+        echo "ERROR: Failed to create log directory: $LOG_DIR" >&2
+        exit 1
+    fi
 
     log "==================================="
     log "Backup Verification Tool"

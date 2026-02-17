@@ -103,7 +103,7 @@ class DeliveryLogGateway extends QueryableGateway
     ) {
         $query = $this
             ->newQuery()
-            ->from($this->getTableName())
+            ->from($this->getTableName() . ' AS log')
             ->cols([
                 'log.gibbonNotificationDeliveryLogID',
                 'log.gibbonNotificationQueueID',

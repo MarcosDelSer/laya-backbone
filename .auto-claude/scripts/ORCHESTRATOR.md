@@ -233,6 +233,28 @@ Specs with P0/P1 findings should be marked blocked until issues are resolved.
 - **Report consumption:** Reports link to evidence via relative paths; suitable for PR comments and issue tracking.
 - **Downstream specs:** Tasks 068-071 extend this foundation with platform-specific execution.
 
+## Desktop LLM QA Orchestration
+
+For desktop application QA (Windows VM/emulator and macOS installed app), use the desktop LLM QA runner.
+
+### Flow
+
+1. Auto-Claude moves task to `in_progress` and prepares scenario context.
+2. Desktop QA receives the run trigger and executes test scenarios.
+3. Windows suites run via `.auto-claude/scripts/run-desktop-llm-qa.sh --platform windows`.
+4. macOS suites run via `.auto-claude/scripts/run-desktop-llm-qa.sh --platform macos`.
+5. Artifacts are written under `.auto-claude/qa/runs/desktop/...` and summarized.
+
+### Operational Notes
+
+- Windows requires `WINDOWS_VM_HOST`, `WINDOWS_VM_USER` for VM connectivity.
+- macOS requires `MACOS_APP_BUNDLE_ID` or `MACOS_APP_PATH` for app identification.
+- Use `DESKTOP_QA_DRY_RUN=true` for configuration validation without execution.
+- Evidence (screenshots, logs) is captured per-run under timestamped directories.
+- Scenario packs are located at:
+  - Windows: `.auto-claude/qa/desktop/windows/scenarios.json`
+  - macOS: `.auto-claude/qa/desktop/macos/scenarios.json`
+
 ## Related Docs
 
 | Doc | Purpose |
@@ -246,6 +268,7 @@ Specs with P0/P1 findings should be marked blocked until issues are resolved.
 | **`docs/LLM_QA_FOUNDATION.md`** | End-to-end LLM QA workflow, scenario format, and runner invocation. |
 | **`.auto-claude/qa/llm/scenario-schema.json`** | JSON Schema for LLM QA scenario validation. |
 | **`.auto-claude/qa/llm/severity-rubric.md`** | P0-P3 severity definitions and triage decision rules. |
+| **`docs/LLM_QA_DESKTOP.md`** | Desktop LLM QA setup, execution, and troubleshooting. |
 
 ## Summary
 

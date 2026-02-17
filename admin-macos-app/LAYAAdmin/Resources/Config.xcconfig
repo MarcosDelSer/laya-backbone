@@ -8,13 +8,13 @@
 
 // MARK: - API Configuration
 
-// Gibbon CMS API Base URL
-// Override this value for different environments
-GIBBON_API_URL = http:/$()/localhost/gibbon/api
+// Gibbon CMS API Base URL (shared Hetzner backend via Caddy path routing)
+// Override this value for local/dev environments
+GIBBON_API_URL = https://ai.46-225-139-110.sslip.io/gibbon/api
 
 // AI Service API Base URL
-// Override this value for different environments
-AI_SERVICE_URL = http:/$()/localhost:8000
+// Override this value for local/dev environments
+AI_SERVICE_URL = https://ai.46-225-139-110.sslip.io
 
 // MARK: - App Configuration
 

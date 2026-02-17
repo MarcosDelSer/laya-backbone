@@ -1,0 +1,1281 @@
+{
+  "$schema": "./scenario-schema.json",
+  "version": "1.0.0",
+  "name": "LLM Frontend Edge-Case Scenarios",
+  "description": "Edge-case journeys and negative tests for LLM-guided exploratory frontend review",
+  "target_app": "gibbon/modules/AISync",
+  "base_url": "${GIBBON_URL:-http://localhost:8080}",
+  "auth": {
+    "username_env": "ADMIN_USERNAME",
+    "password_env": "ADMIN_PASSWORD",
+    "login_url": "/index.php",
+    "username_selector": "input[name=\"username\"]",
+    "password_selector": "input[name=\"password\"]",
+    "submit_selector": "input[type=\"submit\"], button[type=\"submit\"]"
+  },
+  "scenarios": [
+    {
+      "id": "edge-001",
+      "name": "Invalid Login Credentials",
+      "category": "authentication",
+      "severity": "critical",
+      "description": "Verify system handles invalid login attempts gracefully",
+      "tags": ["auth", "negative-test", "security"],
+      "prerequisites": [],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php",
+          "description": "Navigate to login page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "input[name=\"username\"]",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"username\"]",
+          "value": "invalid_user_123",
+          "description": "Enter invalid username"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"password\"]",
+          "value": "wrong_password_456",
+          "description": "Enter invalid password"
+        },
+        {
+          "action": "click",
+          "selector": "input[type=\"submit\"], button[type=\"submit\"]",
+          "description": "Submit login form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check that an appropriate error message is displayed. The error should NOT reveal whether the username or password was incorrect (security best practice). Report the actual error message shown.",
+          "evidence_selectors": [".error", ".alert", ".warning", "[class*='error']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "invalid-login-error.png"
+        },
+        {
+          "action": "assert_not_url_contains",
+          "value": "modules/AISync",
+          "description": "Verify user was not authenticated"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Error message is displayed",
+        "Error does not reveal sensitive info",
+        "User remains on login page",
+        "No server error or crash"
+      ]
+    },
+    {
+      "id": "edge-002",
+      "name": "Empty Login Submission",
+      "category": "authentication",
+      "severity": "high",
+      "description": "Verify form validation prevents empty login submission",
+      "tags": ["auth", "validation", "negative-test"],
+      "prerequisites": [],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php",
+          "description": "Navigate to login page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "input[name=\"username\"]",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "clear",
+          "selector": "input[name=\"username\"]",
+          "description": "Ensure username is empty"
+        },
+        {
+          "action": "clear",
+          "selector": "input[name=\"password\"]",
+          "description": "Ensure password is empty"
+        },
+        {
+          "action": "click",
+          "selector": "input[type=\"submit\"], button[type=\"submit\"]",
+          "description": "Submit empty form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check if client-side validation prevents submission or if server returns an appropriate error. Note which fields show validation errors.",
+          "evidence_selectors": ["input:invalid", ".error", ".required"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "empty-login-validation.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Form validation prevents empty submission OR server error displayed",
+        "User remains on login page",
+        "Clear error messaging"
+      ]
+    },
+    {
+      "id": "edge-003",
+      "name": "Invalid URL Format in Settings",
+      "category": "settings",
+      "severity": "high",
+      "description": "Verify settings validates URL format correctly",
+      "tags": ["settings", "validation", "negative-test"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value": "not-a-valid-url",
+          "description": "Enter invalid URL"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check for URL validation error message. The system should reject non-URL strings. Report the exact error message shown.",
+          "evidence_selectors": [".error", ".invalid-feedback", "[class*='error']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "invalid-url-validation.png"
+        },
+        {
+          "action": "assert_page_contains_any",
+          "values": ["valid URL", "error", "Error", "invalid"],
+          "description": "Verify validation error present"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "URL validation error is displayed",
+        "Invalid URL is not saved",
+        "Error message is clear and helpful"
+      ]
+    },
+    {
+      "id": "edge-004",
+      "name": "Webhook Timeout Above Maximum",
+      "category": "settings",
+      "severity": "medium",
+      "description": "Verify numeric validation rejects values above maximum (>300)",
+      "tags": ["settings", "validation", "boundary-test"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"webhookTimeout\"]",
+          "value": "500",
+          "description": "Enter value above max (300)"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check for validation error indicating the value must be between 1 and 300. Note the exact error message and whether the invalid value was rejected.",
+          "evidence_selectors": [".error", ".invalid-feedback", "[class*='error']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "timeout-above-max-validation.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Validation error for range is displayed",
+        "Value is not saved",
+        "Error message mentions valid range (1-300)"
+      ]
+    },
+    {
+      "id": "edge-005",
+      "name": "Webhook Timeout Below Minimum",
+      "category": "settings",
+      "severity": "medium",
+      "description": "Verify numeric validation rejects values below minimum (<1)",
+      "tags": ["settings", "validation", "boundary-test"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"webhookTimeout\"]",
+          "value": "0",
+          "description": "Enter value below min (1)"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check for validation error indicating the value must be between 1 and 300. Note whether 0 is treated differently than negative numbers.",
+          "evidence_selectors": [".error", ".invalid-feedback", "[class*='error']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "timeout-below-min-validation.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Validation error for range is displayed",
+        "Zero value is rejected",
+        "Error message mentions valid range"
+      ]
+    },
+    {
+      "id": "edge-006",
+      "name": "Max Retry Attempts Above Maximum",
+      "category": "settings",
+      "severity": "medium",
+      "description": "Verify max retry attempts validation rejects values above maximum (>10)",
+      "tags": ["settings", "validation", "boundary-test"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"maxRetryAttempts\"]",
+          "value": "15",
+          "description": "Enter value above max (10)"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check for validation error indicating the value must be between 0 and 10. Note the exact error message.",
+          "evidence_selectors": [".error", ".invalid-feedback", "[class*='error']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "retry-above-max-validation.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Validation error for range is displayed",
+        "Value is not saved",
+        "Error message mentions valid range (0-10)"
+      ]
+    },
+    {
+      "id": "edge-007",
+      "name": "Negative Number in Numeric Fields",
+      "category": "settings",
+      "severity": "medium",
+      "description": "Verify negative numbers are rejected in numeric settings fields",
+      "tags": ["settings", "validation", "boundary-test"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"webhookTimeout\"]",
+          "value": "-10",
+          "description": "Enter negative timeout value"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"maxRetryAttempts\"]",
+          "value": "-5",
+          "description": "Enter negative retry attempts value"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"retryDelaySeconds\"]",
+          "value": "-100",
+          "description": "Enter negative retry delay value"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check that all negative values are rejected with appropriate error messages. Note which fields show errors and which might incorrectly accept negative values.",
+          "evidence_selectors": [".error", ".invalid-feedback", "[class*='error']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "negative-numbers-validation.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "All negative values are rejected",
+        "Clear validation errors shown",
+        "No negative values saved to database"
+      ]
+    },
+    {
+      "id": "edge-008",
+      "name": "Non-Numeric Input in Numeric Fields",
+      "category": "settings",
+      "severity": "medium",
+      "description": "Verify non-numeric strings are rejected in numeric settings fields",
+      "tags": ["settings", "validation", "type-check"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"webhookTimeout\"]",
+          "value": "abc",
+          "description": "Enter non-numeric string"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"maxRetryAttempts\"]",
+          "value": "xyz",
+          "description": "Enter non-numeric string"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check how the form handles non-numeric input. Does HTML5 validation catch it? Does the server reject it? Are error messages clear?",
+          "evidence_selectors": ["input:invalid", ".error", ".invalid-feedback"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "non-numeric-validation.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Non-numeric values are rejected",
+        "Clear validation errors shown",
+        "Either client or server-side validation works"
+      ]
+    },
+    {
+      "id": "edge-009",
+      "name": "XSS Attempt in URL Field",
+      "category": "security",
+      "severity": "critical",
+      "description": "Verify XSS payloads are rejected/sanitized in URL field",
+      "tags": ["security", "xss", "negative-test"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value": "javascript:alert('xss')",
+          "description": "Enter XSS payload as URL"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check that the XSS payload is rejected or sanitized. The javascript: protocol should not be accepted as a valid URL. Report any security concerns.",
+          "evidence_selectors": [".error", "input[name='aiServiceURL']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "xss-url-validation.png"
+        },
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Reload page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_not_input_value",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "not_expected": "javascript:",
+          "description": "Verify XSS payload was not saved"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "XSS payload is rejected or sanitized",
+        "No script execution occurs",
+        "Error message indicates invalid URL"
+      ]
+    },
+    {
+      "id": "edge-010",
+      "name": "Invalid Date Range in Health Filter",
+      "category": "filtering",
+      "severity": "low",
+      "description": "Verify health page handles invalid date ranges gracefully",
+      "tags": ["health", "filtering", "validation"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_health.php",
+          "description": "Navigate to health page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#filter",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"dateFrom\"]",
+          "value": "2026-12-31",
+          "description": "Enter later date as start"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"dateTo\"]",
+          "value": "2026-01-01",
+          "description": "Enter earlier date as end (invalid range)"
+        },
+        {
+          "action": "click",
+          "selector": "form#filter input[type=\"submit\"]",
+          "description": "Submit invalid date range"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check how the system handles a date range where start > end. Does it show an error, show empty results, or swap the dates? Note the actual behavior.",
+          "evidence_selectors": [".error", ".warning", ".grid"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "invalid-date-range-health.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "System handles invalid range gracefully",
+        "No crash or server error",
+        "Either shows error or empty results"
+      ]
+    },
+    {
+      "id": "edge-011",
+      "name": "Future Date in Health Filter",
+      "category": "filtering",
+      "severity": "low",
+      "description": "Verify health page handles future dates correctly",
+      "tags": ["health", "filtering", "boundary-test"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_health.php",
+          "description": "Navigate to health page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#filter",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"dateFrom\"]",
+          "value": "2030-01-01",
+          "description": "Enter far future start date"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"dateTo\"]",
+          "value": "2030-12-31",
+          "description": "Enter far future end date"
+        },
+        {
+          "action": "click",
+          "selector": "form#filter input[type=\"submit\"]",
+          "description": "Submit future date range"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check how the system handles queries for future dates where no data can exist. Should show empty/zero metrics gracefully.",
+          "evidence_selectors": [".grid", ".error"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "future-date-filter.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "System handles future dates gracefully",
+        "Shows zero metrics or empty state",
+        "No crash or unexpected error"
+      ]
+    },
+    {
+      "id": "edge-012",
+      "name": "Empty Logs Table State",
+      "category": "logs",
+      "severity": "low",
+      "description": "Verify logs page handles empty state gracefully",
+      "tags": ["logs", "empty-state", "ux"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_logs.php?dateFrom=1900-01-01&dateTo=1900-01-02",
+          "description": "Navigate to logs with date range that has no data"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check the empty state display. Is there a helpful message indicating no logs found? Is the table structure still visible? Is the UI clear about why there's no data?",
+          "evidence_selectors": ["table", ".empty-state", ".no-data", ".no-results"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "logs-empty-state.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": false
+      },
+      "success_criteria": [
+        "Empty state is handled gracefully",
+        "UI indicates no matching logs",
+        "Page remains functional",
+        "User can clear filters easily"
+      ]
+    },
+    {
+      "id": "edge-013",
+      "name": "Direct URL Access Without Auth",
+      "category": "security",
+      "severity": "critical",
+      "description": "Verify protected pages require authentication",
+      "tags": ["security", "auth", "negative-test"],
+      "prerequisites": [],
+      "steps": [
+        {
+          "action": "clear_cookies",
+          "description": "Clear all session cookies"
+        },
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Attempt to access settings without login"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check that unauthenticated access is blocked. The user should be redirected to login or shown an access denied message. Settings should NOT be visible.",
+          "evidence_selectors": ["form#aiSyncSettings", "input[name='username']", ".error", ".access-denied"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "unauth-access-settings.png"
+        },
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_health.php",
+          "description": "Attempt to access health without login"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "screenshot",
+          "filename": "unauth-access-health.png"
+        },
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_logs.php",
+          "description": "Attempt to access logs without login"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "screenshot",
+          "filename": "unauth-access-logs.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "All protected pages require authentication",
+        "User is redirected to login or shown access denied",
+        "No sensitive data is exposed"
+      ]
+    },
+    {
+      "id": "edge-014",
+      "name": "Rapid Form Submission",
+      "category": "stress",
+      "severity": "medium",
+      "description": "Verify form handles rapid submissions gracefully",
+      "tags": ["stress", "race-condition", "negative-test"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value": "http://rapid-test:8000",
+          "description": "Enter test URL"
+        },
+        {
+          "action": "rapid_click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "count": 5,
+          "interval_ms": 50,
+          "description": "Submit form rapidly 5 times"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check for any race condition issues, duplicate submissions, or error states. The system should handle rapid clicks gracefully (ideally disable button after first click).",
+          "evidence_selectors": [".error", ".success", "input[type='submit']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "rapid-submission.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "No server errors from rapid submission",
+        "Either prevents duplicate submissions or handles them gracefully",
+        "Final state is consistent"
+      ]
+    },
+    {
+      "id": "edge-015",
+      "name": "Browser Back Button After Form Submit",
+      "category": "navigation",
+      "severity": "low",
+      "description": "Verify browser back button behavior after form submission",
+      "tags": ["navigation", "ux", "form"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value": "http://back-button-test:8000",
+          "description": "Change URL value"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "go_back",
+          "description": "Press browser back button"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check the behavior after pressing back. Does it show a cached page? Resubmission warning? Is the user experience confusing? Note any issues.",
+          "evidence_selectors": ["form#aiSyncSettings", "input[name='aiServiceURL']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "back-button-after-submit.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": false
+      },
+      "success_criteria": [
+        "Back button doesn't cause errors",
+        "No unwanted form resubmission",
+        "User can navigate away cleanly"
+      ]
+    },
+    {
+      "id": "edge-016",
+      "name": "Very Long URL Input",
+      "category": "settings",
+      "severity": "low",
+      "description": "Verify system handles extremely long URL input",
+      "tags": ["settings", "boundary-test", "input-length"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value_generator": "repeat_string",
+          "base_value": "http://example.com/",
+          "repeat_char": "a",
+          "repeat_count": 2000,
+          "description": "Enter extremely long URL (2000+ chars)"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check how the system handles very long input. Does it truncate, reject, or accept? Note any UI overflow issues or error messages.",
+          "evidence_selectors": [".error", "input[name='aiServiceURL']", ".overflow"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "very-long-url.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Long input is either truncated or rejected",
+        "No buffer overflow or crash",
+        "Error message if length exceeded"
+      ]
+    },
+    {
+      "id": "edge-017",
+      "name": "Special Characters in Filter Fields",
+      "category": "filtering",
+      "severity": "medium",
+      "description": "Verify special characters in filters don't cause issues",
+      "tags": ["filtering", "security", "validation"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_logs.php",
+          "description": "Navigate to logs page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#filters",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"dateFrom\"]",
+          "value": "'; DROP TABLE logs; --",
+          "description": "Enter SQL injection attempt in date field"
+        },
+        {
+          "action": "click",
+          "selector": "form#filters input[type=\"submit\"]",
+          "description": "Submit filter"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check that the SQL injection attempt is handled safely. The input should be rejected or sanitized. No SQL error should be exposed. Note any security concerns.",
+          "evidence_selectors": [".error", "table"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "sql-injection-filter.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "SQL injection attempt is blocked",
+        "No SQL error messages exposed",
+        "Input is properly sanitized"
+      ]
+    },
+    {
+      "id": "edge-018",
+      "name": "Page Refresh During Form Fill",
+      "category": "ux",
+      "severity": "low",
+      "description": "Verify page refresh behavior with unsaved form data",
+      "tags": ["ux", "form", "data-loss"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value": "http://unsaved-changes-test:8000",
+          "description": "Enter new value without saving"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"webhookTimeout\"]",
+          "value": "45",
+          "description": "Change timeout without saving"
+        },
+        {
+          "action": "screenshot",
+          "filename": "unsaved-form-before-refresh.png"
+        },
+        {
+          "action": "refresh",
+          "description": "Refresh the page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check the behavior on page refresh with unsaved data. Is there a warning dialog? Is data lost? Note any UX concerns about unsaved data handling.",
+          "evidence_selectors": ["form#aiSyncSettings", "input[name='aiServiceURL']", "input[name='webhookTimeout']"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "after-refresh-unsaved.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": false
+      },
+      "success_criteria": [
+        "Either warns about unsaved changes or data is preserved",
+        "User understands data may be lost",
+        "No JavaScript errors on refresh"
+      ]
+    },
+    {
+      "id": "edge-019",
+      "name": "Multiple Tabs Same Page",
+      "category": "concurrency",
+      "severity": "low",
+      "description": "Verify behavior with same page open in multiple tabs",
+      "tags": ["concurrency", "session", "ux"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page in first tab"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "new_tab",
+          "url": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Open settings in second tab"
+        },
+        {
+          "action": "switch_tab",
+          "index": 1,
+          "description": "Switch to second tab"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value": "http://second-tab-url:8000",
+          "description": "Change URL in second tab"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Save in second tab"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "switch_tab",
+          "index": 0,
+          "description": "Switch back to first tab"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value": "http://first-tab-url:8000",
+          "description": "Change URL in first tab"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Save in first tab"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check for any concurrency issues when the same page is edited in multiple tabs. Does the last save win? Are there any conflict warnings? Note the behavior.",
+          "evidence_selectors": ["input[name='aiServiceURL']", ".error", ".warning"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "multi-tab-save.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "No server errors from concurrent edits",
+        "Last save wins OR conflict detected",
+        "Data integrity maintained"
+      ]
+    },
+    {
+      "id": "edge-020",
+      "name": "Accessibility - Keyboard Navigation",
+      "category": "accessibility",
+      "severity": "medium",
+      "description": "Verify all form elements are keyboard accessible",
+      "tags": ["a11y", "keyboard", "ux"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "press_key",
+          "key": "Tab",
+          "repeat": 10,
+          "description": "Tab through form elements"
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check that all form elements can be reached via keyboard tabbing. Note if focus order is logical, if focus indicators are visible, and if any elements are skipped.",
+          "evidence_selectors": [":focus", "form#aiSyncSettings *"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "keyboard-navigation.png"
+        },
+        {
+          "action": "focus",
+          "selector": "select[name=\"syncEnabled\"]",
+          "description": "Focus on select element"
+        },
+        {
+          "action": "press_key",
+          "key": "ArrowDown",
+          "description": "Navigate dropdown with arrow keys"
+        },
+        {
+          "action": "press_key",
+          "key": "Enter",
+          "description": "Select with Enter"
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check that dropdown controls work with keyboard. Arrow keys should navigate options, Enter should select.",
+          "evidence_selectors": ["select[name='syncEnabled']"]
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": false
+      },
+      "success_criteria": [
+        "All form elements reachable via Tab",
+        "Focus indicators are visible",
+        "Logical tab order",
+        "Dropdown navigable with arrow keys"
+      ]
+    }
+  ],
+  "llm_instructions": {
+    "exploratory_guidance": [
+      "Try unexpected input combinations",
+      "Look for error message information leakage",
+      "Test boundary conditions systematically",
+      "Check for race conditions in rapid interactions",
+      "Verify security controls are consistent",
+      "Note any inconsistent error handling",
+      "Test accessibility with keyboard only"
+    ],
+    "evidence_collection": {
+      "screenshots": "Capture before and after each test action",
+      "console_logs": "Pay special attention to errors and warnings",
+      "network_capture": "Log all failed requests and unexpected responses"
+    },
+    "severity_guidelines": {
+      "critical": "Authentication bypass, data exposure, XSS/SQL injection success",
+      "high": "Security control failures, data corruption, critical validation gaps",
+      "medium": "Poor error handling, UX issues affecting workflows, minor validation gaps",
+      "low": "Edge case handling, cosmetic issues, minor UX improvements"
+    },
+    "reporting_focus": [
+      "Security vulnerabilities get highest priority",
+      "Document exact reproduction steps",
+      "Include failed request details",
+      "Note any unexpected behavior even if not strictly a bug",
+      "Suggest severity based on impact and exploitability"
+    ]
+  }
+}

@@ -253,7 +253,16 @@ process_retention() {
 
         # Keep weekly backups (Sundays) for WEEKLY_RETENTION weeks
         if is_sunday "$backup_date"; then
-            local week_marker="${backup_date:0:6}"  # YYYYMM format
+            # Use ISO week number (YYYYWW) to properly key by week instead of month
+            local week_marker
+            week_marker=$(date -d "${backup_date:0:4}-${backup_date:4:2}-${backup_date:6:2}" +%G%V 2>/dev/null || \
+                          date -j -f "%Y%m%d" "$backup_date" +%G%V 2>/dev/null || echo "")
+
+            if [ -z "$week_marker" ]; then
+                warning "Could not determine week number for: $filename"
+                continue
+            fi
+
             local already_have_week=false
 
             if echo "$weekly_dates" | grep -q "^${week_marker}$"; then
@@ -349,6 +358,13 @@ process_retention() {
 
 # Main function
 main() {
+    # Create log directory first to ensure logging works
+    local log_dir
+    log_dir=$(dirname "$RETENTION_LOG")
+    if [ ! -d "$log_dir" ]; then
+        mkdir -p "$log_dir" || { echo "ERROR: Failed to create log directory: $log_dir" >&2; exit 1; }
+    fi
+
     log "==================================="
     if [ "$DRY_RUN" = true ]; then
         log "Starting backup retention policy (DRY-RUN MODE)"
@@ -362,13 +378,6 @@ main() {
     log "  - Weekly retention: $WEEKLY_RETENTION weeks (Sundays)"
     log "  - Monthly retention: $MONTHLY_RETENTION months (1st day)"
     log ""
-
-    # Create log directory if it doesn't exist
-    local log_dir
-    log_dir=$(dirname "$RETENTION_LOG")
-    if [ ! -d "$log_dir" ]; then
-        mkdir -p "$log_dir" || error_exit "Failed to create log directory: $log_dir"
-    fi
 
     # Process MySQL backups
     if [ -n "$MYSQL_BACKUP_DIR" ]; then

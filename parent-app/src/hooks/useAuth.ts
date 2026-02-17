@@ -4,6 +4,9 @@
  * A custom hook for managing authentication state throughout the app.
  * Handles login, logout, biometric authentication, and session management.
  *
+ * Wires LoginScreen actions to AuthProvider so the unauthenticated gate
+ * can transition into authenticated state correctly.
+ *
  * Follows pattern from:
  * - useChildSelection.ts for hook structure
  * - authService.ts for authentication operations
@@ -11,20 +14,15 @@
 
 import {useState, useEffect, useCallback} from 'react';
 import type {Parent} from '../types';
+import {useAuthContext} from '../contexts/AuthContext';
 import {
-  isAuthenticated as checkAuth,
-  getCurrentUser,
-  login as authLogin,
-  logout as authLogout,
   loginWithBiometrics as authLoginBiometrics,
   checkBiometricAvailability,
   isBiometricLoginEnabled,
   getStoredEmail,
   enableBiometricLogin as authEnableBiometrics,
   disableBiometricLogin as authDisableBiometrics,
-  loginWithMockCredentials,
   type LoginCredentials,
-  type LoginResponse,
   type BiometricStatus,
   type AuthError,
 } from '../services/authService';
@@ -76,6 +74,9 @@ export type UseAuthReturn = UseAuthState & UseAuthActions;
 /**
  * Hook for managing authentication throughout the app
  *
+ * Wires login actions to AuthContext so the authentication gate
+ * in App.tsx can properly transition between authenticated/unauthenticated states.
+ *
  * @returns {UseAuthReturn} Authentication state and actions
  *
  * @example
@@ -116,14 +117,22 @@ export type UseAuthReturn = UseAuthState & UseAuthActions;
  * ```
  */
 export function useAuth(): UseAuthReturn {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  // Get auth state and actions from AuthContext to ensure
+  // login/logout updates the app-wide auth gate in App.tsx
+  const {state: authContextState, actions: authContextActions} = useAuthContext();
+
+  // Local state for UI (loading indicators, errors)
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [user, setUser] = useState<Parent | null>(null);
   const [error, setError] = useState<AuthError | null>(null);
   const [biometricStatus, setBiometricStatus] = useState<BiometricStatus | null>(null);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [storedEmail, setStoredEmail] = useState<string | null>(null);
+
+  // Auth state comes from context - this is the key fix
+  // AppNavigator checks authContextState.isAuthenticated, so we must use the same source
+  const isAuthenticated = authContextState.isAuthenticated;
+  const user = authContextState.user;
+  const isLoading = authContextState.loading;
 
   /**
    * Refresh biometric availability status
@@ -136,31 +145,21 @@ export function useAuth(): UseAuthReturn {
   }, []);
 
   /**
-   * Initialize authentication state on mount
+   * Initialize biometric state on mount
+   * Auth state is managed by AuthContext/AuthProvider
    */
   useEffect(() => {
-    const initAuth = async () => {
-      setIsLoading(true);
-
-      // Check if already authenticated (session persisted)
-      const authenticated = checkAuth();
-      setIsAuthenticated(authenticated);
-
-      if (authenticated) {
-        setUser(getCurrentUser());
-      }
-
-      // Check biometric availability
+    const initBiometrics = async () => {
+      // Check biometric availability (auth state comes from context)
       await refreshBiometricStatus();
-
-      setIsLoading(false);
     };
 
-    initAuth();
+    initBiometrics();
   }, [refreshBiometricStatus]);
 
   /**
    * Login with email and password
+   * Delegates to AuthContext.actions.login() to update the app-wide auth gate
    */
   const login = useCallback(
     async (credentials: LoginCredentials): Promise<boolean> => {
@@ -168,28 +167,20 @@ export function useAuth(): UseAuthReturn {
       setError(null);
 
       try {
-        // Try real API first, fall back to mock for development
-        let result = await authLogin(credentials);
+        // Use AuthContext login action to update the app-wide auth state
+        // This ensures AppNavigator in App.tsx sees the authenticated state
+        const success = await authContextActions.login(credentials);
 
-        // If API fails (development mode), use mock login
-        if (!result.success && result.error?.code === 'NETWORK_ERROR') {
-          result = await loginWithMockCredentials(credentials.email, credentials.password);
-        }
-
-        if (result.success && result.data) {
-          setIsAuthenticated(true);
-          setUser(result.data.user);
-
-          // Update biometric state
+        if (success) {
+          // Update biometric state on successful login
           if (credentials.rememberMe) {
             setBiometricEnabled(true);
             setStoredEmail(credentials.email);
           }
-
           return true;
         }
 
-        setError(result.error || {code: 'UNKNOWN_ERROR', message: 'Login failed'});
+        setError({code: 'LOGIN_FAILED', message: 'Login failed. Please check your credentials.'});
         return false;
       } catch (err) {
         setError({
@@ -201,11 +192,12 @@ export function useAuth(): UseAuthReturn {
         setIsLoggingIn(false);
       }
     },
-    [],
+    [authContextActions],
   );
 
   /**
    * Login using biometrics
+   * Uses AuthContext.actions.login() to update the app-wide auth gate
    */
   const loginWithBiometrics = useCallback(async (): Promise<boolean> => {
     if (!biometricEnabled) {
@@ -223,18 +215,30 @@ export function useAuth(): UseAuthReturn {
       const result = await authLoginBiometrics();
 
       if (result.success && result.data) {
-        setIsAuthenticated(true);
-        setUser(result.data.user);
-        return true;
+        // For biometric login, we need to use the stored credentials
+        // The authLoginBiometrics already handles token refresh/validation
+        // Use context login to update app-wide state
+        if (storedEmail) {
+          const success = await authContextActions.login({
+            email: storedEmail,
+            password: '', // Biometric auth doesn't need password
+            rememberMe: true,
+          });
+          if (success) {
+            return true;
+          }
+        }
       }
 
       // For development/mock: if biometric is enabled but no token,
-      // just authenticate the user
+      // just authenticate the user via context
       if (storedEmail) {
-        const mockResult = await loginWithMockCredentials(storedEmail, 'biometric');
-        if (mockResult.success && mockResult.data) {
-          setIsAuthenticated(true);
-          setUser(mockResult.data.user);
+        const success = await authContextActions.login({
+          email: storedEmail,
+          password: 'biometric', // Mock password for development
+          rememberMe: true,
+        });
+        if (success) {
           return true;
         }
       }
@@ -250,17 +254,16 @@ export function useAuth(): UseAuthReturn {
     } finally {
       setIsLoggingIn(false);
     }
-  }, [biometricEnabled, storedEmail]);
+  }, [biometricEnabled, storedEmail, authContextActions]);
 
   /**
    * Logout the current user
+   * Delegates to AuthContext.actions.logout() to update the app-wide auth gate
    */
   const logout = useCallback(async (): Promise<void> => {
-    await authLogout();
-    setIsAuthenticated(false);
-    setUser(null);
+    await authContextActions.logout();
     setError(null);
-  }, []);
+  }, [authContextActions]);
 
   /**
    * Enable biometric login
@@ -294,7 +297,8 @@ export function useAuth(): UseAuthReturn {
    */
   const clearError = useCallback((): void => {
     setError(null);
-  }, []);
+    authContextActions.clearError();
+  }, [authContextActions]);
 
   return {
     // State

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import Depends
-from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import security, verify_token
@@ -19,7 +19,11 @@ from app.middleware.auth import (
     get_current_user_multi_source as _get_current_user_multi_source,
     get_optional_user_multi_source as _get_optional_user_multi_source,
     security_multi_source,
+    security_multi_source_optional,
 )
+
+# Optional security scheme for endpoints that accept but don't require auth
+security_optional = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
@@ -54,9 +58,7 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(
-        security,
-    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security_optional),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any] | None:
     """Dependency to optionally get the current user if authenticated.
@@ -120,7 +122,7 @@ async def get_current_user_multi_source(
 
 
 async def get_optional_user_multi_source(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security_multi_source),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security_multi_source_optional),
 ) -> dict[str, Any] | None:
     """Dependency to optionally get current user from multi-source token.
 

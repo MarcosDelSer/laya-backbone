@@ -30,6 +30,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
  * - Overdue invoices count and amount
  * - Quick links to invoice management
  * - RL-24 status overview (if tax season)
+ * - YTD (Year-to-Date) revenue with monthly breakdown
+ * - Outstanding balances by family
+ * - Payment method breakdown with percentages
+ * - Aging summary widget (30/60/90+ day overdue totals with drill-down links)
+ * - Monthly vs Historical Comparison (year-over-year revenue comparison with chart/table)
+ * - Expense Summary (category breakdown, recent expenses, net income calculation)
  *
  * @package    Gibbon\Module\EnhancedFinance
  * @author     LAYA
@@ -43,6 +49,7 @@ use Gibbon\Domain\School\SchoolYearGateway;
 use Gibbon\Module\EnhancedFinance\Domain\InvoiceGateway;
 use Gibbon\Module\EnhancedFinance\Domain\PaymentGateway;
 use Gibbon\Module\EnhancedFinance\Domain\Releve24Gateway;
+use Gibbon\Module\EnhancedFinance\Domain\ExpenseGateway;
 
 // Access check
 if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_dashboard.php') == false) {
@@ -63,6 +70,7 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
     $releve24Gateway = $container->get(Releve24Gateway::class);
     $settingGateway = $container->get(SettingGateway::class);
     $schoolYearGateway = $container->get(SchoolYearGateway::class);
+    $expenseGateway = $container->get(ExpenseGateway::class);
 
     // Get school year information
     $schoolYear = $schoolYearGateway->getByID($gibbonSchoolYearID);
@@ -99,6 +107,37 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
 
     // Get payment summary by month
     $paymentsByMonth = $paymentGateway->selectPaymentSummaryByMonth($gibbonSchoolYearID)->fetchAll();
+
+    // Get YTD (Year-to-Date) revenue for current calendar year
+    $currentCalendarYear = (int) date('Y');
+    $ytdRevenue = $paymentGateway->selectYTDRevenue($currentCalendarYear);
+    $ytdRevenueByMonth = $paymentGateway->selectYTDRevenueByMonth($currentCalendarYear)->fetchAll();
+
+    // Get outstanding balances by family
+    $outstandingByFamily = $invoiceGateway->selectOutstandingByFamily($gibbonSchoolYearID, 10)->fetchAll();
+    $outstandingFamilySummary = $invoiceGateway->selectOutstandingByFamilySummary($gibbonSchoolYearID);
+
+    // Get aging summary for overdue invoices (30/60/90+ days)
+    $agingSummary = $invoiceGateway->selectAgingSummaryByYear($gibbonSchoolYearID);
+
+    // Get previous school year for historical comparison
+    $previousSchoolYear = getPreviousSchoolYearInfo($connection2, $gibbonSchoolYearID);
+    $previousSchoolYearID = $previousSchoolYear['gibbonSchoolYearID'] ?? null;
+    $previousSchoolYearName = $previousSchoolYear['name'] ?? __('Previous Year');
+
+    // Get previous year payment data for comparison
+    $previousPaymentsByMonth = [];
+    $previousYearTotalPaid = 0;
+    if ($previousSchoolYearID) {
+        $previousPaymentsByMonth = $paymentGateway->selectPaymentSummaryByMonth($previousSchoolYearID)->fetchAll();
+        $previousFinancialSummary = $invoiceGateway->selectFinancialSummaryByYear($previousSchoolYearID);
+        $previousYearTotalPaid = (float) ($previousFinancialSummary['totalPaid'] ?? 0);
+    }
+
+    // Get expense summary data
+    $expenseSummary = $expenseGateway->selectExpenseTotalsByYear($gibbonSchoolYearID);
+    $expenseByCategory = $expenseGateway->selectExpenseSummaryByCategory($gibbonSchoolYearID)->fetchAll();
+    $recentExpenses = $expenseGateway->selectRecentExpenses($gibbonSchoolYearID, 5)->fetchAll();
 
     // Check if it's tax season (January-February for previous year's RL-24)
     $currentMonth = (int) date('m');
@@ -196,6 +235,83 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
 
     echo '</div>'; // End KPI grid
 
+    // YTD (Year-to-Date) Revenue Section
+    $ytdAmount = (float) ($ytdRevenue['totalAmount'] ?? 0);
+    $ytdPaymentCount = (int) ($ytdRevenue['paymentCount'] ?? 0);
+    $ytdFamilyCount = (int) ($ytdRevenue['familyCount'] ?? 0);
+    $currentMonthNum = (int) date('m');
+
+    echo '<div class="bg-white rounded-lg shadow mb-6">';
+    echo '<div class="px-5 py-4 border-b flex justify-between items-center">';
+    echo '<h3 class="text-lg font-semibold">';
+    echo '<span class="text-indigo-600 mr-2">📈</span>';
+    echo sprintf(__('Year-to-Date Revenue (%d)'), $currentCalendarYear);
+    echo '</h3>';
+    echo '<span class="bg-indigo-100 text-indigo-800 text-sm px-3 py-1 rounded-full">' . __('Calendar Year') . '</span>';
+    echo '</div>';
+    echo '<div class="p-5">';
+
+    // YTD Summary Stats
+    echo '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">';
+
+    // Total YTD Revenue
+    echo '<div class="text-center p-4 bg-indigo-50 rounded-lg">';
+    echo '<div class="text-2xl font-bold text-indigo-700">' . Format::currency($ytdAmount) . '</div>';
+    echo '<div class="text-sm text-indigo-500">' . __('Total Revenue') . '</div>';
+    echo '</div>';
+
+    // Payment Count
+    echo '<div class="text-center p-4 bg-green-50 rounded-lg">';
+    echo '<div class="text-2xl font-bold text-green-700">' . $ytdPaymentCount . '</div>';
+    echo '<div class="text-sm text-green-500">' . __('Payments Received') . '</div>';
+    echo '</div>';
+
+    // Families Served
+    echo '<div class="text-center p-4 bg-blue-50 rounded-lg">';
+    echo '<div class="text-2xl font-bold text-blue-700">' . $ytdFamilyCount . '</div>';
+    echo '<div class="text-sm text-blue-500">' . __('Families Served') . '</div>';
+    echo '</div>';
+
+    // Monthly Average
+    $monthlyAverage = $currentMonthNum > 0 ? $ytdAmount / $currentMonthNum : 0;
+    echo '<div class="text-center p-4 bg-purple-50 rounded-lg">';
+    echo '<div class="text-2xl font-bold text-purple-700">' . Format::currency($monthlyAverage) . '</div>';
+    echo '<div class="text-sm text-purple-500">' . __('Monthly Average') . '</div>';
+    echo '</div>';
+
+    echo '</div>';
+
+    // YTD Monthly Breakdown (mini chart)
+    if (count($ytdRevenueByMonth) > 0) {
+        $maxYtdMonth = max(array_column($ytdRevenueByMonth, 'totalAmount'));
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        echo '<div class="mt-4 pt-4 border-t">';
+        echo '<div class="text-sm text-gray-600 mb-2">' . __('Monthly Revenue Breakdown') . '</div>';
+        echo '<div class="flex items-end justify-between space-x-1" style="height: 80px;">';
+
+        // Create array for all months up to current
+        for ($m = 1; $m <= $currentMonthNum; $m++) {
+            $monthData = array_filter($ytdRevenueByMonth, function ($r) use ($m) {
+                return (int) $r['paymentMonth'] == $m;
+            });
+            $monthData = reset($monthData);
+            $amount = $monthData ? (float) $monthData['totalAmount'] : 0;
+            $height = $maxYtdMonth > 0 ? round(($amount / $maxYtdMonth) * 100) : 0;
+
+            echo '<div class="flex-1 flex flex-col items-center">';
+            echo '<div class="w-full bg-indigo-500 hover:bg-indigo-600 transition rounded-t cursor-pointer" style="height: ' . max($height, 2) . '%" title="' . $monthNames[$m] . ': ' . Format::currency($amount) . '"></div>';
+            echo '<div class="text-xs text-gray-400 mt-1">' . $monthNames[$m] . '</div>';
+            echo '</div>';
+        }
+
+        echo '</div>';
+        echo '</div>';
+    }
+
+    echo '</div>';
+    echo '</div>';
+
     // Overdue Alert (if any)
     if ($overdueCount > 0) {
         echo '<div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">';
@@ -212,6 +328,131 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
         echo '</a>';
         echo '</div>';
         echo '</div>';
+    }
+
+    // Aging Summary Widget
+    $totalOverdueCount = (int) ($agingSummary['total_overdue_count'] ?? 0);
+    if ($totalOverdueCount > 0) {
+        $count1_30 = (int) ($agingSummary['count_1_30'] ?? 0);
+        $count31_60 = (int) ($agingSummary['count_31_60'] ?? 0);
+        $count61_90 = (int) ($agingSummary['count_61_90'] ?? 0);
+        $count90Plus = (int) ($agingSummary['count_90_plus'] ?? 0);
+        $amount1_30 = (float) ($agingSummary['amount_1_30'] ?? 0);
+        $amount31_60 = (float) ($agingSummary['amount_31_60'] ?? 0);
+        $amount61_90 = (float) ($agingSummary['amount_61_90'] ?? 0);
+        $amount90Plus = (float) ($agingSummary['amount_90_plus'] ?? 0);
+        $totalOverdueAmount = (float) ($agingSummary['total_overdue_amount'] ?? 0);
+
+        echo '<div class="bg-white rounded-lg shadow mb-6">';
+        echo '<div class="px-5 py-4 border-b flex justify-between items-center">';
+        echo '<h3 class="text-lg font-semibold">';
+        echo '<span class="text-red-600 mr-2">⏰</span>';
+        echo __('Aging Summary');
+        echo '</h3>';
+        echo '<span class="bg-red-100 text-red-800 text-sm px-3 py-1 rounded-full font-semibold">' . Format::currency($totalOverdueAmount) . '</span>';
+        echo '</div>';
+        echo '<div class="p-5">';
+
+        // Aging buckets grid
+        echo '<div class="grid grid-cols-2 md:grid-cols-4 gap-4">';
+
+        // 1-30 Days
+        $bgColor1_30 = $count1_30 > 0 ? 'bg-yellow-50' : 'bg-gray-50';
+        $textColor1_30 = $count1_30 > 0 ? 'text-yellow-700' : 'text-gray-400';
+        $labelColor1_30 = $count1_30 > 0 ? 'text-yellow-600' : 'text-gray-400';
+        echo '<div class="' . $bgColor1_30 . ' rounded-lg p-4 text-center">';
+        echo '<div class="text-sm font-medium ' . $labelColor1_30 . ' mb-1">' . __('1-30 Days') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $textColor1_30 . '">' . Format::currency($amount1_30) . '</div>';
+        echo '<div class="text-xs ' . $labelColor1_30 . ' mt-1">' . sprintf(__('%d invoice(s)'), $count1_30) . '</div>';
+        if ($count1_30 > 0) {
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Overdue&agingMin=1&agingMax=30" class="text-xs text-yellow-700 hover:underline mt-2 inline-block">' . __('View') . ' &rarr;</a>';
+        }
+        echo '</div>';
+
+        // 31-60 Days
+        $bgColor31_60 = $count31_60 > 0 ? 'bg-orange-50' : 'bg-gray-50';
+        $textColor31_60 = $count31_60 > 0 ? 'text-orange-700' : 'text-gray-400';
+        $labelColor31_60 = $count31_60 > 0 ? 'text-orange-600' : 'text-gray-400';
+        echo '<div class="' . $bgColor31_60 . ' rounded-lg p-4 text-center">';
+        echo '<div class="text-sm font-medium ' . $labelColor31_60 . ' mb-1">' . __('31-60 Days') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $textColor31_60 . '">' . Format::currency($amount31_60) . '</div>';
+        echo '<div class="text-xs ' . $labelColor31_60 . ' mt-1">' . sprintf(__('%d invoice(s)'), $count31_60) . '</div>';
+        if ($count31_60 > 0) {
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Overdue&agingMin=31&agingMax=60" class="text-xs text-orange-700 hover:underline mt-2 inline-block">' . __('View') . ' &rarr;</a>';
+        }
+        echo '</div>';
+
+        // 61-90 Days
+        $bgColor61_90 = $count61_90 > 0 ? 'bg-red-50' : 'bg-gray-50';
+        $textColor61_90 = $count61_90 > 0 ? 'text-red-700' : 'text-gray-400';
+        $labelColor61_90 = $count61_90 > 0 ? 'text-red-600' : 'text-gray-400';
+        echo '<div class="' . $bgColor61_90 . ' rounded-lg p-4 text-center">';
+        echo '<div class="text-sm font-medium ' . $labelColor61_90 . ' mb-1">' . __('61-90 Days') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $textColor61_90 . '">' . Format::currency($amount61_90) . '</div>';
+        echo '<div class="text-xs ' . $labelColor61_90 . ' mt-1">' . sprintf(__('%d invoice(s)'), $count61_90) . '</div>';
+        if ($count61_90 > 0) {
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Overdue&agingMin=61&agingMax=90" class="text-xs text-red-700 hover:underline mt-2 inline-block">' . __('View') . ' &rarr;</a>';
+        }
+        echo '</div>';
+
+        // 90+ Days
+        $bgColor90Plus = $count90Plus > 0 ? 'bg-red-100' : 'bg-gray-50';
+        $textColor90Plus = $count90Plus > 0 ? 'text-red-800' : 'text-gray-400';
+        $labelColor90Plus = $count90Plus > 0 ? 'text-red-700' : 'text-gray-400';
+        echo '<div class="' . $bgColor90Plus . ' rounded-lg p-4 text-center">';
+        echo '<div class="text-sm font-medium ' . $labelColor90Plus . ' mb-1">' . __('90+ Days') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $textColor90Plus . '">' . Format::currency($amount90Plus) . '</div>';
+        echo '<div class="text-xs ' . $labelColor90Plus . ' mt-1">' . sprintf(__('%d invoice(s)'), $count90Plus) . '</div>';
+        if ($count90Plus > 0) {
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Overdue&agingMin=91" class="text-xs text-red-800 hover:underline mt-2 inline-block">' . __('View') . ' &rarr;</a>';
+        }
+        echo '</div>';
+
+        echo '</div>'; // End aging buckets grid
+
+        // Visual aging bar
+        if ($totalOverdueAmount > 0) {
+            $pct1_30 = round(($amount1_30 / $totalOverdueAmount) * 100, 1);
+            $pct31_60 = round(($amount31_60 / $totalOverdueAmount) * 100, 1);
+            $pct61_90 = round(($amount61_90 / $totalOverdueAmount) * 100, 1);
+            $pct90Plus = round(($amount90Plus / $totalOverdueAmount) * 100, 1);
+
+            echo '<div class="mt-4 pt-4 border-t">';
+            echo '<div class="text-sm text-gray-600 mb-2">' . __('Aging Distribution') . '</div>';
+            echo '<div class="flex h-4 rounded-full overflow-hidden">';
+            if ($pct1_30 > 0) {
+                echo '<div class="bg-yellow-400" style="width: ' . $pct1_30 . '%" title="' . __('1-30 Days') . ': ' . $pct1_30 . '%"></div>';
+            }
+            if ($pct31_60 > 0) {
+                echo '<div class="bg-orange-400" style="width: ' . $pct31_60 . '%" title="' . __('31-60 Days') . ': ' . $pct31_60 . '%"></div>';
+            }
+            if ($pct61_90 > 0) {
+                echo '<div class="bg-red-400" style="width: ' . $pct61_90 . '%" title="' . __('61-90 Days') . ': ' . $pct61_90 . '%"></div>';
+            }
+            if ($pct90Plus > 0) {
+                echo '<div class="bg-red-600" style="width: ' . $pct90Plus . '%" title="' . __('90+ Days') . ': ' . $pct90Plus . '%"></div>';
+            }
+            echo '</div>';
+
+            // Legend
+            echo '<div class="flex flex-wrap justify-center gap-4 mt-2 text-xs">';
+            echo '<span class="flex items-center"><span class="w-3 h-3 bg-yellow-400 rounded mr-1"></span>' . __('1-30 Days') . '</span>';
+            echo '<span class="flex items-center"><span class="w-3 h-3 bg-orange-400 rounded mr-1"></span>' . __('31-60 Days') . '</span>';
+            echo '<span class="flex items-center"><span class="w-3 h-3 bg-red-400 rounded mr-1"></span>' . __('61-90 Days') . '</span>';
+            echo '<span class="flex items-center"><span class="w-3 h-3 bg-red-600 rounded mr-1"></span>' . __('90+ Days') . '</span>';
+            echo '</div>';
+            echo '</div>';
+        }
+
+        // Link to full aging report
+        echo '<div class="mt-4 text-center">';
+        echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_report_aging.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '" class="text-blue-600 hover:underline text-sm font-medium">';
+        echo __('View Full Aging Report') . ' &rarr;';
+        echo '</a>';
+        echo '</div>';
+
+        echo '</div>'; // End p-5
+        echo '</div>'; // End card
     }
 
     // Main content grid
@@ -296,6 +537,112 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
 
     echo '</div>'; // End main grid
 
+    // Outstanding by Family Section
+    if (count($outstandingByFamily) > 0) {
+        $outstandingFamilyTotal = (float) ($outstandingFamilySummary['totalOutstanding'] ?? 0);
+        $outstandingFamilyCount = (int) ($outstandingFamilySummary['familyCount'] ?? 0);
+        $outstandingInvoiceCount = (int) ($outstandingFamilySummary['invoiceCount'] ?? 0);
+
+        echo '<div class="bg-white rounded-lg shadow mb-6">';
+        echo '<div class="px-5 py-4 border-b flex justify-between items-center">';
+        echo '<h3 class="text-lg font-semibold">';
+        echo '<span class="text-orange-600 mr-2">👨‍👩‍👧‍👦</span>';
+        echo __('Outstanding by Family');
+        echo '</h3>';
+        echo '<div class="flex items-center space-x-4">';
+        echo '<span class="text-sm text-gray-500">' . sprintf(__('%d families'), $outstandingFamilyCount) . '</span>';
+        echo '<span class="bg-orange-100 text-orange-800 text-sm px-3 py-1 rounded-full font-semibold">' . Format::currency($outstandingFamilyTotal) . '</span>';
+        echo '</div>';
+        echo '</div>';
+        echo '<div class="p-5">';
+
+        // Family Outstanding Table
+        echo '<div class="overflow-x-auto">';
+        echo '<table class="w-full">';
+        echo '<thead>';
+        echo '<tr class="text-left text-sm text-gray-500 border-b">';
+        echo '<th class="pb-3 font-medium">' . __('Family') . '</th>';
+        echo '<th class="pb-3 font-medium text-center">' . __('Invoices') . '</th>';
+        echo '<th class="pb-3 font-medium text-right">' . __('Outstanding') . '</th>';
+        echo '<th class="pb-3 font-medium text-right">' . __('Overdue') . '</th>';
+        echo '<th class="pb-3 font-medium text-center">' . __('Status') . '</th>';
+        echo '<th class="pb-3 font-medium text-center">' . __('Action') . '</th>';
+        echo '</tr>';
+        echo '</thead>';
+        echo '<tbody>';
+
+        foreach ($outstandingByFamily as $family) {
+            $familyOutstanding = (float) $family['totalOutstanding'];
+            $familyOverdue = (float) $family['overdueAmount'];
+            $hasOverdue = (int) $family['hasOverdue'];
+            $invoiceCount = (int) $family['invoiceCount'];
+
+            // Row styling based on overdue status
+            $rowClass = $hasOverdue ? 'bg-red-50' : '';
+
+            echo '<tr class="border-b hover:bg-gray-50 ' . $rowClass . '">';
+
+            // Family Name
+            echo '<td class="py-3">';
+            echo '<div class="font-medium">' . htmlspecialchars($family['familyName']) . '</div>';
+            if (!empty($family['oldestDueDate'])) {
+                echo '<div class="text-xs text-gray-400">' . __('Oldest due') . ': ' . Format::date($family['oldestDueDate']) . '</div>';
+            }
+            echo '</td>';
+
+            // Invoice Count
+            echo '<td class="py-3 text-center">';
+            echo '<span class="bg-gray-100 text-gray-700 px-2 py-1 rounded text-sm">' . $invoiceCount . '</span>';
+            echo '</td>';
+
+            // Outstanding Amount
+            echo '<td class="py-3 text-right font-semibold text-orange-600">' . Format::currency($familyOutstanding) . '</td>';
+
+            // Overdue Amount
+            echo '<td class="py-3 text-right">';
+            if ($familyOverdue > 0) {
+                echo '<span class="font-semibold text-red-600">' . Format::currency($familyOverdue) . '</span>';
+            } else {
+                echo '<span class="text-gray-400">-</span>';
+            }
+            echo '</td>';
+
+            // Status Badge
+            echo '<td class="py-3 text-center">';
+            if ($hasOverdue) {
+                echo '<span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">' . __('Overdue') . '</span>';
+            } else {
+                echo '<span class="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full">' . __('Pending') . '</span>';
+            }
+            echo '</td>';
+
+            // Action Link
+            echo '<td class="py-3 text-center">';
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&family=' . $family['gibbonFamilyID'] . '" class="text-blue-600 hover:text-blue-800 text-sm">';
+            echo __('View');
+            echo '</a>';
+            echo '</td>';
+
+            echo '</tr>';
+        }
+
+        echo '</tbody>';
+        echo '</table>';
+        echo '</div>';
+
+        // Link to view all
+        if ($outstandingFamilyCount > 10) {
+            echo '<div class="mt-4 text-center">';
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_invoices.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '&status=Outstanding" class="text-blue-600 hover:underline text-sm">';
+            echo sprintf(__('View all %d families with outstanding balances'), $outstandingFamilyCount) . ' &rarr;';
+            echo '</a>';
+            echo '</div>';
+        }
+
+        echo '</div>';
+        echo '</div>';
+    }
+
     // Overdue Invoices Table (if any)
     if (count($overdueInvoices) > 0) {
         echo '<div class="bg-white rounded-lg shadow mb-6">';
@@ -378,6 +725,310 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
         echo '<span>' . __('Total this year') . ': ' . Format::currency($totalPaid) . '</span>';
         echo '<span>' . sprintf(__('%d payments'), array_sum(array_column($paymentsByMonth, 'paymentCount'))) . '</span>';
         echo '</div>';
+
+        echo '</div>';
+        echo '</div>';
+    }
+
+    // Monthly vs Historical Comparison Section
+    if (count($paymentsByMonth) > 0 && count($previousPaymentsByMonth) > 0) {
+        // Prepare comparison data by month
+        $comparisonByMonth = [];
+        $monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        // Index previous year payments by month
+        $prevByMonth = [];
+        foreach ($previousPaymentsByMonth as $prev) {
+            $prevByMonth[(int) $prev['paymentMonth']] = (float) $prev['totalAmount'];
+        }
+
+        // Build comparison array
+        foreach ($paymentsByMonth as $current) {
+            $month = (int) $current['paymentMonth'];
+            $currentAmount = (float) $current['totalAmount'];
+            $prevAmount = $prevByMonth[$month] ?? 0;
+            $change = $prevAmount > 0 ? (($currentAmount - $prevAmount) / $prevAmount) * 100 : ($currentAmount > 0 ? 100 : 0);
+
+            $comparisonByMonth[] = [
+                'month' => $month,
+                'monthName' => $monthNames[$month],
+                'current' => $currentAmount,
+                'previous' => $prevAmount,
+                'change' => $change,
+            ];
+        }
+
+        // Find max for chart scaling
+        $allAmounts = array_merge(
+            array_column($comparisonByMonth, 'current'),
+            array_column($comparisonByMonth, 'previous')
+        );
+        $maxComparison = count($allAmounts) > 0 ? max($allAmounts) : 1;
+
+        echo '<div class="bg-white rounded-lg shadow mb-6">';
+        echo '<div class="px-5 py-4 border-b flex justify-between items-center">';
+        echo '<h3 class="text-lg font-semibold">';
+        echo '<span class="text-purple-600 mr-2">📊</span>';
+        echo __('Monthly vs Historical Comparison');
+        echo '</h3>';
+        echo '<span class="text-sm text-gray-500">' . htmlspecialchars($schoolYearName) . ' vs ' . htmlspecialchars($previousSchoolYearName) . '</span>';
+        echo '</div>';
+        echo '<div class="p-5">';
+
+        // Year-over-Year Summary
+        $yoyChange = $previousYearTotalPaid > 0 ? (($totalPaid - $previousYearTotalPaid) / $previousYearTotalPaid) * 100 : 0;
+        $yoyClass = $yoyChange >= 0 ? 'text-green-600' : 'text-red-600';
+        $yoyIcon = $yoyChange >= 0 ? '↑' : '↓';
+        $yoyBg = $yoyChange >= 0 ? 'bg-green-50' : 'bg-red-50';
+
+        echo '<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">';
+
+        // Current Year Total
+        echo '<div class="text-center p-4 bg-blue-50 rounded-lg">';
+        echo '<div class="text-sm text-blue-500 mb-1">' . htmlspecialchars($schoolYearName) . '</div>';
+        echo '<div class="text-2xl font-bold text-blue-700">' . Format::currency($totalPaid) . '</div>';
+        echo '</div>';
+
+        // Previous Year Total
+        echo '<div class="text-center p-4 bg-gray-50 rounded-lg">';
+        echo '<div class="text-sm text-gray-500 mb-1">' . htmlspecialchars($previousSchoolYearName) . '</div>';
+        echo '<div class="text-2xl font-bold text-gray-700">' . Format::currency($previousYearTotalPaid) . '</div>';
+        echo '</div>';
+
+        // Year-over-Year Change
+        echo '<div class="text-center p-4 ' . $yoyBg . ' rounded-lg">';
+        echo '<div class="text-sm ' . $yoyClass . ' mb-1">' . __('Year-over-Year Change') . '</div>';
+        echo '<div class="text-2xl font-bold ' . $yoyClass . '">' . $yoyIcon . ' ' . number_format(abs($yoyChange), 1) . '%</div>';
+        echo '</div>';
+
+        echo '</div>';
+
+        // Comparison Bar Chart
+        echo '<div class="mt-4">';
+        echo '<div class="text-sm text-gray-600 mb-2">' . __('Monthly Revenue Comparison') . '</div>';
+        echo '<div class="flex items-end justify-between space-x-1" style="height: 200px;">';
+
+        foreach ($comparisonByMonth as $data) {
+            $currentHeight = $maxComparison > 0 ? round(($data['current'] / $maxComparison) * 100) : 0;
+            $prevHeight = $maxComparison > 0 ? round(($data['previous'] / $maxComparison) * 100) : 0;
+            $changeClass = $data['change'] >= 0 ? 'text-green-600' : 'text-red-600';
+            $changeIcon = $data['change'] >= 0 ? '↑' : '↓';
+
+            echo '<div class="flex-1 flex flex-col items-center">';
+            echo '<div class="w-full flex justify-center space-x-1" style="height: 100%; align-items: flex-end;">';
+            // Previous year bar (gray)
+            if ($data['previous'] > 0) {
+                echo '<div class="w-2 bg-gray-300 rounded-t" style="height: ' . max($prevHeight, 2) . '%" title="' . $data['monthName'] . ' ' . htmlspecialchars($previousSchoolYearName) . ': ' . Format::currency($data['previous']) . '"></div>';
+            }
+            // Current year bar (blue)
+            echo '<div class="w-2 bg-blue-500 hover:bg-blue-600 transition rounded-t cursor-pointer" style="height: ' . max($currentHeight, 2) . '%" title="' . $data['monthName'] . ' ' . htmlspecialchars($schoolYearName) . ': ' . Format::currency($data['current']) . '"></div>';
+            echo '</div>';
+            echo '<div class="text-xs text-gray-400 mt-1">' . $data['monthName'] . '</div>';
+            echo '</div>';
+        }
+
+        echo '</div>';
+
+        // Legend
+        echo '<div class="flex justify-center gap-6 mt-4 text-xs">';
+        echo '<span class="flex items-center"><span class="w-3 h-3 bg-blue-500 rounded mr-1"></span>' . htmlspecialchars($schoolYearName) . '</span>';
+        echo '<span class="flex items-center"><span class="w-3 h-3 bg-gray-300 rounded mr-1"></span>' . htmlspecialchars($previousSchoolYearName) . '</span>';
+        echo '</div>';
+        echo '</div>';
+
+        // Comparison Table
+        echo '<div class="mt-6 overflow-x-auto">';
+        echo '<table class="w-full text-sm">';
+        echo '<thead>';
+        echo '<tr class="text-left text-gray-500 border-b">';
+        echo '<th class="pb-2 font-medium">' . __('Month') . '</th>';
+        echo '<th class="pb-2 font-medium text-right">' . htmlspecialchars($schoolYearName) . '</th>';
+        echo '<th class="pb-2 font-medium text-right">' . htmlspecialchars($previousSchoolYearName) . '</th>';
+        echo '<th class="pb-2 font-medium text-center">' . __('Change') . '</th>';
+        echo '</tr>';
+        echo '</thead>';
+        echo '<tbody>';
+
+        foreach ($comparisonByMonth as $data) {
+            $changeClass = $data['change'] >= 0 ? 'text-green-600' : 'text-red-600';
+            $changeIcon = $data['change'] >= 0 ? '↑' : '↓';
+
+            echo '<tr class="border-b hover:bg-gray-50">';
+            echo '<td class="py-2 font-medium">' . $data['monthName'] . '</td>';
+            echo '<td class="py-2 text-right text-blue-600 font-semibold">' . Format::currency($data['current']) . '</td>';
+            echo '<td class="py-2 text-right text-gray-500">' . Format::currency($data['previous']) . '</td>';
+            echo '<td class="py-2 text-center">';
+            if ($data['previous'] > 0) {
+                echo '<span class="' . $changeClass . ' font-medium">' . $changeIcon . ' ' . number_format(abs($data['change']), 1) . '%</span>';
+            } else {
+                echo '<span class="text-gray-400">-</span>';
+            }
+            echo '</td>';
+            echo '</tr>';
+        }
+
+        // Total row
+        echo '<tr class="bg-gray-100 font-semibold">';
+        echo '<td class="py-2">' . __('Total') . '</td>';
+        echo '<td class="py-2 text-right text-blue-700">' . Format::currency($totalPaid) . '</td>';
+        echo '<td class="py-2 text-right text-gray-600">' . Format::currency($previousYearTotalPaid) . '</td>';
+        echo '<td class="py-2 text-center">';
+        echo '<span class="' . $yoyClass . '">' . $yoyIcon . ' ' . number_format(abs($yoyChange), 1) . '%</span>';
+        echo '</td>';
+        echo '</tr>';
+
+        echo '</tbody>';
+        echo '</table>';
+        echo '</div>';
+
+        // Link to full report
+        echo '<div class="mt-4 text-center">';
+        echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_report_revenue.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '" class="text-blue-600 hover:underline text-sm font-medium">';
+        echo __('View Full Revenue Report') . ' &rarr;';
+        echo '</a>';
+        echo '</div>';
+
+        echo '</div>';
+        echo '</div>';
+    }
+
+    // Expense Summary Section
+    $totalExpenseAmount = (float) ($expenseSummary['totalWithTax'] ?? 0);
+    $totalExpenseCount = (int) ($expenseSummary['totalExpenses'] ?? 0);
+    $pendingExpenseCount = (int) ($expenseSummary['pendingCount'] ?? 0);
+    $pendingExpenseAmount = (float) ($expenseSummary['pendingAmount'] ?? 0);
+    $paidExpenseCount = (int) ($expenseSummary['paidCount'] ?? 0);
+    $paidExpenseAmount = (float) ($expenseSummary['paidAmount'] ?? 0);
+
+    if ($totalExpenseCount > 0 || count($recentExpenses) > 0) {
+        echo '<div class="bg-white rounded-lg shadow mb-6">';
+        echo '<div class="px-5 py-4 border-b flex justify-between items-center">';
+        echo '<h3 class="text-lg font-semibold">';
+        echo '<span class="text-red-600 mr-2">💸</span>';
+        echo __('Expense Summary');
+        echo '</h3>';
+        echo '<span class="bg-red-100 text-red-800 text-sm px-3 py-1 rounded-full font-semibold">' . Format::currency($totalExpenseAmount) . '</span>';
+        echo '</div>';
+        echo '<div class="p-5">';
+
+        // Expense Summary Stats
+        echo '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">';
+
+        // Total Expenses
+        echo '<div class="text-center p-4 bg-red-50 rounded-lg">';
+        echo '<div class="text-2xl font-bold text-red-700">' . Format::currency($totalExpenseAmount) . '</div>';
+        echo '<div class="text-sm text-red-500">' . sprintf(__('%d expenses'), $totalExpenseCount) . '</div>';
+        echo '</div>';
+
+        // Paid Expenses
+        echo '<div class="text-center p-4 bg-green-50 rounded-lg">';
+        echo '<div class="text-2xl font-bold text-green-700">' . Format::currency($paidExpenseAmount) . '</div>';
+        echo '<div class="text-sm text-green-500">' . sprintf(__('%d paid'), $paidExpenseCount) . '</div>';
+        echo '</div>';
+
+        // Pending Expenses
+        echo '<div class="text-center p-4 bg-yellow-50 rounded-lg">';
+        echo '<div class="text-2xl font-bold text-yellow-700">' . Format::currency($pendingExpenseAmount) . '</div>';
+        echo '<div class="text-sm text-yellow-500">' . sprintf(__('%d pending'), $pendingExpenseCount) . '</div>';
+        echo '</div>';
+
+        // Net Income (Revenue - Expenses)
+        $netIncome = $totalPaid - $totalExpenseAmount;
+        $netIncomeClass = $netIncome >= 0 ? 'text-green-700' : 'text-red-700';
+        $netIncomeBg = $netIncome >= 0 ? 'bg-green-50' : 'bg-red-50';
+        echo '<div class="text-center p-4 ' . $netIncomeBg . ' rounded-lg">';
+        echo '<div class="text-2xl font-bold ' . $netIncomeClass . '">' . Format::currency($netIncome) . '</div>';
+        echo '<div class="text-sm ' . ($netIncome >= 0 ? 'text-green-500' : 'text-red-500') . '">' . __('Net Income') . '</div>';
+        echo '</div>';
+
+        echo '</div>';
+
+        // Two-column layout: Category Breakdown and Recent Expenses
+        echo '<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">';
+
+        // Expense by Category Breakdown
+        if (count($expenseByCategory) > 0) {
+            // Filter categories with expenses
+            $categoriesWithExpenses = array_filter($expenseByCategory, function ($cat) {
+                return (float) ($cat['totalWithTax'] ?? 0) > 0;
+            });
+
+            if (count($categoriesWithExpenses) > 0) {
+                $maxCategoryAmount = max(array_column($categoriesWithExpenses, 'totalWithTax'));
+
+                echo '<div>';
+                echo '<div class="text-sm text-gray-600 mb-3 font-medium">' . __('Expenses by Category') . '</div>';
+                echo '<div class="space-y-3">';
+
+                $categoryColors = ['#EF4444', '#F97316', '#EAB308', '#22C55E', '#3B82F6', '#8B5CF6', '#EC4899', '#6B7280'];
+                $colorIndex = 0;
+
+                foreach ($categoriesWithExpenses as $category) {
+                    $catAmount = (float) $category['totalWithTax'];
+                    $catCount = (int) $category['expenseCount'];
+                    $percentage = $totalExpenseAmount > 0 ? round(($catAmount / $totalExpenseAmount) * 100, 1) : 0;
+                    $color = $categoryColors[$colorIndex % count($categoryColors)];
+                    $colorIndex++;
+
+                    echo '<div>';
+                    echo '<div class="flex justify-between items-center mb-1">';
+                    echo '<span class="font-medium text-sm">' . htmlspecialchars($category['categoryName']) . '</span>';
+                    echo '<span class="text-xs text-gray-500">' . Format::currency($catAmount) . ' (' . $catCount . ')</span>';
+                    echo '</div>';
+                    echo '<div class="w-full bg-gray-200 rounded-full h-2">';
+                    echo '<div class="h-2 rounded-full" style="width: ' . $percentage . '%; background-color: ' . $color . '"></div>';
+                    echo '</div>';
+                    echo '</div>';
+                }
+
+                echo '</div>';
+                echo '</div>';
+            }
+        }
+
+        // Recent Expenses
+        if (count($recentExpenses) > 0) {
+            echo '<div>';
+            echo '<div class="text-sm text-gray-600 mb-3 font-medium">' . __('Recent Expenses') . '</div>';
+            echo '<div class="space-y-2">';
+
+            foreach ($recentExpenses as $expense) {
+                $statusColors = [
+                    'Pending' => 'bg-yellow-100 text-yellow-800',
+                    'Approved' => 'bg-blue-100 text-blue-800',
+                    'Paid' => 'bg-green-100 text-green-800',
+                    'Rejected' => 'bg-red-100 text-red-800',
+                ];
+                $statusClass = $statusColors[$expense['status']] ?? 'bg-gray-100 text-gray-800';
+
+                echo '<div class="flex justify-between items-center p-2 bg-gray-50 rounded hover:bg-gray-100 transition">';
+                echo '<div class="flex-1">';
+                echo '<div class="font-medium text-sm">' . htmlspecialchars($expense['vendor'] ?: $expense['categoryName']) . '</div>';
+                echo '<div class="text-xs text-gray-500">';
+                echo Format::date($expense['expenseDate']);
+                echo ' &middot; <span class="' . $statusClass . ' px-1.5 py-0.5 rounded text-xs">' . __($expense['status']) . '</span>';
+                echo '</div>';
+                echo '</div>';
+                echo '<div class="text-right">';
+                echo '<div class="font-semibold text-red-600">' . Format::currency($expense['totalAmount']) . '</div>';
+                echo '</div>';
+                echo '</div>';
+            }
+
+            echo '</div>';
+            echo '</div>';
+        }
+
+        echo '</div>'; // End two-column grid
+
+        // Link to expense management
+        if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_expenses.php')) {
+            echo '<div class="mt-4 pt-4 border-t text-center">';
+            echo '<a href="' . $session->get('absoluteURL') . '/index.php?q=/modules/EnhancedFinance/finance_expenses.php&gibbonSchoolYearID=' . $gibbonSchoolYearID . '" class="text-red-600 hover:underline text-sm font-medium">';
+            echo __('View All Expenses') . ' &rarr;';
+            echo '</a>';
+            echo '</div>';
+        }
 
         echo '</div>';
         echo '</div>';
@@ -543,4 +1194,27 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_da
     echo '<div class="mt-4 text-center text-xs text-gray-400">';
     echo __('Dashboard data as of') . ' ' . Format::dateTime(date('Y-m-d H:i:s'));
     echo '</div>';
+}
+
+/**
+ * Get previous school year information.
+ *
+ * @param PDO $connection2 Database connection
+ * @param int $currentSchoolYearID Current school year ID
+ * @return array|null Previous school year data
+ */
+function getPreviousSchoolYearInfo($connection2, $currentSchoolYearID)
+{
+    $sql = "SELECT y2.gibbonSchoolYearID, y2.name
+            FROM gibbonSchoolYear y1
+            INNER JOIN gibbonSchoolYear y2 ON y2.sequenceNumber = y1.sequenceNumber - 1
+            WHERE y1.gibbonSchoolYearID = :gibbonSchoolYearID";
+
+    try {
+        $stmt = $connection2->prepare($sql);
+        $stmt->execute(['gibbonSchoolYearID' => $currentSchoolYearID]);
+        return $stmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+    } catch (\PDOException $e) {
+        return [];
+    }
 }

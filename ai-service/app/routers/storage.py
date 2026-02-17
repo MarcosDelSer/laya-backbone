@@ -15,11 +15,13 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     UploadFile,
 )
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas.storage import (
@@ -34,6 +36,8 @@ from app.services.storage_service import (
     FileTooLargeError,
     InvalidFileTypeError,
     QuotaExceededError,
+    SignedUrlExpiredError,
+    SignedUrlInvalidError,
     StorageService,
     StorageServiceError,
     FileNotFoundError as StorageFileNotFoundError,
@@ -51,6 +55,7 @@ router = APIRouter(prefix="/api/v1/storage", tags=["storage"])
     "Files are stored based on the configured storage backend (local or S3).",
 )
 async def upload_file(
+    request: Request,
     file: UploadFile = File(
         ...,
         description="The file to upload",
@@ -113,8 +118,45 @@ async def upload_file(
     # Get owner ID from current user
     owner_id = UUID(current_user["sub"])
 
-    # Read file content
-    file_content = await file.read()
+    # Calculate maximum allowed file size in bytes
+    max_file_size_bytes = settings.max_file_size_mb * 1024 * 1024
+
+    # Check Content-Length header BEFORE buffering the file
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared_size = int(content_length)
+            # Content-Length is for the entire multipart body, but we can use it
+            # as an upper bound check. If the total request body exceeds the max
+            # file size, reject early.
+            if declared_size > max_file_size_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Request body size ({declared_size} bytes) exceeds "
+                    f"maximum allowed file size ({max_file_size_bytes} bytes)",
+                )
+        except ValueError:
+            pass  # Invalid Content-Length header, proceed with streaming check
+
+    # Read file content with size limit enforcement
+    file_content = bytearray()
+    chunk_size = 64 * 1024  # 64KB chunks
+    bytes_read = 0
+
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        bytes_read += len(chunk)
+        if bytes_read > max_file_size_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File size exceeds maximum allowed size "
+                f"({max_file_size_bytes} bytes)",
+            )
+        file_content.extend(chunk)
+
+    file_content = bytes(file_content)
 
     # Determine content type
     content_type = file.content_type or "application/octet-stream"
@@ -455,6 +497,7 @@ async def delete_file(
     "The URL will include a cryptographic signature and expiration timestamp.",
 )
 async def generate_secure_url(
+    request: Request,
     file_id: UUID,
     expires_in_seconds: int = Query(
         default=3600,
@@ -498,11 +541,23 @@ async def generate_secure_url(
     owner_id = UUID(current_user["sub"])
     service = StorageService(db)
 
+    # Derive base_url from the request context
+    # Use X-Forwarded-Proto and X-Forwarded-Host headers if behind a proxy
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+
+    if forwarded_proto and forwarded_host:
+        base_url = f"{forwarded_proto}://{forwarded_host}"
+    else:
+        # Fall back to request URL components
+        base_url = f"{request.url.scheme}://{request.url.netloc}"
+
     try:
         url, expires_at = await service.generate_secure_url(
             file_id=file_id,
             owner_id=owner_id,
             expires_in_seconds=expires_in_seconds,
+            base_url=base_url,
         )
     except StorageFileNotFoundError:
         raise HTTPException(
@@ -524,4 +579,101 @@ async def generate_secure_url(
         file_id=file_id,
         url=url,
         expires_at=expires_at,
+    )
+
+
+@router.get(
+    "/files/{file_id}/signed-download",
+    summary="Download file via signed URL",
+    description="Download file content using a signed URL. "
+    "This endpoint does not require authentication - the signed URL "
+    "serves as authorization. The URL must include valid 'expires' and "
+    "'signature' query parameters.",
+    responses={
+        200: {
+            "description": "File content",
+            "content": {"application/octet-stream": {}},
+        },
+        400: {"description": "Invalid or missing signature parameters"},
+        401: {"description": "Signature expired"},
+        403: {"description": "Invalid signature"},
+        404: {"description": "File not found"},
+    },
+)
+async def download_file_signed(
+    file_id: UUID,
+    expires: int = Query(
+        ...,
+        description="Unix timestamp when the signed URL expires",
+    ),
+    signature: str = Query(
+        ...,
+        description="HMAC signature for URL verification",
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Download file content using a signed URL.
+
+    This endpoint allows file downloads without JWT authentication.
+    Instead, it verifies the request using the signed URL parameters
+    (expires timestamp and HMAC signature).
+
+    The signed URL should be generated using the /secure-url endpoint.
+
+    Args:
+        file_id: Unique identifier of the file.
+        expires: Unix timestamp when the URL expires.
+        signature: Base64-encoded HMAC signature.
+        db: Async database session (injected).
+
+    Returns:
+        File content as binary response with appropriate content type.
+
+    Raises:
+        HTTPException: 400 if signature parameters are invalid.
+        HTTPException: 401 if the signed URL has expired.
+        HTTPException: 403 if the signature is invalid.
+        HTTPException: 404 if file not found.
+        HTTPException: 500 if storage error occurs.
+
+    Example:
+        GET /api/v1/storage/files/123e4567-e89b-12d3-a456-426614174000/signed-download?expires=1699999999&signature=abc123
+    """
+    service = StorageService(db)
+
+    try:
+        file_content, file_record = await service.download_file_with_signed_url(
+            file_id=file_id,
+            expires_timestamp=expires,
+            signature=signature,
+        )
+    except SignedUrlExpiredError:
+        raise HTTPException(
+            status_code=401,
+            detail="Signed URL has expired",
+        )
+    except SignedUrlInvalidError as e:
+        raise HTTPException(
+            status_code=403,
+            detail=str(e),
+        )
+    except StorageFileNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"File with id {file_id} not found",
+        )
+    except StorageServiceError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Storage error: {str(e)}",
+        )
+
+    # Return file content with appropriate headers
+    return Response(
+        content=file_content,
+        media_type=file_record.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_record.original_filename}"',
+            "Content-Length": str(file_record.size_bytes),
+        },
     )

@@ -8,6 +8,51 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { gibbonClient, ApiError } from '../api';
+
+// ============================================================================
+// API Endpoints for Setup Wizard
+// ============================================================================
+
+/**
+ * Setup wizard API endpoints following Gibbon API conventions.
+ * Uses snake_case field naming to match PHP backend expectations.
+ */
+const SETUP_ENDPOINTS = {
+  CURRENT_STEP: '/api/v1/setup/current-step',
+  STEP: (stepId: string) => `/api/v1/setup/steps/${stepId}`,
+  STEP_PREVIOUS: (stepId: string) => `/api/v1/setup/steps/${stepId}/previous`,
+  PROGRESS: '/api/v1/setup/progress',
+} as const;
+
+/**
+ * Transform camelCase keys to snake_case for API compatibility.
+ * The Gibbon backend expects snake_case field names.
+ */
+function toSnakeCase(data: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const key of Object.keys(data)) {
+    const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    result[snakeKey] = data[key];
+  }
+  return result;
+}
+
+/**
+ * Transform snake_case keys to camelCase for frontend compatibility.
+ */
+function toCamelCase(data: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const key of Object.keys(data)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    result[camelKey] = data[key];
+  }
+  return result;
+}
+
+// ============================================================================
+// Type Definitions
+// ============================================================================
 
 /**
  * Wizard step definition
@@ -81,43 +126,48 @@ export function useSetupWizard(): UseSetupWizardReturn {
   });
 
   /**
-   * Fetch current step from backend
+   * Fetch current step from backend using gibbonClient.
+   * The response data is transformed from snake_case to camelCase.
    */
   const fetchCurrentStep = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const response = await fetch('/api/setup/current-step', {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const result = await gibbonClient.get<{
+        step: WizardStep | null;
+        completionPercentage?: number;
+        completion_percentage?: number;
+      }>(SETUP_ENDPOINTS.CURRENT_STEP);
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch current step: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      // Handle both camelCase and snake_case responses
+      const completionPct = result.completionPercentage ?? result.completion_percentage ?? 0;
+      const stepData = result.step?.data ? toCamelCase(result.step.data) : {};
 
       setState(prev => ({
         ...prev,
         currentStep: result.step,
-        data: result.step?.data || {},
-        completionPercentage: result.completionPercentage || 0,
+        data: stepData,
+        completionPercentage: completionPct,
         isLoading: false,
       }));
     } catch (error) {
+      const errorMessage = error instanceof ApiError
+        ? error.userMessage
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+
       setState(prev => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         isLoading: false,
       }));
     }
   }, []);
 
   /**
-   * Save step data to backend
+   * Save step data to backend using gibbonClient.
+   * Data is transformed to snake_case before sending to match Gibbon conventions.
    *
    * @param stepId - Step identifier
    * @param data - Step data to save
@@ -127,23 +177,15 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const response = await fetch(`/api/setup/steps/${stepId}`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
+      // Transform camelCase to snake_case for the backend
+      const snakeCaseData = toSnakeCase(data);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to save step: ${response.statusText}`);
-      }
+      const result = await gibbonClient.post<{
+        success?: boolean;
+        errors?: Record<string, string>;
+      }>(SETUP_ENDPOINTS.STEP(stepId), snakeCaseData);
 
-      const result = await response.json();
-
-      // Check for validation errors
+      // Check for validation errors in response
       if (result.errors && Object.keys(result.errors).length > 0) {
         const errorMessage = Object.values(result.errors).join(', ');
         throw new Error(errorMessage);
@@ -151,9 +193,15 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
       setState(prev => ({ ...prev, isLoading: false }));
     } catch (error) {
+      const errorMessage = error instanceof ApiError
+        ? error.userMessage
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+
       setState(prev => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         isLoading: false,
       }));
       throw error;
@@ -173,8 +221,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
   }, []);
 
   /**
-   * Move to next step
-   * Validates and saves current step data before advancing
+   * Move to next step.
+   * Validates and saves current step data before advancing.
+   * Uses gibbonClient for API communication.
    */
   const next = useCallback(async () => {
     if (!state.currentStep) {
@@ -186,12 +235,15 @@ export function useSetupWizard(): UseSetupWizardReturn {
       await fetchCurrentStep();
     } catch (error) {
       // Error is already set in state by saveStepData
-      console.error('Failed to move to next step:', error);
+      // Log for debugging but don't re-throw since state is already updated
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to move to next step:', error);
+      }
     }
   }, [state.currentStep, state.data, saveStepData, fetchCurrentStep]);
 
   /**
-   * Move to previous step
+   * Move to previous step using gibbonClient.
    */
   const previous = useCallback(async () => {
     if (!state.currentStep) {
@@ -201,29 +253,29 @@ export function useSetupWizard(): UseSetupWizardReturn {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const response = await fetch(`/api/setup/steps/${state.currentStep.id}/previous`, {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to go to previous step: ${response.statusText}`);
-      }
+      await gibbonClient.get<{ success: boolean }>(
+        SETUP_ENDPOINTS.STEP_PREVIOUS(state.currentStep.id)
+      );
 
       await fetchCurrentStep();
     } catch (error) {
+      const errorMessage = error instanceof ApiError
+        ? error.userMessage
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+
       setState(prev => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         isLoading: false,
       }));
     }
   }, [state.currentStep, fetchCurrentStep]);
 
   /**
-   * Save current progress and allow resuming later
+   * Save current progress and allow resuming later.
+   * Uses gibbonClient for API communication.
    */
   const saveAndResume = useCallback(async () => {
     if (!state.currentStep) {
@@ -232,9 +284,12 @@ export function useSetupWizard(): UseSetupWizardReturn {
 
     try {
       await saveStepData(state.currentStep.id, state.data);
-      // Optionally redirect to a "resume later" page or show a message
+      // Progress is saved - user can return later and resume
     } catch (error) {
-      console.error('Failed to save and resume:', error);
+      // Error is already set in state by saveStepData
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to save and resume:', error);
+      }
     }
   }, [state.currentStep, state.data, saveStepData]);
 

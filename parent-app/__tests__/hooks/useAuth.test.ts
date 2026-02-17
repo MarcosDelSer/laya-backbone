@@ -34,10 +34,19 @@ jest.mock('../../src/services/authService', () => ({
   loginWithMockCredentials: jest.fn(),
 }));
 
+// Mock the AuthContext module
+jest.mock('../../src/contexts/AuthContext', () => ({
+  useAuthContext: jest.fn(),
+}));
+
 // Import mocked functions
 import * as authService from '../../src/services/authService';
+import {useAuthContext} from '../../src/contexts/AuthContext';
 
 const mockAuthService = authService as jest.Mocked<typeof authService>;
+const mockUseAuthContext = useAuthContext as jest.MockedFunction<
+  typeof useAuthContext
+>;
 
 // Test data
 const mockUser: Parent = {
@@ -62,21 +71,66 @@ const mockBiometricStatus: BiometricStatus = {
   isEnrolled: true,
 };
 
+// Mock functions for AuthContext actions
+const mockAuthContextLogin = jest.fn();
+const mockAuthContextLogout = jest.fn();
+const mockAuthContextRefresh = jest.fn();
+const mockAuthContextClearError = jest.fn();
+
 describe('useAuth', () => {
   beforeEach(() => {
     // Reset all mocks before each test
     jest.clearAllMocks();
 
-    // Default mock implementations
+    // Default mock implementations for authService
     mockAuthService.isAuthenticated.mockReturnValue(false);
     mockAuthService.getCurrentUser.mockReturnValue(null);
-    mockAuthService.checkBiometricAvailability.mockResolvedValue(mockBiometricStatus);
+    mockAuthService.checkBiometricAvailability.mockResolvedValue(
+      mockBiometricStatus,
+    );
     mockAuthService.isBiometricLoginEnabled.mockReturnValue(false);
     mockAuthService.getStoredEmail.mockReturnValue(null);
+
+    // Default mock for AuthContext (unauthenticated state)
+    mockAuthContextLogin.mockResolvedValue(false);
+    mockAuthContextLogout.mockResolvedValue(undefined);
+    mockAuthContextRefresh.mockResolvedValue(true);
+    mockAuthContextClearError.mockReturnValue(undefined);
+
+    mockUseAuthContext.mockReturnValue({
+      state: {
+        isAuthenticated: false,
+        user: null,
+        token: null,
+        loading: false,
+      },
+      actions: {
+        login: mockAuthContextLogin,
+        logout: mockAuthContextLogout,
+        refresh: mockAuthContextRefresh,
+        clearError: mockAuthContextClearError,
+      },
+    });
   });
 
   describe('Initial State', () => {
     it('should initialize with loading state', async () => {
+      // Mock context to return loading state initially
+      mockUseAuthContext.mockReturnValueOnce({
+        state: {
+          isAuthenticated: false,
+          user: null,
+          token: null,
+          loading: true,
+        },
+        actions: {
+          login: mockAuthContextLogin,
+          logout: mockAuthContextLogout,
+          refresh: mockAuthContextRefresh,
+          clearError: mockAuthContextClearError,
+        },
+      });
+
       const {result} = renderHook(() => useAuth());
 
       // Initial state should show loading
@@ -91,8 +145,21 @@ describe('useAuth', () => {
     });
 
     it('should restore authenticated session on mount', async () => {
-      mockAuthService.isAuthenticated.mockReturnValue(true);
-      mockAuthService.getCurrentUser.mockReturnValue(mockUser);
+      // Mock context to return authenticated state
+      mockUseAuthContext.mockReturnValue({
+        state: {
+          isAuthenticated: true,
+          user: mockUser,
+          token: 'mock-token',
+          loading: false,
+        },
+        actions: {
+          login: mockAuthContextLogin,
+          logout: mockAuthContextLogout,
+          refresh: mockAuthContextRefresh,
+          clearError: mockAuthContextClearError,
+        },
+      });
 
       const {result} = renderHook(() => useAuth());
 
@@ -123,9 +190,24 @@ describe('useAuth', () => {
 
   describe('Login', () => {
     it('should login successfully with valid credentials', async () => {
-      mockAuthService.login.mockResolvedValue({
-        success: true,
-        data: mockLoginResponse,
+      // Mock context login to succeed and update context state
+      mockAuthContextLogin.mockImplementation(async () => {
+        // Update the context state to authenticated after login
+        mockUseAuthContext.mockReturnValue({
+          state: {
+            isAuthenticated: true,
+            user: mockUser,
+            token: 'mock-token',
+            loading: false,
+          },
+          actions: {
+            login: mockAuthContextLogin,
+            logout: mockAuthContextLogout,
+            refresh: mockAuthContextRefresh,
+            clearError: mockAuthContextClearError,
+          },
+        });
+        return true;
       });
 
       const {result} = renderHook(() => useAuth());
@@ -149,8 +231,8 @@ describe('useAuth', () => {
     });
 
     it('should set isLoggingIn during login', async () => {
-      let resolveLogin: (value: any) => void;
-      mockAuthService.login.mockReturnValue(
+      let resolveLogin: (value: boolean) => void;
+      mockAuthContextLogin.mockReturnValue(
         new Promise(resolve => {
           resolveLogin = resolve;
         }),
@@ -172,17 +254,15 @@ describe('useAuth', () => {
       expect(result.current.isLoggingIn).toBe(true);
 
       await act(async () => {
-        resolveLogin!({success: true, data: mockLoginResponse});
+        resolveLogin!(true);
       });
 
       expect(result.current.isLoggingIn).toBe(false);
     });
 
     it('should enable biometric login when rememberMe is true', async () => {
-      mockAuthService.login.mockResolvedValue({
-        success: true,
-        data: mockLoginResponse,
-      });
+      // Mock context login to succeed
+      mockAuthContextLogin.mockResolvedValue(true);
 
       const {result} = renderHook(() => useAuth());
 
@@ -202,15 +282,9 @@ describe('useAuth', () => {
       expect(result.current.storedEmail).toBe('test@example.com');
     });
 
-    it('should fallback to mock credentials on network error', async () => {
-      mockAuthService.login.mockResolvedValue({
-        success: false,
-        error: {code: 'NETWORK_ERROR', message: 'Network error'},
-      });
-      mockAuthService.loginWithMockCredentials.mockResolvedValue({
-        success: true,
-        data: mockLoginResponse,
-      });
+    it('should call authContext login with credentials', async () => {
+      // Mock context login to succeed
+      mockAuthContextLogin.mockResolvedValue(true);
 
       const {result} = renderHook(() => useAuth());
 
@@ -218,31 +292,23 @@ describe('useAuth', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      let success: boolean;
       await act(async () => {
-        success = await result.current.login({
+        await result.current.login({
           email: 'test@example.com',
           password: 'password123',
         });
       });
 
-      expect(success!).toBe(true);
-      expect(mockAuthService.loginWithMockCredentials).toHaveBeenCalledWith(
-        'test@example.com',
-        'password123',
-      );
+      // Verify authContext login was called with correct credentials
+      expect(mockAuthContextLogin).toHaveBeenCalledWith({
+        email: 'test@example.com',
+        password: 'password123',
+      });
     });
 
     it('should handle login failure with error', async () => {
-      const loginError: AuthError = {
-        code: 'INVALID_CREDENTIALS',
-        message: 'Invalid email or password',
-      };
-
-      mockAuthService.login.mockResolvedValue({
-        success: false,
-        error: loginError,
-      });
+      // Mock context login to fail
+      mockAuthContextLogin.mockResolvedValue(false);
 
       const {result} = renderHook(() => useAuth());
 
@@ -260,11 +326,16 @@ describe('useAuth', () => {
 
       expect(success!).toBe(false);
       expect(result.current.isAuthenticated).toBe(false);
-      expect(result.current.error).toEqual(loginError);
+      // useAuth sets its own error when context login fails
+      expect(result.current.error).toEqual({
+        code: 'LOGIN_FAILED',
+        message: 'Login failed. Please check your credentials.',
+      });
     });
 
     it('should handle login exception', async () => {
-      mockAuthService.login.mockRejectedValue(new Error('Unexpected error'));
+      // Mock context login to throw an exception
+      mockAuthContextLogin.mockRejectedValue(new Error('Unexpected error'));
 
       const {result} = renderHook(() => useAuth());
 
@@ -291,9 +362,39 @@ describe('useAuth', () => {
   describe('Logout', () => {
     it('should logout successfully', async () => {
       // Start as authenticated
-      mockAuthService.isAuthenticated.mockReturnValue(true);
-      mockAuthService.getCurrentUser.mockReturnValue(mockUser);
-      mockAuthService.logout.mockResolvedValue({success: true});
+      mockUseAuthContext.mockReturnValue({
+        state: {
+          isAuthenticated: true,
+          user: mockUser,
+          token: 'mock-token',
+          loading: false,
+        },
+        actions: {
+          login: mockAuthContextLogin,
+          logout: mockAuthContextLogout,
+          refresh: mockAuthContextRefresh,
+          clearError: mockAuthContextClearError,
+        },
+      });
+
+      // Mock logout to succeed and update context state
+      mockAuthContextLogout.mockImplementation(async () => {
+        // Update the context state to unauthenticated after logout
+        mockUseAuthContext.mockReturnValue({
+          state: {
+            isAuthenticated: false,
+            user: null,
+            token: null,
+            loading: false,
+          },
+          actions: {
+            login: mockAuthContextLogin,
+            logout: mockAuthContextLogout,
+            refresh: mockAuthContextRefresh,
+            clearError: mockAuthContextClearError,
+          },
+        });
+      });
 
       const {result} = renderHook(() => useAuth());
 
@@ -305,7 +406,7 @@ describe('useAuth', () => {
         await result.current.logout();
       });
 
-      expect(mockAuthService.logout).toHaveBeenCalled();
+      expect(mockAuthContextLogout).toHaveBeenCalled();
       expect(result.current.isAuthenticated).toBe(false);
       expect(result.current.user).toBeNull();
       expect(result.current.error).toBeNull();
@@ -342,6 +443,25 @@ describe('useAuth', () => {
         data: mockLoginResponse,
       });
 
+      // Mock context login to succeed and update context state
+      mockAuthContextLogin.mockImplementation(async () => {
+        mockUseAuthContext.mockReturnValue({
+          state: {
+            isAuthenticated: true,
+            user: mockUser,
+            token: 'mock-token',
+            loading: false,
+          },
+          actions: {
+            login: mockAuthContextLogin,
+            logout: mockAuthContextLogout,
+            refresh: mockAuthContextRefresh,
+            clearError: mockAuthContextClearError,
+          },
+        });
+        return true;
+      });
+
       const {result} = renderHook(() => useAuth());
 
       await waitFor(() => {
@@ -358,15 +478,30 @@ describe('useAuth', () => {
       expect(result.current.user).toEqual(mockUser);
     });
 
-    it('should fallback to mock credentials when biometric API fails', async () => {
+    it('should fallback to context login when biometric API fails', async () => {
       mockAuthService.isBiometricLoginEnabled.mockReturnValue(true);
       mockAuthService.getStoredEmail.mockReturnValue('test@example.com');
       mockAuthService.loginWithBiometrics.mockResolvedValue({
         success: false,
       });
-      mockAuthService.loginWithMockCredentials.mockResolvedValue({
-        success: true,
-        data: mockLoginResponse,
+
+      // Mock context login to succeed (fallback path)
+      mockAuthContextLogin.mockImplementation(async () => {
+        mockUseAuthContext.mockReturnValue({
+          state: {
+            isAuthenticated: true,
+            user: mockUser,
+            token: 'mock-token',
+            loading: false,
+          },
+          actions: {
+            login: mockAuthContextLogin,
+            logout: mockAuthContextLogout,
+            refresh: mockAuthContextRefresh,
+            clearError: mockAuthContextClearError,
+          },
+        });
+        return true;
       });
 
       const {result} = renderHook(() => useAuth());
@@ -381,10 +516,12 @@ describe('useAuth', () => {
       });
 
       expect(success!).toBe(true);
-      expect(mockAuthService.loginWithMockCredentials).toHaveBeenCalledWith(
-        'test@example.com',
-        'biometric',
-      );
+      // Verify context login was called with stored email and biometric password
+      expect(mockAuthContextLogin).toHaveBeenCalledWith({
+        email: 'test@example.com',
+        password: 'biometric',
+        rememberMe: true,
+      });
     });
 
     it('should handle biometric authentication failure', async () => {
@@ -416,14 +553,17 @@ describe('useAuth', () => {
     });
 
     it('should set isLoggingIn during biometric authentication', async () => {
-      let resolveLogin: (value: any) => void;
+      let resolveBiometric: (value: any) => void;
       mockAuthService.isBiometricLoginEnabled.mockReturnValue(true);
       mockAuthService.getStoredEmail.mockReturnValue('test@example.com');
       mockAuthService.loginWithBiometrics.mockReturnValue(
         new Promise(resolve => {
-          resolveLogin = resolve;
+          resolveBiometric = resolve;
         }),
       );
+
+      // Context login will be called after biometric succeeds
+      mockAuthContextLogin.mockResolvedValue(true);
 
       const {result} = renderHook(() => useAuth());
 
@@ -438,7 +578,7 @@ describe('useAuth', () => {
       expect(result.current.isLoggingIn).toBe(true);
 
       await act(async () => {
-        resolveLogin!({success: true, data: mockLoginResponse});
+        resolveBiometric!({success: true, data: mockLoginResponse});
       });
 
       expect(result.current.isLoggingIn).toBe(false);
@@ -539,10 +679,8 @@ describe('useAuth', () => {
 
   describe('Error Handling', () => {
     it('should clear error', async () => {
-      mockAuthService.login.mockResolvedValue({
-        success: false,
-        error: {code: 'INVALID_CREDENTIALS', message: 'Invalid credentials'},
-      });
+      // Mock context login to fail
+      mockAuthContextLogin.mockResolvedValue(false);
 
       const {result} = renderHook(() => useAuth());
 
@@ -564,18 +702,14 @@ describe('useAuth', () => {
       });
 
       expect(result.current.error).toBeNull();
+      expect(mockAuthContextClearError).toHaveBeenCalled();
     });
 
     it('should clear previous error on new login attempt', async () => {
-      mockAuthService.login
-        .mockResolvedValueOnce({
-          success: false,
-          error: {code: 'INVALID_CREDENTIALS', message: 'Invalid credentials'},
-        })
-        .mockResolvedValueOnce({
-          success: true,
-          data: mockLoginResponse,
-        });
+      // First call fails, second succeeds
+      mockAuthContextLogin
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
 
       const {result} = renderHook(() => useAuth());
 
@@ -604,11 +738,9 @@ describe('useAuth', () => {
       expect(result.current.error).toBeNull();
     });
 
-    it('should set default error when login fails without error object', async () => {
-      mockAuthService.login.mockResolvedValue({
-        success: false,
-        // No error object provided
-      });
+    it('should set default error when login fails', async () => {
+      // Mock context login to fail
+      mockAuthContextLogin.mockResolvedValue(false);
 
       const {result} = renderHook(() => useAuth());
 
@@ -624,8 +756,8 @@ describe('useAuth', () => {
       });
 
       expect(result.current.error).toEqual({
-        code: 'UNKNOWN_ERROR',
-        message: 'Login failed',
+        code: 'LOGIN_FAILED',
+        message: 'Login failed. Please check your credentials.',
       });
     });
   });

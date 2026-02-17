@@ -2,6 +2,9 @@
  * Jest setup file for React Native testing
  */
 
+// Ensure __DEV__ is defined for tests (simulates development mode)
+global.__DEV__ = true;
+
 // Mock react-native-safe-area-context
 jest.mock('react-native-safe-area-context', () => {
   const inset = {top: 0, right: 0, bottom: 0, left: 0};
