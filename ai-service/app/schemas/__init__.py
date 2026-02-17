@@ -11,6 +11,7 @@ Modules:
     communication: Parent communication schemas
     pagination: Standardized pagination schemas
     search: Full-text search schemas
+    filters: Filter schemas for list endpoints
 """
 
 from app.schemas.activity import (
@@ -85,6 +86,13 @@ from app.schemas.search import (
     SearchResultType,
     SearchType,
 )
+from app.schemas.filters import (
+    ActivityFilters,
+    CoachingFilters,
+    DateRangeFilter,
+    StatusFilter,
+    TypeFilter,
+)
 
 __all__ = [
     # Base schemas
@@ -152,4 +160,10 @@ __all__ = [
     "SearchResultType",
     "SearchResult",
     "SearchResponse",
+    # Filter schemas
+    "DateRangeFilter",
+    "StatusFilter",
+    "TypeFilter",
+    "ActivityFilters",
+    "CoachingFilters",
 ]
