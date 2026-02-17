@@ -12,6 +12,8 @@ from app.routers.analytics import router as analytics_router
 from app.routers.communication import router as communication_router
 from app.routers.development_profile import router as development_profile_router
 from app.routers.documents import router as documents_router
+from app.routers.message_quality import router as message_quality_router
+from app.routers.message_quality_analytics import router as message_quality_analytics_router
 from app.routers.mfa import router as mfa_router
 from app.routers.qa_diagnostics import router as qa_diagnostics_router
 from app.routers.storage import router as storage_router
@@ -39,6 +41,8 @@ app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(communication_router, prefix="/api/v1/communication", tags=["communication"])
 app.include_router(development_profile_router)
 app.include_router(documents_router)
+app.include_router(message_quality_router, prefix="/api/v1/message-quality", tags=["message-quality"])
+app.include_router(message_quality_analytics_router, prefix="/api/v1/message-quality", tags=["message-quality"])
 app.include_router(mfa_router)
 app.include_router(qa_diagnostics_router, prefix="/api/v1/qa/diagnostics", tags=["qa-diagnostics"])
 app.include_router(storage_router)
