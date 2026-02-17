@@ -1130,6 +1130,28 @@ class DevelopmentProfileService:
     # Private Helper Methods
     # =========================================================================
 
+    def _user_has_profile_access(
+        self,
+        profile: DevelopmentProfile,
+        user_id: UUID,
+    ) -> bool:
+        """Check if a user has access to a development profile.
+
+        User has access if they are the assigned educator.
+
+        Args:
+            profile: The profile to check access for
+            user_id: ID of the user to check
+
+        Returns:
+            True if user has access, False otherwise
+        """
+        # Educator always has access
+        if str(profile.educator_id) == str(user_id):
+            return True
+
+        return False
+
     async def _get_profile_model(
         self, profile_id: UUID
     ) -> Optional[DevelopmentProfile]:
