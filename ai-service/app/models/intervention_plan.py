@@ -17,10 +17,10 @@ The 8-part structure includes:
 
 from datetime import datetime, date
 from typing import TYPE_CHECKING, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -83,17 +83,17 @@ class InterventionPlan(Base):
     __tablename__ = "intervention_plans"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     child_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
     created_by: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
@@ -112,7 +112,7 @@ class InterventionPlan(Base):
         default=1,
     )
     parent_version_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -265,12 +265,12 @@ class InterventionStrength(Base):
     __tablename__ = "intervention_strengths"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -331,12 +331,12 @@ class InterventionNeed(Base):
     __tablename__ = "intervention_needs"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -415,18 +415,18 @@ class InterventionGoal(Base):
     __tablename__ = "intervention_goals"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     need_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_needs.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -528,18 +528,18 @@ class InterventionStrategy(Base):
     __tablename__ = "intervention_strategies"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     goal_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_goals.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -614,18 +614,18 @@ class InterventionMonitoring(Base):
     __tablename__ = "intervention_monitoring"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     goal_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_goals.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -701,12 +701,12 @@ class InterventionParentInvolvement(Base):
     __tablename__ = "intervention_parent_involvements"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -783,12 +783,12 @@ class InterventionConsultation(Base):
     __tablename__ = "intervention_consultations"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -874,23 +874,23 @@ class InterventionProgress(Base):
     __tablename__ = "intervention_progress"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     goal_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_goals.id", ondelete="SET NULL"),
         nullable=True,
     )
     recorded_by: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
     )
     record_date: Mapped[date] = mapped_column(
@@ -961,12 +961,12 @@ class InterventionVersion(Base):
     __tablename__ = "intervention_versions"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     plan_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("intervention_plans.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -976,7 +976,7 @@ class InterventionVersion(Base):
         nullable=False,
     )
     created_by: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
     )
     change_summary: Mapped[Optional[str]] = mapped_column(

@@ -7,10 +7,10 @@ that generates personalized bilingual reports and home activity suggestions.
 
 from datetime import datetime
 from typing import Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -42,12 +42,12 @@ class ParentReport(Base):
     __tablename__ = "parent_reports"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     child_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
@@ -85,7 +85,7 @@ class ParentReport(Base):
         nullable=True,
     )
     generated_by: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -136,12 +136,12 @@ class HomeActivity(Base):
     __tablename__ = "home_activities"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     child_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
@@ -171,7 +171,7 @@ class HomeActivity(Base):
         default="en",
     )
     based_on_activity_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=True,
     )
     is_completed: Mapped[bool] = mapped_column(
@@ -224,17 +224,17 @@ class CommunicationPreference(Base):
     __tablename__ = "communication_preferences"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     parent_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         unique=True,
     )
     child_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
     )
     preferred_language: Mapped[str] = mapped_column(
