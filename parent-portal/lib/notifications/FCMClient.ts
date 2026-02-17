@@ -197,16 +197,28 @@ export async function unregisterFCMToken(
 }
 
 /**
+ * FCM token list API response envelope.
+ */
+interface FCMTokenListResponse {
+  success: boolean;
+  message: string;
+  data: {
+    tokens: FCMToken[];
+    count: number;
+  };
+}
+
+/**
  * List all active FCM tokens for a user.
  */
 export async function listFCMTokens(gibbonPersonID: string): Promise<FCMToken[]> {
-  const response = await gibbonClient.get<{ tokens: FCMToken[] }>(
+  const response = await gibbonClient.get<FCMTokenListResponse>(
     ENDPOINTS.FCM_TOKEN_LIST,
     {
       params: { gibbonPersonID },
     }
   );
-  return response.tokens;
+  return response.data?.tokens ?? [];
 }
 
 // ============================================================================
@@ -279,9 +291,11 @@ export function formatNotificationTime(timestamp: string): string {
 
 /**
  * Get icon name for notification type.
+ * Handles both simple types (e.g., 'checkIn') and dotted types (e.g., 'attendance.checkIn').
  */
 export function getNotificationIcon(type: string): string {
   const iconMap: Record<string, string> = {
+    // Simple type keys
     checkIn: 'login',
     checkOut: 'logout',
     photo: 'photo',
@@ -291,6 +305,18 @@ export function getNotificationIcon(type: string): string {
     announcement: 'campaign',
     message: 'mail',
     dailyReport: 'assignment',
+    diaper: 'baby_changing_station',
+    // Dotted type keys (from EventNotificationMapper)
+    'attendance.checkIn': 'login',
+    'attendance.checkOut': 'logout',
+    'photo.uploaded': 'photo',
+    'incident.created': 'alert',
+    'incident.updated': 'alert',
+    'meal.recorded': 'restaurant',
+    'nap.recorded': 'bedtime',
+    'message.received': 'mail',
+    'dailyReport.ready': 'assignment',
+    'diaper.recorded': 'baby_changing_station',
   };
   return iconMap[type] || 'notifications';
 }
