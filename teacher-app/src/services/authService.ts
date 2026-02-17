@@ -98,7 +98,9 @@ export function getCurrentUser(): Teacher | null {
  */
 export async function checkBiometricAvailability(): Promise<BiometricStatus> {
   try {
-    const rnBiometrics = new ReactNativeBiometrics();
+    const rnBiometrics = new ReactNativeBiometrics({
+      allowDeviceCredentials: __DEV__,
+    });
     const {available, biometryType} = await rnBiometrics.isSensorAvailable();
 
     if (!available) {
@@ -164,7 +166,9 @@ export async function authenticateWithBiometrics(
   }
 
   try {
-    const rnBiometrics = new ReactNativeBiometrics();
+    const rnBiometrics = new ReactNativeBiometrics({
+      allowDeviceCredentials: __DEV__,
+    });
     const {success} = await rnBiometrics.simplePrompt({
       promptMessage: promptMessage,
     });
@@ -509,6 +513,7 @@ export function setCurrentUser(user: Teacher): void {
 }
 
 // Mock data for development when API is unavailable
+// Only available in development mode (__DEV__)
 const MOCK_USER: Teacher = {
   id: 'teacher-1',
   firstName: 'Emily',
@@ -526,11 +531,23 @@ const MOCK_LOGIN_RESPONSE: LoginResponse = {
 
 /**
  * Development-only: Login with mock credentials
+ * Only available when __DEV__ is true
  */
 export async function loginWithMockCredentials(
   email: string,
   password: string,
 ): Promise<AuthResult<LoginResponse>> {
+  // Prevent mock login in production
+  if (!__DEV__) {
+    return {
+      success: false,
+      error: {
+        code: 'UNKNOWN_ERROR',
+        message: 'Mock login is not available in production',
+      },
+    };
+  }
+
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 1000));
 
