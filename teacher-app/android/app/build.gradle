@@ -5,39 +5,15 @@
 
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
-
-// Check if React Native node_modules exist
-def reactNativeModulesExist = file("../../node_modules/@react-native/gradle-plugin").exists()
-
-// Apply React Native plugin only if available
-if (reactNativeModulesExist) {
-    apply plugin: "com.facebook.react"
-}
-
-// Firebase Cloud Messaging for push notifications
+apply plugin: "com.facebook.react"
 apply plugin: 'com.google.gms.google-services'
 
-/**
- * React Native configuration block.
- * Configures the React Native Gradle plugin for bundling and code generation.
- * Only applied when React Native modules are available.
- */
-if (reactNativeModulesExist) {
-    react {
-        // Enable autolinking of native modules
-        autolinkLibrariesWithApp()
-
-        // Hermes is the recommended JS engine for React Native
-        // It provides better performance and smaller bundle sizes
-        hermesEnabled = true
-
-        // Enable code generation for native modules
-        enableHermes = true
-    }
+react {
+    autolinkLibrariesWithApp()
+    hermesEnabled = true
 }
 
-// Define hermesEnabled for use in dependencies
-def hermesEnabled = reactNativeModulesExist ? "true" : "false"
+def hermesEnabled = "true"
 
 /**
  * Loads local.properties for keystore passwords and other local config.
@@ -184,17 +160,9 @@ android {
 }
 
 dependencies {
-    // React Native core (only if available)
-    if (reactNativeModulesExist) {
-        implementation("com.facebook.react:react-android")
-
-        // Hermes JavaScript engine (recommended for React Native)
-        if (hermesEnabled.toBoolean()) {
-            implementation("com.facebook.react:hermes-android")
-        } else {
-            implementation("org.webkit:android-jsc:+")
-        }
-    }
+    // React Native core
+    implementation("com.facebook.react:react-android")
+    implementation("com.facebook.react:hermes-android")
 
     // Firebase BoM (Bill of Materials) for version management
     implementation platform('com.google.firebase:firebase-bom:32.7.0')
@@ -232,9 +200,4 @@ task copyDownloadableDepsToLibs(type: Copy) {
     into 'libs'
 }
 
-// Apply React Native autolinking (only if node_modules exist)
-def nativeModulesGradle = file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
-if (nativeModulesGradle.exists()) {
-    apply from: nativeModulesGradle
-    applyNativeModulesAppBuildGradle(project)
-}
+// React Native autolinking is handled by the com.facebook.react plugin

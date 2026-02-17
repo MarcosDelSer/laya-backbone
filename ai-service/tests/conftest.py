@@ -6,7 +6,7 @@ test data, and authentication mocking for coaching, activity, and communication 
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 from uuid import UUID, uuid4
 
@@ -245,47 +245,6 @@ CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(chi
 """
 
 
-# SQLite-compatible MFA tables (PostgreSQL UUID not supported in SQLite)
-SQLITE_CREATE_MFA_TABLES_SQL = """
-CREATE TABLE IF NOT EXISTS mfa_settings (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL UNIQUE,
-    is_enabled INTEGER NOT NULL DEFAULT 0,
-    method VARCHAR(20) NOT NULL DEFAULT 'totp',
-    secret_key VARCHAR(255),
-    recovery_email VARCHAR(255),
-    last_verified_at TIMESTAMP,
-    failed_attempts INTEGER NOT NULL DEFAULT 0,
-    locked_until TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS mfa_backup_codes (
-    id TEXT PRIMARY KEY,
-    mfa_settings_id TEXT NOT NULL REFERENCES mfa_settings(id) ON DELETE CASCADE,
-    code_hash VARCHAR(255) NOT NULL,
-    is_used INTEGER NOT NULL DEFAULT 0,
-    used_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS mfa_ip_whitelist (
-    id TEXT PRIMARY KEY,
-    mfa_settings_id TEXT NOT NULL REFERENCES mfa_settings(id) ON DELETE CASCADE,
-    ip_address VARCHAR(45) NOT NULL,
-    description TEXT,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_mfa_settings_user_id ON mfa_settings(user_id);
-CREATE INDEX IF NOT EXISTS idx_mfa_backup_codes_settings ON mfa_backup_codes(mfa_settings_id);
-CREATE INDEX IF NOT EXISTS idx_mfa_ip_whitelist_settings ON mfa_ip_whitelist(mfa_settings_id);
-"""
-
-
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -335,6 +294,53 @@ CREATE INDEX IF NOT EXISTS idx_evidence_sources_recommendation ON evidence_sourc
 """
 
 
+# SQLite-compatible storage tables (for file upload testing)
+SQLITE_CREATE_STORAGE_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS files (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    filename VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    storage_backend VARCHAR(20) NOT NULL,
+    storage_path VARCHAR(500) NOT NULL,
+    checksum VARCHAR(64),
+    is_public INTEGER NOT NULL DEFAULT 0,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS file_thumbnails (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    size VARCHAR(20) NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    storage_path VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS storage_quotas (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL UNIQUE,
+    quota_bytes INTEGER NOT NULL DEFAULT 104857600,
+    used_bytes INTEGER NOT NULL DEFAULT 0,
+    file_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
+CREATE INDEX IF NOT EXISTS idx_files_content_type ON files(content_type);
+CREATE INDEX IF NOT EXISTS idx_files_is_public ON files(is_public);
+CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
+CREATE INDEX IF NOT EXISTS idx_file_thumbnails_file ON file_thumbnails(file_id);
+CREATE INDEX IF NOT EXISTS idx_storage_quotas_owner ON storage_quotas(owner_id);
+"""
+
+
 @pytest.fixture(scope="session")
 def event_loop_policy():
     """Use default event loop policy for tests."""
@@ -374,9 +380,16 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
-    # Create MFA tables via raw SQL (SQLite compatibility)
+    # Create storage tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_MFA_TABLES_SQL.strip().split(';'):
+        for statement in SQLITE_CREATE_STORAGE_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
+    # Create development profile tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_DEVELOPMENT_PROFILE_TABLES_SQL.strip().split(';'):
             statement = statement.strip()
             if statement:
                 await conn.execute(text(statement))
@@ -403,10 +416,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
-        # Drop MFA tables
-        await conn.execute(text("DROP TABLE IF EXISTS mfa_ip_whitelist"))
-        await conn.execute(text("DROP TABLE IF EXISTS mfa_backup_codes"))
-        await conn.execute(text("DROP TABLE IF EXISTS mfa_settings"))
+        # Drop development profile tables
+        await conn.execute(text("DROP TABLE IF EXISTS monthly_snapshots"))
+        await conn.execute(text("DROP TABLE IF EXISTS observations"))
+        await conn.execute(text("DROP TABLE IF EXISTS skill_assessments"))
+        await conn.execute(text("DROP TABLE IF EXISTS development_profiles"))
 
 
 @pytest_asyncio.fixture
@@ -1600,224 +1614,527 @@ async def sample_home_activities(
 
 
 # ============================================================================
-# MFA fixtures
+# Development Profile fixtures
 # ============================================================================
 
 
-class MockMFASettings:
-    """Mock MFASettings object for testing without SQLAlchemy ORM overhead."""
+# SQLite-compatible development profile tables (PostgreSQL ARRAY/JSONB not supported in SQLite)
+SQLITE_CREATE_DEVELOPMENT_PROFILE_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS development_profiles (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL UNIQUE,
+    educator_id TEXT,
+    birth_date DATE,
+    notes TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS skill_assessments (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES development_profiles(id) ON DELETE CASCADE,
+    domain VARCHAR(20) NOT NULL,
+    skill_name VARCHAR(200) NOT NULL,
+    skill_name_fr VARCHAR(200),
+    status VARCHAR(20) NOT NULL DEFAULT 'not_yet',
+    assessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    assessed_by_id TEXT,
+    evidence TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS observations (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES development_profiles(id) ON DELETE CASCADE,
+    domain VARCHAR(20) NOT NULL,
+    observed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    observer_id TEXT,
+    observer_type VARCHAR(50) NOT NULL DEFAULT 'educator',
+    behavior_description TEXT NOT NULL,
+    context TEXT,
+    is_milestone INTEGER NOT NULL DEFAULT 0,
+    is_concern INTEGER NOT NULL DEFAULT 0,
+    attachments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS monthly_snapshots (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES development_profiles(id) ON DELETE CASCADE,
+    snapshot_month DATE NOT NULL,
+    age_months INTEGER,
+    domain_summaries TEXT,
+    overall_progress VARCHAR(50) NOT NULL DEFAULT 'on_track',
+    strengths TEXT,
+    growth_areas TEXT,
+    recommendations TEXT,
+    generated_by_id TEXT,
+    is_parent_shared INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_development_profiles_child ON development_profiles(child_id);
+CREATE INDEX IF NOT EXISTS idx_development_profiles_educator ON development_profiles(educator_id);
+CREATE INDEX IF NOT EXISTS idx_development_profiles_active ON development_profiles(is_active);
+CREATE INDEX IF NOT EXISTS idx_skill_assessments_profile ON skill_assessments(profile_id);
+CREATE INDEX IF NOT EXISTS idx_skill_assessments_domain ON skill_assessments(domain);
+CREATE INDEX IF NOT EXISTS idx_skill_assessments_status ON skill_assessments(status);
+CREATE INDEX IF NOT EXISTS idx_observations_profile ON observations(profile_id);
+CREATE INDEX IF NOT EXISTS idx_observations_domain ON observations(domain);
+CREATE INDEX IF NOT EXISTS idx_observations_concern ON observations(is_concern);
+CREATE INDEX IF NOT EXISTS idx_monthly_snapshots_profile ON monthly_snapshots(profile_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_snapshots_month ON monthly_snapshots(snapshot_month);
+"""
+
+
+class MockFile:
+    """Mock File object for testing without SQLAlchemy ORM overhead."""
 
     def __init__(
         self,
         id,
-        user_id,
-        is_enabled,
-        method,
-        secret_key,
-        recovery_email,
-        last_verified_at,
-        failed_attempts,
-        locked_until,
-        created_at,
-        updated_at,
-    ):
-        self.id = id
-        self.user_id = user_id
-        self.is_enabled = is_enabled
-        self.method = method
-        self.secret_key = secret_key
-        self.recovery_email = recovery_email
-        self.last_verified_at = last_verified_at
-        self.failed_attempts = failed_attempts
-        self.locked_until = locked_until
-        self.created_at = created_at
-        self.updated_at = updated_at
-
-    def __repr__(self) -> str:
-        return f"<MFASettings(id={self.id}, user_id={self.user_id}, enabled={self.is_enabled})>"
-
-
-class MockMFABackupCode:
-    """Mock MFABackupCode object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        mfa_settings_id,
-        code_hash,
-        is_used,
-        used_at,
-        created_at,
-    ):
-        self.id = id
-        self.mfa_settings_id = mfa_settings_id
-        self.code_hash = code_hash
-        self.is_used = is_used
-        self.used_at = used_at
-        self.created_at = created_at
-
-    def __repr__(self) -> str:
-        return f"<MFABackupCode(id={self.id}, used={self.is_used})>"
-
-
-class MockMFAIPWhitelist:
-    """Mock MFAIPWhitelist object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        mfa_settings_id,
-        ip_address,
+        owner_id,
+        filename,
+        original_filename,
+        content_type,
+        size_bytes,
+        storage_backend,
+        storage_path,
+        checksum,
+        is_public,
         description,
-        is_active,
+        created_at,
+        updated_at,
+        thumbnails=None,
+    ):
+        self.id = id
+        self.owner_id = owner_id
+        self.filename = filename
+        self.original_filename = original_filename
+        self.content_type = content_type
+        self.size_bytes = size_bytes
+        self.storage_backend = storage_backend
+        self.storage_path = storage_path
+        self.checksum = checksum
+        self.is_public = is_public
+        self.description = description
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.thumbnails = thumbnails or []
+
+    def __repr__(self) -> str:
+        return (
+            f"<File(id={self.id}, filename='{self.original_filename}', "
+            f"size={self.size_bytes}, backend={self.storage_backend})>"
+        )
+
+
+class MockFileThumbnail:
+    """Mock FileThumbnail object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        file_id,
+        size,
+        width,
+        height,
+        storage_path,
+        created_at,
+    ):
+        self.id = id
+        self.file_id = file_id
+        self.size = size
+        self.width = width
+        self.height = height
+        self.storage_path = storage_path
+        self.created_at = created_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<FileThumbnail(id={self.id}, file_id={self.file_id}, "
+            f"size={self.size}, {self.width}x{self.height})>"
+        )
+
+
+class MockStorageQuota:
+    """Mock StorageQuota object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        owner_id,
+        quota_bytes,
+        used_bytes,
+        file_count,
         created_at,
         updated_at,
     ):
         self.id = id
-        self.mfa_settings_id = mfa_settings_id
-        self.ip_address = ip_address
-        self.description = description
-        self.is_active = is_active
+        self.owner_id = owner_id
+        self.quota_bytes = quota_bytes
+        self.used_bytes = used_bytes
+        self.file_count = file_count
         self.created_at = created_at
         self.updated_at = updated_at
 
+    @property
+    def available_bytes(self) -> int:
+        """Calculate available storage space in bytes."""
+        return max(0, self.quota_bytes - self.used_bytes)
+
+    @property
+    def usage_percentage(self) -> float:
+        """Calculate storage usage as a percentage."""
+        if self.quota_bytes <= 0:
+            return 0.0
+        return (self.used_bytes / self.quota_bytes) * 100
+
     def __repr__(self) -> str:
-        return f"<MFAIPWhitelist(id={self.id}, ip={self.ip_address})>"
+        usage_percent = self.usage_percentage
+        return (
+            f"<StorageQuota(id={self.id}, owner_id={self.owner_id}, "
+            f"usage={usage_percent:.1f}%, files={self.file_count})>"
+        )
 
 
-async def create_mfa_settings_in_db(
+async def create_file_in_db(
     session: AsyncSession,
-    user_id: UUID,
-    is_enabled: bool = False,
-    method: str = "TOTP",
-    secret_key: Optional[str] = None,
-    recovery_email: Optional[str] = None,
-    failed_attempts: int = 0,
-    locked_until: Optional[datetime] = None,
-) -> MockMFASettings:
-    """Helper function to create MFA settings directly in SQLite database.
-
-    Note: UUIDs are stored without hyphens to match SQLAlchemy's PGUUID behavior
-    when querying against SQLite in test mode.
-    Note: Enum values are stored as uppercase names (TOTP, SMS, EMAIL) to match
-    SQLAlchemy's default enum handling.
-    """
-    settings_id = uuid4().hex  # Store without hyphens
+    owner_id: UUID,
+    filename: str,
+    original_filename: str,
+    content_type: str,
+    size_bytes: int,
+    storage_backend: str = "local",
+    storage_path: Optional[str] = None,
+    checksum: Optional[str] = None,
+    is_public: bool = False,
+    description: Optional[str] = None,
+) -> MockFile:
+    """Helper function to create a file directly in SQLite database."""
+    file_id = str(uuid4())
     now = datetime.now(timezone.utc)
+    if storage_path is None:
+        storage_path = f"/storage/{file_id}/{filename}"
 
     await session.execute(
         text("""
-            INSERT INTO mfa_settings (
-                id, user_id, is_enabled, method, secret_key, recovery_email,
-                last_verified_at, failed_attempts, locked_until, created_at, updated_at
+            INSERT INTO files (
+                id, owner_id, filename, original_filename, content_type,
+                size_bytes, storage_backend, storage_path, checksum,
+                is_public, description, created_at, updated_at
             ) VALUES (
-                :id, :user_id, :is_enabled, :method, :secret_key, :recovery_email,
-                :last_verified_at, :failed_attempts, :locked_until, :created_at, :updated_at
+                :id, :owner_id, :filename, :original_filename, :content_type,
+                :size_bytes, :storage_backend, :storage_path, :checksum,
+                :is_public, :description, :created_at, :updated_at
             )
         """),
         {
-            "id": settings_id,
-            "user_id": user_id.hex,  # Store without hyphens for SQLite/PGUUID compatibility
-            "is_enabled": 1 if is_enabled else 0,
-            "method": method.upper(),  # Store as uppercase enum name
-            "secret_key": secret_key,
-            "recovery_email": recovery_email,
-            "last_verified_at": None,
-            "failed_attempts": failed_attempts,
-            "locked_until": locked_until.isoformat() if locked_until else None,
+            "id": file_id,
+            "owner_id": str(owner_id),
+            "filename": filename,
+            "original_filename": original_filename,
+            "content_type": content_type,
+            "size_bytes": size_bytes,
+            "storage_backend": storage_backend,
+            "storage_path": storage_path,
+            "checksum": checksum,
+            "is_public": 1 if is_public else 0,
+            "description": description,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
         }
     )
     await session.commit()
 
-    return MockMFASettings(
-        id=UUID(settings_id),
-        user_id=user_id,
-        is_enabled=is_enabled,
-        method=method,
-        secret_key=secret_key,
-        recovery_email=recovery_email,
-        last_verified_at=None,
-        failed_attempts=failed_attempts,
-        locked_until=locked_until,
+    return MockFile(
+        id=UUID(file_id),
+        owner_id=owner_id,
+        filename=filename,
+        original_filename=original_filename,
+        content_type=content_type,
+        size_bytes=size_bytes,
+        storage_backend=storage_backend,
+        storage_path=storage_path,
+        checksum=checksum,
+        is_public=is_public,
+        description=description,
         created_at=now,
         updated_at=now,
+        thumbnails=[],
     )
 
 
-async def create_mfa_backup_code_in_db(
+async def create_file_thumbnail_in_db(
     session: AsyncSession,
-    mfa_settings_id: UUID,
-    code_hash: str,
-    is_used: bool = False,
-    used_at: Optional[datetime] = None,
-) -> MockMFABackupCode:
-    """Helper function to create MFA backup code directly in SQLite database.
-
-    Note: UUIDs are stored without hyphens to match SQLAlchemy's PGUUID behavior.
-    """
-    code_id = uuid4().hex  # Store without hyphens
+    file_id: UUID,
+    size: str,
+    width: int,
+    height: int,
+    storage_path: Optional[str] = None,
+) -> MockFileThumbnail:
+    """Helper function to create a file thumbnail directly in SQLite database."""
+    thumbnail_id = str(uuid4())
     now = datetime.now(timezone.utc)
+    if storage_path is None:
+        storage_path = f"/storage/thumbnails/{thumbnail_id}_{size}.jpg"
 
     await session.execute(
         text("""
-            INSERT INTO mfa_backup_codes (
-                id, mfa_settings_id, code_hash, is_used, used_at, created_at
+            INSERT INTO file_thumbnails (
+                id, file_id, size, width, height, storage_path, created_at
             ) VALUES (
-                :id, :mfa_settings_id, :code_hash, :is_used, :used_at, :created_at
+                :id, :file_id, :size, :width, :height, :storage_path, :created_at
             )
         """),
         {
-            "id": code_id,
-            "mfa_settings_id": mfa_settings_id.hex,  # Store without hyphens
-            "code_hash": code_hash,
-            "is_used": 1 if is_used else 0,
-            "used_at": used_at.isoformat() if used_at else None,
+            "id": thumbnail_id,
+            "file_id": str(file_id),
+            "size": size,
+            "width": width,
+            "height": height,
+            "storage_path": storage_path,
             "created_at": now.isoformat(),
         }
     )
     await session.commit()
 
-    return MockMFABackupCode(
-        id=UUID(code_id),
-        mfa_settings_id=mfa_settings_id,
-        code_hash=code_hash,
-        is_used=is_used,
-        used_at=used_at,
+    return MockFileThumbnail(
+        id=UUID(thumbnail_id),
+        file_id=file_id,
+        size=size,
+        width=width,
+        height=height,
+        storage_path=storage_path,
         created_at=now,
     )
 
 
-async def create_mfa_ip_whitelist_in_db(
+async def create_storage_quota_in_db(
     session: AsyncSession,
-    mfa_settings_id: UUID,
-    ip_address: str,
-    description: Optional[str] = None,
-    is_active: bool = True,
-) -> MockMFAIPWhitelist:
-    """Helper function to create MFA IP whitelist entry directly in SQLite database.
-
-    Note: UUIDs are stored without hyphens to match SQLAlchemy's PGUUID behavior.
-    """
-    entry_id = uuid4().hex  # Store without hyphens
+    owner_id: UUID,
+    quota_bytes: int = 104857600,  # 100 MB default
+    used_bytes: int = 0,
+    file_count: int = 0,
+) -> MockStorageQuota:
+    """Helper function to create a storage quota directly in SQLite database."""
+    quota_id = str(uuid4())
     now = datetime.now(timezone.utc)
 
     await session.execute(
         text("""
-            INSERT INTO mfa_ip_whitelist (
-                id, mfa_settings_id, ip_address, description, is_active,
-                created_at, updated_at
+            INSERT INTO storage_quotas (
+                id, owner_id, quota_bytes, used_bytes, file_count, created_at, updated_at
             ) VALUES (
-                :id, :mfa_settings_id, :ip_address, :description, :is_active,
-                :created_at, :updated_at
+                :id, :owner_id, :quota_bytes, :used_bytes, :file_count, :created_at, :updated_at
             )
         """),
         {
-            "id": entry_id,
-            "mfa_settings_id": mfa_settings_id.hex,  # Store without hyphens
-            "ip_address": ip_address,
-            "description": description,
+            "id": quota_id,
+            "owner_id": str(owner_id),
+            "quota_bytes": quota_bytes,
+            "used_bytes": used_bytes,
+            "file_count": file_count,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockStorageQuota(
+        id=UUID(quota_id),
+        owner_id=owner_id,
+        quota_bytes=quota_bytes,
+        used_bytes=used_bytes,
+        file_count=file_count,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+class MockDevelopmentProfile:
+    """Mock DevelopmentProfile object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        child_id,
+        educator_id,
+        birth_date,
+        notes,
+        is_active,
+        created_at,
+        updated_at,
+        skill_assessments=None,
+        observations=None,
+        monthly_snapshots=None,
+    ):
+        self.id = id
+        self.child_id = child_id
+        self.educator_id = educator_id
+        self.birth_date = birth_date
+        self.notes = notes
+        self.is_active = is_active
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.skill_assessments = skill_assessments or []
+        self.observations = observations or []
+        self.monthly_snapshots = monthly_snapshots or []
+
+    def __repr__(self) -> str:
+        return f"<DevelopmentProfile(id={self.id}, child_id={self.child_id})>"
+
+
+class MockSkillAssessment:
+    """Mock SkillAssessment object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        profile_id,
+        domain,
+        skill_name,
+        skill_name_fr,
+        status,
+        assessed_at,
+        assessed_by_id,
+        evidence,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.profile_id = profile_id
+        self.domain = domain
+        self.skill_name = skill_name
+        self.skill_name_fr = skill_name_fr
+        self.status = status
+        self.assessed_at = assessed_at
+        self.assessed_by_id = assessed_by_id
+        self.evidence = evidence
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<SkillAssessment(id={self.id}, domain={self.domain}, "
+            f"skill='{self.skill_name}', status={self.status})>"
+        )
+
+
+class MockObservation:
+    """Mock Observation object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        profile_id,
+        domain,
+        observed_at,
+        observer_id,
+        observer_type,
+        behavior_description,
+        context,
+        is_milestone,
+        is_concern,
+        attachments,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.profile_id = profile_id
+        self.domain = domain
+        self.observed_at = observed_at
+        self.observer_id = observer_id
+        self.observer_type = observer_type
+        self.behavior_description = behavior_description
+        self.context = context
+        self.is_milestone = is_milestone
+        self.is_concern = is_concern
+        self.attachments = attachments
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<Observation(id={self.id}, domain={self.domain}, "
+            f"observed_at={self.observed_at})>"
+        )
+
+
+class MockMonthlySnapshot:
+    """Mock MonthlySnapshot object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        profile_id,
+        snapshot_month,
+        age_months,
+        domain_summaries,
+        overall_progress,
+        strengths,
+        growth_areas,
+        recommendations,
+        generated_by_id,
+        is_parent_shared,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.profile_id = profile_id
+        self.snapshot_month = snapshot_month
+        self.age_months = age_months
+        self.domain_summaries = domain_summaries
+        self.overall_progress = overall_progress
+        self.strengths = strengths
+        self.growth_areas = growth_areas
+        self.recommendations = recommendations
+        self.generated_by_id = generated_by_id
+        self.is_parent_shared = is_parent_shared
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<MonthlySnapshot(id={self.id}, profile_id={self.profile_id}, "
+            f"month={self.snapshot_month}, progress={self.overall_progress})>"
+        )
+
+
+async def create_development_profile_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    educator_id: Optional[UUID] = None,
+    birth_date: Optional[date] = None,
+    notes: Optional[str] = None,
+    is_active: bool = True,
+) -> MockDevelopmentProfile:
+    """Helper function to create a development profile directly in SQLite database."""
+    from datetime import date as date_type
+
+    profile_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO development_profiles (
+                id, child_id, educator_id, birth_date, notes,
+                is_active, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :educator_id, :birth_date, :notes,
+                :is_active, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": profile_id,
+            "child_id": str(child_id),
+            "educator_id": str(educator_id) if educator_id else None,
+            "birth_date": birth_date.isoformat() if birth_date else None,
+            "notes": notes,
             "is_active": 1 if is_active else 0,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
@@ -1825,153 +2142,382 @@ async def create_mfa_ip_whitelist_in_db(
     )
     await session.commit()
 
-    return MockMFAIPWhitelist(
-        id=UUID(entry_id),
-        mfa_settings_id=mfa_settings_id,
-        ip_address=ip_address,
-        description=description,
+    return MockDevelopmentProfile(
+        id=UUID(profile_id),
+        child_id=child_id,
+        educator_id=educator_id,
+        birth_date=birth_date,
+        notes=notes,
         is_active=is_active,
         created_at=now,
         updated_at=now,
     )
 
 
-@pytest.fixture
-def admin_user_payload(test_user_id: UUID) -> dict[str, Any]:
-    """Create an admin user token payload."""
-    return {
-        "sub": str(test_user_id),
-        "email": "admin@example.com",
-        "role": "admin",
-    }
+async def create_skill_assessment_in_db(
+    session: AsyncSession,
+    profile_id: UUID,
+    domain: str,
+    skill_name: str,
+    skill_name_fr: Optional[str] = None,
+    status: str = "not_yet",
+    assessed_by_id: Optional[UUID] = None,
+    evidence: Optional[str] = None,
+) -> MockSkillAssessment:
+    """Helper function to create a skill assessment directly in SQLite database."""
+    assessment_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO skill_assessments (
+                id, profile_id, domain, skill_name, skill_name_fr,
+                status, assessed_at, assessed_by_id, evidence,
+                created_at, updated_at
+            ) VALUES (
+                :id, :profile_id, :domain, :skill_name, :skill_name_fr,
+                :status, :assessed_at, :assessed_by_id, :evidence,
+                :created_at, :updated_at
+            )
+        """),
+        {
+            "id": assessment_id,
+            "profile_id": str(profile_id),
+            "domain": domain,
+            "skill_name": skill_name,
+            "skill_name_fr": skill_name_fr,
+            "status": status,
+            "assessed_at": now.isoformat(),
+            "assessed_by_id": str(assessed_by_id) if assessed_by_id else None,
+            "evidence": evidence,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockSkillAssessment(
+        id=UUID(assessment_id),
+        profile_id=profile_id,
+        domain=domain,
+        skill_name=skill_name,
+        skill_name_fr=skill_name_fr,
+        status=status,
+        assessed_at=now,
+        assessed_by_id=assessed_by_id,
+        evidence=evidence,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_observation_in_db(
+    session: AsyncSession,
+    profile_id: UUID,
+    domain: str,
+    behavior_description: str,
+    observer_id: Optional[UUID] = None,
+    observer_type: str = "educator",
+    context: Optional[str] = None,
+    is_milestone: bool = False,
+    is_concern: bool = False,
+    attachments: Optional[Dict] = None,
+) -> MockObservation:
+    """Helper function to create an observation directly in SQLite database."""
+    import json
+
+    observation_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO observations (
+                id, profile_id, domain, observed_at, observer_id,
+                observer_type, behavior_description, context,
+                is_milestone, is_concern, attachments,
+                created_at, updated_at
+            ) VALUES (
+                :id, :profile_id, :domain, :observed_at, :observer_id,
+                :observer_type, :behavior_description, :context,
+                :is_milestone, :is_concern, :attachments,
+                :created_at, :updated_at
+            )
+        """),
+        {
+            "id": observation_id,
+            "profile_id": str(profile_id),
+            "domain": domain,
+            "observed_at": now.isoformat(),
+            "observer_id": str(observer_id) if observer_id else None,
+            "observer_type": observer_type,
+            "behavior_description": behavior_description,
+            "context": context,
+            "is_milestone": 1 if is_milestone else 0,
+            "is_concern": 1 if is_concern else 0,
+            "attachments": json.dumps(attachments) if attachments else None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockObservation(
+        id=UUID(observation_id),
+        profile_id=profile_id,
+        domain=domain,
+        observed_at=now,
+        observer_id=observer_id,
+        observer_type=observer_type,
+        behavior_description=behavior_description,
+        context=context,
+        is_milestone=is_milestone,
+        is_concern=is_concern,
+        attachments=attachments,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_monthly_snapshot_in_db(
+    session: AsyncSession,
+    profile_id: UUID,
+    snapshot_month: date,
+    age_months: Optional[int] = None,
+    domain_summaries: Optional[Dict] = None,
+    overall_progress: str = "on_track",
+    strengths: Optional[List[str]] = None,
+    growth_areas: Optional[List[str]] = None,
+    recommendations: Optional[str] = None,
+    generated_by_id: Optional[UUID] = None,
+    is_parent_shared: bool = False,
+) -> MockMonthlySnapshot:
+    """Helper function to create a monthly snapshot directly in SQLite database."""
+    import json
+    from datetime import date as date_type
+
+    snapshot_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO monthly_snapshots (
+                id, profile_id, snapshot_month, age_months,
+                domain_summaries, overall_progress, strengths,
+                growth_areas, recommendations, generated_by_id,
+                is_parent_shared, created_at, updated_at
+            ) VALUES (
+                :id, :profile_id, :snapshot_month, :age_months,
+                :domain_summaries, :overall_progress, :strengths,
+                :growth_areas, :recommendations, :generated_by_id,
+                :is_parent_shared, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": snapshot_id,
+            "profile_id": str(profile_id),
+            "snapshot_month": snapshot_month.isoformat(),
+            "age_months": age_months,
+            "domain_summaries": json.dumps(domain_summaries) if domain_summaries else None,
+            "overall_progress": overall_progress,
+            "strengths": json.dumps({"items": strengths}) if strengths else None,
+            "growth_areas": json.dumps({"items": growth_areas}) if growth_areas else None,
+            "recommendations": recommendations,
+            "generated_by_id": str(generated_by_id) if generated_by_id else None,
+            "is_parent_shared": 1 if is_parent_shared else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockMonthlySnapshot(
+        id=UUID(snapshot_id),
+        profile_id=profile_id,
+        snapshot_month=snapshot_month,
+        age_months=age_months,
+        domain_summaries=domain_summaries,
+        overall_progress=overall_progress,
+        strengths=strengths,
+        growth_areas=growth_areas,
+        recommendations=recommendations,
+        generated_by_id=generated_by_id,
+        is_parent_shared=is_parent_shared,
+        created_at=now,
+        updated_at=now,
+    )
 
 
 @pytest.fixture
-def admin_token(admin_user_payload: dict[str, Any]) -> str:
-    """Create a valid admin JWT token for testing."""
-    return create_test_token(
-        subject=admin_user_payload["sub"],
-        expires_delta_seconds=3600,
-        additional_claims={
-            "email": admin_user_payload["email"],
-            "role": admin_user_payload["role"],
+def sample_profile_child_id() -> UUID:
+    """Generate a unique child ID for development profile tests."""
+    return UUID("11111111-2222-3333-4444-555555555555")
+
+
+@pytest.fixture
+def sample_educator_id() -> UUID:
+    """Generate a unique educator ID for development profile tests."""
+    return UUID("66666666-7777-8888-9999-aaaaaaaaaaaa")
+
+
+@pytest.fixture
+def sample_birth_date() -> date:
+    """Sample birth date for a 3-year-old child."""
+    from datetime import date as date_type, timedelta
+    return date_type.today() - timedelta(days=365 * 3)
+
+
+@pytest_asyncio.fixture
+async def sample_development_profile(
+    db_session: AsyncSession,
+    sample_profile_child_id: UUID,
+    sample_educator_id: UUID,
+    sample_birth_date: date,
+) -> MockDevelopmentProfile:
+    """Create a sample development profile in the database."""
+    return await create_development_profile_in_db(
+        db_session,
+        child_id=sample_profile_child_id,
+        educator_id=sample_educator_id,
+        birth_date=sample_birth_date,
+        notes="Sample development profile for testing",
+        is_active=True,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_skill_assessment(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> MockSkillAssessment:
+    """Create a sample skill assessment in the database."""
+    return await create_skill_assessment_in_db(
+        db_session,
+        profile_id=sample_development_profile.id,
+        domain="affective",
+        skill_name="Emotional Expression",
+        skill_name_fr="Expression émotionnelle",
+        status="learning",
+        assessed_by_id=test_user_id,
+        evidence="Child is beginning to identify and name basic emotions",
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_observation(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> MockObservation:
+    """Create a sample observation in the database."""
+    return await create_observation_in_db(
+        db_session,
+        profile_id=sample_development_profile.id,
+        domain="social",
+        behavior_description="Child initiated play with peers during free time",
+        observer_id=test_user_id,
+        observer_type="educator",
+        context="During morning free play session",
+        is_milestone=True,
+        is_concern=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_monthly_snapshot(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> MockMonthlySnapshot:
+    """Create a sample monthly snapshot in the database."""
+    from datetime import date as date_type
+    snapshot_month = date_type.today().replace(day=1)
+
+    return await create_monthly_snapshot_in_db(
+        db_session,
+        profile_id=sample_development_profile.id,
+        snapshot_month=snapshot_month,
+        age_months=36,
+        domain_summaries={
+            "affective": {"skills_can": 3, "skills_learning": 2, "skills_not_yet": 1},
+            "social": {"skills_can": 4, "skills_learning": 1, "skills_not_yet": 0},
         },
+        overall_progress="on_track",
+        strengths=["Social development", "Peer interactions"],
+        growth_areas=["Self-regulation"],
+        recommendations="Continue supporting emotional expression",
+        generated_by_id=test_user_id,
+        is_parent_shared=False,
     )
 
 
-@pytest.fixture
-def admin_auth_headers(admin_token: str) -> dict[str, str]:
-    """Create authorization headers with admin token."""
-    return {"Authorization": f"Bearer {admin_token}"}
-
-
-@pytest.fixture
-def mfa_test_secret() -> str:
-    """Generate a test TOTP secret key."""
-    import pyotp
-    return pyotp.random_base32()
-
-
-@pytest.fixture
-def mfa_valid_code(mfa_test_secret: str) -> str:
-    """Generate a valid TOTP code for the test secret."""
-    import pyotp
-    totp = pyotp.TOTP(mfa_test_secret)
-    return totp.now()
-
-
 @pytest_asyncio.fixture
-async def mfa_settings_pending_setup(
+async def sample_skill_assessments_all_domains(
     db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
     test_user_id: UUID,
-    mfa_test_secret: str,
-) -> MockMFASettings:
-    """Create MFA settings in pending setup state (secret set but not enabled)."""
-    return await create_mfa_settings_in_db(
-        db_session,
-        user_id=test_user_id,
-        is_enabled=False,
-        secret_key=mfa_test_secret,
-    )
-
-
-@pytest_asyncio.fixture
-async def mfa_settings_enabled(
-    db_session: AsyncSession,
-    test_user_id: UUID,
-    mfa_test_secret: str,
-) -> MockMFASettings:
-    """Create MFA settings in enabled state."""
-    return await create_mfa_settings_in_db(
-        db_session,
-        user_id=test_user_id,
-        is_enabled=True,
-        secret_key=mfa_test_secret,
-    )
-
-
-@pytest_asyncio.fixture
-async def mfa_settings_locked(
-    db_session: AsyncSession,
-    test_user_id: UUID,
-    mfa_test_secret: str,
-) -> MockMFASettings:
-    """Create MFA settings in locked state (too many failed attempts)."""
-    locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
-    return await create_mfa_settings_in_db(
-        db_session,
-        user_id=test_user_id,
-        is_enabled=True,
-        secret_key=mfa_test_secret,
-        failed_attempts=5,
-        locked_until=locked_until,
-    )
-
-
-@pytest_asyncio.fixture
-async def mfa_with_backup_codes(
-    db_session: AsyncSession,
-    mfa_settings_enabled: MockMFASettings,
-) -> tuple[MockMFASettings, list[MockMFABackupCode]]:
-    """Create MFA settings with backup codes."""
-    import hashlib
-
-    codes = []
-    for i in range(5):
-        code_plaintext = f"TESTCODE{i}"
-        code_hash = hashlib.sha256(code_plaintext.encode()).hexdigest()
-        backup_code = await create_mfa_backup_code_in_db(
-            db_session,
-            mfa_settings_id=mfa_settings_enabled.id,
-            code_hash=code_hash,
-            is_used=i == 0,  # First code is used
-        )
-        codes.append(backup_code)
-
-    return mfa_settings_enabled, codes
-
-
-@pytest_asyncio.fixture
-async def mfa_with_ip_whitelist(
-    db_session: AsyncSession,
-    mfa_settings_enabled: MockMFASettings,
-) -> tuple[MockMFASettings, list[MockMFAIPWhitelist]]:
-    """Create MFA settings with IP whitelist entries."""
-    entries = []
-    ip_data = [
-        ("192.168.1.100", "Home office", True),
-        ("10.0.0.0/24", "Corporate VPN", True),
-        ("172.16.0.1", "Old office (disabled)", False),
+) -> List[MockSkillAssessment]:
+    """Create skill assessments across all 6 Quebec developmental domains."""
+    domains_and_skills = [
+        ("affective", "Emotional Expression", "Expression émotionnelle", "can"),
+        ("affective", "Self-Regulation", "Autorégulation", "learning"),
+        ("social", "Peer Interactions", "Interactions avec les pairs", "can"),
+        ("social", "Turn-Taking", "Tour de rôle", "learning"),
+        ("language", "Receptive Language", "Langage réceptif", "can"),
+        ("language", "Speech Clarity", "Clarté du discours", "learning"),
+        ("cognitive", "Problem-Solving", "Résolution de problèmes", "can"),
+        ("cognitive", "Number Concept", "Concept du nombre", "not_yet"),
+        ("gross_motor", "Balance", "Équilibre", "can"),
+        ("gross_motor", "Coordination", "Coordination", "learning"),
+        ("fine_motor", "Pencil Grip", "Prise du crayon", "learning"),
+        ("fine_motor", "Hand-Eye Coordination", "Coordination œil-main", "can"),
     ]
 
-    for ip_address, description, is_active in ip_data:
-        entry = await create_mfa_ip_whitelist_in_db(
+    assessments = []
+    for domain, skill_name, skill_name_fr, status in domains_and_skills:
+        assessment = await create_skill_assessment_in_db(
             db_session,
-            mfa_settings_id=mfa_settings_enabled.id,
-            ip_address=ip_address,
-            description=description,
-            is_active=is_active,
+            profile_id=sample_development_profile.id,
+            domain=domain,
+            skill_name=skill_name,
+            skill_name_fr=skill_name_fr,
+            status=status,
+            assessed_by_id=test_user_id,
+            evidence=f"Assessment evidence for {skill_name}",
         )
-        entries.append(entry)
+        assessments.append(assessment)
 
-    return mfa_settings_enabled, entries
+    return assessments
+
+
+@pytest_asyncio.fixture
+async def sample_observations_all_domains(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> List[MockObservation]:
+    """Create observations across all 6 Quebec developmental domains."""
+    observations_data = [
+        ("affective", "Child expressed happiness when seeing friends", False, False),
+        ("social", "Child shared toys with classmates", True, False),
+        ("language", "Child used a new vocabulary word correctly", True, False),
+        ("cognitive", "Child solved a puzzle independently", True, False),
+        ("gross_motor", "Child climbed playground equipment safely", True, False),
+        ("fine_motor", "Child struggled with scissors", False, True),
+    ]
+
+    observations = []
+    for domain, description, is_milestone, is_concern in observations_data:
+        observation = await create_observation_in_db(
+            db_session,
+            profile_id=sample_development_profile.id,
+            domain=domain,
+            behavior_description=description,
+            observer_id=test_user_id,
+            observer_type="educator",
+            is_milestone=is_milestone,
+            is_concern=is_concern,
+        )
+        observations.append(observation)
+
+    return observations

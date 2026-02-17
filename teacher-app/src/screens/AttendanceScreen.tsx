@@ -6,7 +6,7 @@
  * current attendance status.
  */
 
-import React, {useState, useCallback, useEffect} from 'react';
+import React, {useState, useCallback, useEffect, useMemo} from 'react';
 import {
   StyleSheet,
   Text,
@@ -173,18 +173,20 @@ function AttendanceScreen(): React.JSX.Element {
           }),
         );
 
-        // Update summary
-        if (summary) {
-          setSummary({
-            ...summary,
-            totalCheckedIn: summary.totalCheckedIn + 1,
-            currentlyPresent: summary.currentlyPresent + 1,
-            totalAbsent: Math.max(0, summary.totalAbsent - 1),
-            totalLateArrivals: lateArrival
-              ? summary.totalLateArrivals + 1
-              : summary.totalLateArrivals,
-          });
-        }
+        // Update summary (functional update to avoid stale closure)
+        setSummary(prev =>
+          prev
+            ? {
+                ...prev,
+                totalCheckedIn: prev.totalCheckedIn + 1,
+                currentlyPresent: prev.currentlyPresent + 1,
+                totalAbsent: Math.max(0, prev.totalAbsent - 1),
+                totalLateArrivals: lateArrival
+                  ? prev.totalLateArrivals + 1
+                  : prev.totalLateArrivals,
+              }
+            : null,
+        );
       } else {
         // For development: simulate successful check-in
         simulateCheckIn(childId, lateArrival);
@@ -226,17 +228,19 @@ function AttendanceScreen(): React.JSX.Element {
       }),
     );
 
-    if (summary) {
-      setSummary({
-        ...summary,
-        totalCheckedIn: summary.totalCheckedIn + 1,
-        currentlyPresent: summary.currentlyPresent + 1,
-        totalAbsent: Math.max(0, summary.totalAbsent - 1),
-        totalLateArrivals: lateArrival
-          ? summary.totalLateArrivals + 1
-          : summary.totalLateArrivals,
-      });
-    }
+    setSummary(prev =>
+      prev
+        ? {
+            ...prev,
+            totalCheckedIn: prev.totalCheckedIn + 1,
+            currentlyPresent: prev.currentlyPresent + 1,
+            totalAbsent: Math.max(0, prev.totalAbsent - 1),
+            totalLateArrivals: lateArrival
+              ? prev.totalLateArrivals + 1
+              : prev.totalLateArrivals,
+          }
+        : null,
+    );
   };
 
   /**
@@ -282,7 +286,7 @@ function AttendanceScreen(): React.JSX.Element {
     } else {
       await performCheckOut(childId, childState.attendance.id, false);
     }
-  }, [childrenState, summary]);
+  }, [childrenState]);
 
   /**
    * Perform the actual check-out API call
@@ -311,14 +315,16 @@ function AttendanceScreen(): React.JSX.Element {
           }),
         );
 
-        // Update summary
-        if (summary) {
-          setSummary({
-            ...summary,
-            totalCheckedOut: summary.totalCheckedOut + 1,
-            currentlyPresent: Math.max(0, summary.currentlyPresent - 1),
-          });
-        }
+        // Update summary (functional update to avoid stale closure)
+        setSummary(prev =>
+          prev
+            ? {
+                ...prev,
+                totalCheckedOut: prev.totalCheckedOut + 1,
+                currentlyPresent: Math.max(0, prev.currentlyPresent - 1),
+              }
+            : null,
+        );
       } else {
         // For development: simulate successful check-out
         simulateCheckOut(childId, earlyDeparture);
@@ -355,13 +361,15 @@ function AttendanceScreen(): React.JSX.Element {
       }),
     );
 
-    if (summary) {
-      setSummary({
-        ...summary,
-        totalCheckedOut: summary.totalCheckedOut + 1,
-        currentlyPresent: Math.max(0, summary.currentlyPresent - 1),
-      });
-    }
+    setSummary(prev =>
+      prev
+        ? {
+            ...prev,
+            totalCheckedOut: prev.totalCheckedOut + 1,
+            currentlyPresent: Math.max(0, prev.currentlyPresent - 1),
+          }
+        : null,
+    );
   };
 
   /**
@@ -383,29 +391,47 @@ function AttendanceScreen(): React.JSX.Element {
   );
 
   /**
+   * Derive displayed counters from children state so they always match the list.
+   * Avoids stale summary (e.g. mock data or async updates) and debugger errors.
+   */
+  const displayCounts = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let left = 0;
+    for (const item of childrenState) {
+      if (item.attendance?.checkOutTime) {
+        left += 1;
+      } else if (item.status === 'absent') {
+        absent += 1;
+      } else {
+        present += 1; // present | late
+      }
+    }
+    return {present, absent, left};
+  }, [childrenState]);
+
+  /**
    * Render the list header with date and summary
    */
   const renderHeader = () => (
     <View style={styles.header}>
       <Text style={styles.dateText}>{formatDateHeader(new Date())}</Text>
-      {summary && (
-        <View style={styles.summaryContainer}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNumber}>{summary.currentlyPresent}</Text>
-            <Text style={styles.summaryLabel}>Present</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNumber}>{summary.totalAbsent}</Text>
-            <Text style={styles.summaryLabel}>Absent</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNumber}>{summary.totalCheckedOut}</Text>
-            <Text style={styles.summaryLabel}>Left</Text>
-          </View>
+      <View style={styles.summaryContainer}>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryNumber}>{displayCounts.present}</Text>
+          <Text style={styles.summaryLabel}>Present</Text>
         </View>
-      )}
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryNumber}>{displayCounts.absent}</Text>
+          <Text style={styles.summaryLabel}>Absent</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryNumber}>{displayCounts.left}</Text>
+          <Text style={styles.summaryLabel}>Left</Text>
+        </View>
+      </View>
     </View>
   );
 

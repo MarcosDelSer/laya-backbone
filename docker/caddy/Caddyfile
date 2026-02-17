@@ -1,0 +1,16 @@
+{$AI_SERVICE_HOST} {
+    encode gzip
+
+    handle_path /gibbon* {
+        reverse_proxy nginx:80
+    }
+
+    # Keep a direct health route for the web check script.
+    handle /health {
+        reverse_proxy nginx:80
+    }
+
+    handle {
+        reverse_proxy ai-service:8000
+    }
+}

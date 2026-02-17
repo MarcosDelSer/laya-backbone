@@ -5,14 +5,21 @@
  * data models, and API types.
  */
 
-// Navigation Types
-export type RootStackParamList = {
-  Attendance: undefined;
-  MealLogging: {childId?: string};
-  NapTracking: {childId?: string};
-  DiaperTracking: {childId?: string};
-  PhotoCapture: undefined;
-};
+// Re-export Navigation Types from dedicated navigation types module
+// These types include auth-aware navigation (Splash, Login, Main)
+export type {
+  RootStackParamList,
+  MainTabParamList,
+  RootStackNavigationProp,
+  MainTabNavigationProp,
+  SplashScreenProps,
+  LoginScreenProps,
+  AttendanceScreenProps,
+  MealLoggingScreenProps,
+  NapTrackingScreenProps,
+  DiaperTrackingScreenProps,
+  PhotoCaptureScreenProps,
+} from '../navigation/types';
 
 // Child Types
 export interface Child {
@@ -138,3 +145,72 @@ export interface Classroom {
   teacherIds: string[];
   childIds: string[];
 }
+
+// Authentication Types
+
+/**
+ * Login credentials for teacher authentication.
+ */
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+/**
+ * Response from successful login.
+ */
+export interface LoginResponse {
+  user: Teacher;
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+/**
+ * Response from token refresh.
+ */
+export interface RefreshResponse {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+/**
+ * Authentication error with additional context.
+ */
+export interface AuthError {
+  code: string;
+  message: string;
+  field?: string;
+}
+
+/**
+ * Current authentication state.
+ */
+export interface AuthState {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  user: Teacher | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  error: AuthError | null;
+}
+
+/**
+ * Biometric authentication status.
+ */
+export type BiometricStatus =
+  | 'available'
+  | 'not_enrolled'
+  | 'not_available'
+  | 'checking';
+
+/**
+ * Token storage key constants.
+ */
+export const TOKEN_STORAGE_KEYS = {
+  accessToken: 'laya_teacher_access_token',
+  refreshToken: 'laya_teacher_refresh_token',
+  biometricEnabled: 'laya_teacher_biometric_enabled',
+  storedEmail: 'laya_teacher_stored_email',
+} as const;

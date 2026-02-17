@@ -197,7 +197,10 @@ function getBackoffDelay(attempt: number, baseDelay: number = 1000): number {
  * Build URL with query parameters.
  */
 function buildUrl(baseUrl: string, path: string, params?: Record<string, string | number | boolean | undefined>): string {
-  const url = new URL(path, baseUrl);
+  const base = new URL(baseUrl);
+  const basePath = base.pathname.replace(/\/$/, '');
+  const effectivePath = path.startsWith('/') && basePath ? `${basePath}${path}` : path;
+  const url = new URL(effectivePath, `${base.protocol}//${base.host}`);
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     Date,
     DateTime,
+    Index,
     Integer,
     Numeric,
     String,
@@ -148,6 +149,16 @@ class AnalyticsMetric(Base):
         nullable=False,
     )
 
+    # Table-level indexes for common query patterns
+    __table_args__ = (
+        # Composite index for time-range queries by category
+        Index("ix_analytics_metrics_category_period", "category", "period_start", "period_end"),
+        # Composite index for facility-specific time queries
+        Index("ix_analytics_metrics_facility_period", "facility_id", "period_start"),
+        # Composite index for metric name time-series queries
+        Index("ix_analytics_metrics_name_period", "metric_name", "period_start"),
+    )
+
     def __repr__(self) -> str:
         """String representation of the AnalyticsMetric."""
         return (
@@ -212,6 +223,14 @@ class EnrollmentForecast(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+    )
+
+    # Table-level indexes for common query patterns
+    __table_args__ = (
+        # Composite index for facility-specific forecasts
+        Index("ix_enrollment_forecasts_facility_date", "facility_id", "forecast_date"),
+        # Index for model version filtering
+        Index("ix_enrollment_forecasts_model_version", "model_version"),
     )
 
     def __repr__(self) -> str:
@@ -286,6 +305,16 @@ class ComplianceCheck(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    # Table-level indexes for common query patterns
+    __table_args__ = (
+        # Composite index for facility-specific compliance checks by time
+        Index("ix_compliance_checks_facility_checked", "facility_id", "checked_at"),
+        # Index for finding upcoming checks
+        Index("ix_compliance_checks_next_due", "next_check_due"),
+        # Composite index for status filtering by check type
+        Index("ix_compliance_checks_type_status", "check_type", "status"),
     )
 
     def __repr__(self) -> str:

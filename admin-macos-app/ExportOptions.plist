@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Export destination: Developer ID for direct distribution outside App Store -->
+	<key>destination</key>
+	<string>export</string>
+
+	<!-- Method: developer-id for notarized direct distribution -->
+	<key>method</key>
+	<string>developer-id</string>
+
+	<!-- Manual signing configuration -->
+	<key>signingStyle</key>
+	<string>manual</string>
+
+	<!-- Team ID - Must be configured before distribution -->
+	<!-- Replace with actual Apple Developer Team ID -->
+	<key>teamID</key>
+	<string>TEAM_ID_HERE</string>
+
+	<!-- Signing certificate - Developer ID Application -->
+	<key>signingCertificate</key>
+	<string>Developer ID Application</string>
+
+	<!-- Provisioning profiles - Empty for Developer ID distribution -->
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.laya.admin</key>
+		<string>PROFILE_NAME_HERE</string>
+	</dict>
+</dict>
+</plist>

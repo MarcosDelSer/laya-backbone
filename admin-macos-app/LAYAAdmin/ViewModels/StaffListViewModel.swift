@@ -24,6 +24,7 @@ import SwiftUI
 /// - Sort by various fields
 /// - CRUD operations (create, update, delete)
 /// - Selection tracking for bulk operations
+/// - Offline support with local caching
 @MainActor
 final class StaffListViewModel: ObservableObject {
 
@@ -46,6 +47,17 @@ final class StaffListViewModel: ObservableObject {
 
     /// Whether the error alert should be shown
     @Published var showError = false
+
+    // MARK: - Offline Support
+
+    /// Whether the app is currently offline
+    @Published private(set) var isOffline = false
+
+    /// Whether data is being loaded from local cache
+    @Published private(set) var isLoadingFromCache = false
+
+    /// Number of pending sync operations for staff
+    @Published private(set) var pendingSyncCount: Int = 0
 
     // MARK: - Search & Filter
 
@@ -183,6 +195,12 @@ final class StaffListViewModel: ObservableObject {
     /// Gibbon CMS client
     private let gibbonClient: GibbonClient
 
+    /// Sync service for offline support
+    private let syncService: SyncService
+
+    /// Realm manager for local data persistence
+    private let realmManager: RealmManager
+
     /// Combine cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
 
@@ -198,15 +216,56 @@ final class StaffListViewModel: ObservableObject {
     // MARK: - Initialization
 
     /// Creates a new StaffListViewModel
-    /// - Parameter gibbonClient: The Gibbon client to use (defaults to shared instance)
-    init(gibbonClient: GibbonClient = .shared) {
+    /// - Parameters:
+    ///   - gibbonClient: The Gibbon client to use (defaults to shared instance)
+    ///   - syncService: The sync service for offline support (defaults to shared instance)
+    ///   - realmManager: The Realm manager for local persistence (defaults to shared instance)
+    init(
+        gibbonClient: GibbonClient = .shared,
+        syncService: SyncService = .shared,
+        realmManager: RealmManager = .shared
+    ) {
         self.gibbonClient = gibbonClient
+        self.syncService = syncService
+        self.realmManager = realmManager
         setupSearchDebounce()
+        setupOfflineSupport()
+    }
+
+    // MARK: - Offline Support Setup
+
+    /// Sets up observers for offline support
+    private func setupOfflineSupport() {
+        // Observe network status changes
+        syncService.$networkStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                self?.isOffline = !status.isConnected
+            }
+            .store(in: &cancellables)
+
+        // Observe pending sync count
+        syncService.$pendingOperationsCount
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updatePendingSyncCount()
+            }
+            .store(in: &cancellables)
+
+        // Initial state
+        isOffline = !syncService.isOnline
+        updatePendingSyncCount()
+    }
+
+    /// Updates the pending sync count for staff operations
+    private func updatePendingSyncCount() {
+        let pendingOps = realmManager.fetchPendingSyncOperations()
+        pendingSyncCount = pendingOps.filter { $0.entityType == SyncEntityType.staff.rawValue }.count
     }
 
     // MARK: - Public Methods
 
-    /// Loads staff members from the API
+    /// Loads staff members from the API (or local cache if offline)
     /// - Parameter reset: Whether to reset pagination and reload from the beginning
     func loadStaff(reset: Bool = false) async {
         if reset {
@@ -221,6 +280,13 @@ final class StaffListViewModel: ObservableObject {
         isLoading = true
         error = nil
         showError = false
+
+        // Check if offline - load from local cache
+        if isOffline {
+            await loadStaffFromCache()
+            isLoading = false
+            return
+        }
 
         do {
             let response = try await gibbonClient.fetchStaff(
@@ -242,15 +308,70 @@ final class StaffListViewModel: ObservableObject {
             currentOffset += response.items.count
             hasLoaded = true
 
+            // Cache fetched staff locally for offline access
+            await cacheStaffLocally(response.items)
+
             // Apply current sorting
             applySorting()
 
         } catch {
-            self.error = error
-            self.showError = true
+            // On network error, try loading from cache
+            if isNetworkError(error) {
+                isOffline = true
+                await loadStaffFromCache()
+            } else {
+                self.error = error
+                self.showError = true
+            }
         }
 
         isLoading = false
+    }
+
+    /// Loads staff from local cache
+    private func loadStaffFromCache() async {
+        isLoadingFromCache = true
+
+        let cachedStaff = realmManager.fetchStaff(
+            status: statusFilter,
+            role: roleFilter,
+            classroomId: classroomFilter,
+            searchQuery: isSearching ? searchText : nil
+        )
+
+        staff = cachedStaff
+        totalCount = cachedStaff.count
+        hasMoreData = false
+        hasLoaded = true
+
+        // Apply current sorting
+        applySorting()
+
+        isLoadingFromCache = false
+    }
+
+    /// Caches staff to local storage for offline access
+    private func cacheStaffLocally(_ staffToCache: [Staff]) async {
+        do {
+            try await realmManager.saveStaffMembers(staffToCache)
+        } catch {
+            // Silently fail - caching is best effort
+        }
+    }
+
+    /// Checks if an error is a network-related error
+    private func isNetworkError(_ error: Error) -> Bool {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .networkError:
+                return true
+            default:
+                return false
+            }
+        }
+        // Check for URLSession network errors
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain
     }
 
     /// Refreshes the staff list (reloads from the beginning)
@@ -286,6 +407,11 @@ final class StaffListViewModel: ObservableObject {
         isSaving = true
         error = nil
 
+        // If offline, create locally and queue for sync
+        if isOffline {
+            return await createStaffMemberOffline(request)
+        }
+
         do {
             let staffMember = try await gibbonClient.createStaffMember(request)
 
@@ -294,7 +420,68 @@ final class StaffListViewModel: ObservableObject {
             totalCount += 1
             applySorting()
 
+            // Cache locally
+            await cacheStaffLocally([staffMember])
+
             successMessage = String(localized: "Staff member added successfully")
+            showSuccess = true
+
+            isSaving = false
+            return staffMember
+
+        } catch {
+            // If network error, try creating offline
+            if isNetworkError(error) {
+                isOffline = true
+                return await createStaffMemberOffline(request)
+            }
+            self.error = error
+            self.showError = true
+            isSaving = false
+            return nil
+        }
+    }
+
+    /// Creates a staff member locally when offline and queues for sync
+    private func createStaffMemberOffline(_ request: StaffRequest) async -> Staff? {
+        // Create a temporary staff with a local ID
+        let localId = "local-\(UUID().uuidString)"
+        let staffMember = Staff(
+            id: localId,
+            firstName: request.firstName,
+            lastName: request.lastName,
+            email: request.email,
+            phone: request.phone,
+            role: request.role,
+            status: request.status ?? .active,
+            hireDate: request.hireDate,
+            terminationDate: request.terminationDate,
+            assignedClassroomId: request.assignedClassroomId,
+            assignedClassroomName: nil,
+            employeeNumber: request.employeeNumber,
+            profilePhotoURL: nil,
+            emergencyContactName: request.emergencyContactName,
+            emergencyContactPhone: request.emergencyContactPhone,
+            certifications: nil,
+            hourlyRate: request.hourlyRate,
+            contractedHours: request.contractedHours,
+            notes: request.notes,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+
+        do {
+            // Save to local database and queue for sync
+            try await realmManager.saveStaff(staffMember, queueSync: true)
+
+            // Add to the beginning of the list
+            staff.insert(staffMember, at: 0)
+            totalCount += 1
+            applySorting()
+
+            updatePendingSyncCount()
+
+            successMessage = String(localized: "Staff member saved locally. Will sync when online.")
             showSuccess = true
 
             isSaving = false
@@ -318,6 +505,11 @@ final class StaffListViewModel: ObservableObject {
         isSaving = true
         error = nil
 
+        // If offline, update locally and queue for sync
+        if isOffline {
+            return await updateStaffMemberOffline(staffId: staffId, request: request)
+        }
+
         do {
             let updatedStaff = try await gibbonClient.updateStaffMember(staffId: staffId, request: request)
 
@@ -331,7 +523,74 @@ final class StaffListViewModel: ObservableObject {
                 selectedStaff = updatedStaff
             }
 
+            // Cache locally
+            await cacheStaffLocally([updatedStaff])
+
             successMessage = String(localized: "Staff member updated successfully")
+            showSuccess = true
+
+            isSaving = false
+            return updatedStaff
+
+        } catch {
+            // If network error, try updating offline
+            if isNetworkError(error) {
+                isOffline = true
+                return await updateStaffMemberOffline(staffId: staffId, request: request)
+            }
+            self.error = error
+            self.showError = true
+            isSaving = false
+            return nil
+        }
+    }
+
+    /// Updates a staff member locally when offline and queues for sync
+    private func updateStaffMemberOffline(staffId: String, request: StaffRequest) async -> Staff? {
+        // Get existing staff data to preserve non-updated fields
+        let existingStaff = staff.first { $0.id == staffId } ?? realmManager.fetchStaffMember(id: staffId)
+
+        let updatedStaff = Staff(
+            id: staffId,
+            firstName: request.firstName,
+            lastName: request.lastName,
+            email: request.email,
+            phone: request.phone,
+            role: request.role,
+            status: request.status ?? existingStaff?.status ?? .active,
+            hireDate: request.hireDate,
+            terminationDate: request.terminationDate ?? existingStaff?.terminationDate,
+            assignedClassroomId: request.assignedClassroomId ?? existingStaff?.assignedClassroomId,
+            assignedClassroomName: existingStaff?.assignedClassroomName,
+            employeeNumber: request.employeeNumber ?? existingStaff?.employeeNumber,
+            profilePhotoURL: existingStaff?.profilePhotoURL,
+            emergencyContactName: request.emergencyContactName ?? existingStaff?.emergencyContactName,
+            emergencyContactPhone: request.emergencyContactPhone ?? existingStaff?.emergencyContactPhone,
+            certifications: existingStaff?.certifications,
+            hourlyRate: request.hourlyRate ?? existingStaff?.hourlyRate,
+            contractedHours: request.contractedHours ?? existingStaff?.contractedHours,
+            notes: request.notes ?? existingStaff?.notes,
+            createdAt: existingStaff?.createdAt ?? Date(),
+            updatedAt: Date()
+        )
+
+        do {
+            // Save to local database and queue for sync
+            try await realmManager.saveStaff(updatedStaff, queueSync: true)
+
+            // Update in the local list
+            if let index = staff.firstIndex(where: { $0.id == staffId }) {
+                staff[index] = updatedStaff
+            }
+
+            // Update selected staff if it's the same
+            if selectedStaff?.id == staffId {
+                selectedStaff = updatedStaff
+            }
+
+            updatePendingSyncCount()
+
+            successMessage = String(localized: "Staff member saved locally. Will sync when online.")
             showSuccess = true
 
             isSaving = false
@@ -353,8 +612,51 @@ final class StaffListViewModel: ObservableObject {
         isDeleting = true
         error = nil
 
+        // If offline, delete locally and queue for sync
+        if isOffline {
+            return await deleteStaffMemberOffline(staffId: staffId)
+        }
+
         do {
             try await gibbonClient.deleteStaffMember(staffId: staffId)
+
+            // Remove from local list
+            staff.removeAll { $0.id == staffId }
+            totalCount -= 1
+
+            // Remove from local cache
+            try? await realmManager.deleteStaff(id: staffId, queueSync: false)
+
+            // Clear selection if deleted staff was selected
+            selectedStaffIds.remove(staffId)
+            if selectedStaff?.id == staffId {
+                selectedStaff = nil
+            }
+
+            successMessage = String(localized: "Staff member deleted successfully")
+            showSuccess = true
+
+            isDeleting = false
+            return true
+
+        } catch {
+            // If network error, try deleting offline
+            if isNetworkError(error) {
+                isOffline = true
+                return await deleteStaffMemberOffline(staffId: staffId)
+            }
+            self.error = error
+            self.showError = true
+            isDeleting = false
+            return false
+        }
+    }
+
+    /// Deletes a staff member locally when offline and queues for sync
+    private func deleteStaffMemberOffline(staffId: String) async -> Bool {
+        do {
+            // Delete from local database and queue for sync
+            try await realmManager.deleteStaff(id: staffId, queueSync: true)
 
             // Remove from local list
             staff.removeAll { $0.id == staffId }
@@ -366,7 +668,9 @@ final class StaffListViewModel: ObservableObject {
                 selectedStaff = nil
             }
 
-            successMessage = String(localized: "Staff member deleted successfully")
+            updatePendingSyncCount()
+
+            successMessage = String(localized: "Staff member deleted locally. Will sync when online.")
             showSuccess = true
 
             isDeleting = false
@@ -390,20 +694,54 @@ final class StaffListViewModel: ObservableObject {
         var deletedCount = 0
 
         for staffId in staffIds {
-            do {
-                try await gibbonClient.deleteStaffMember(staffId: staffId)
-                staff.removeAll { $0.id == staffId }
-                totalCount -= 1
-                selectedStaffIds.remove(staffId)
-                deletedCount += 1
-            } catch {
-                // Continue with other deletions even if one fails
+            // If offline, delete locally
+            if isOffline {
+                do {
+                    try await realmManager.deleteStaff(id: staffId, queueSync: true)
+                    staff.removeAll { $0.id == staffId }
+                    totalCount -= 1
+                    selectedStaffIds.remove(staffId)
+                    deletedCount += 1
+                } catch {
+                    // Continue with other deletions even if one fails
+                }
+            } else {
+                do {
+                    try await gibbonClient.deleteStaffMember(staffId: staffId)
+                    staff.removeAll { $0.id == staffId }
+                    totalCount -= 1
+                    selectedStaffIds.remove(staffId)
+                    // Remove from local cache
+                    try? await realmManager.deleteStaff(id: staffId, queueSync: false)
+                    deletedCount += 1
+                } catch {
+                    // If network error, try deleting offline
+                    if isNetworkError(error) {
+                        isOffline = true
+                        do {
+                            try await realmManager.deleteStaff(id: staffId, queueSync: true)
+                            staff.removeAll { $0.id == staffId }
+                            totalCount -= 1
+                            selectedStaffIds.remove(staffId)
+                            deletedCount += 1
+                        } catch {
+                            // Continue with other deletions even if one fails
+                        }
+                    }
+                }
             }
         }
 
         if deletedCount > 0 {
-            successMessage = String(localized: "\(deletedCount) staff members deleted successfully")
+            let messageKey = isOffline
+                ? String(localized: "\(deletedCount) staff members deleted locally. Will sync when online.")
+                : String(localized: "\(deletedCount) staff members deleted successfully")
+            successMessage = messageKey
             showSuccess = true
+
+            if isOffline {
+                updatePendingSyncCount()
+            }
         }
 
         // Clear selected staff if it was deleted
@@ -758,6 +1096,26 @@ extension StaffListViewModel {
         viewModel.staff = [.preview, staffWithExpiringCert, .previewSubstitute]
         viewModel.totalCount = 3
         viewModel.hasLoaded = true
+        return viewModel
+    }
+
+    /// Creates a mock ViewModel in offline state for previews
+    static var previewOffline: StaffListViewModel {
+        let viewModel = StaffListViewModel()
+        viewModel.staff = [.preview, .previewSubstitute]
+        viewModel.isOffline = true
+        viewModel.pendingSyncCount = 3
+        viewModel.totalCount = 2
+        viewModel.hasLoaded = true
+        viewModel.hasMoreData = false
+        return viewModel
+    }
+
+    /// Creates a mock ViewModel loading from cache for previews
+    static var previewLoadingFromCache: StaffListViewModel {
+        let viewModel = StaffListViewModel()
+        viewModel.isOffline = true
+        viewModel.isLoadingFromCache = true
         return viewModel
     }
 }

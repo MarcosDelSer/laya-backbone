@@ -27,6 +27,10 @@ from app.schemas.coaching import (
     EvidenceSourceSchema,
     SpecialNeedType,
 )
+from app.utils.query_optimization import (
+    eager_load_coaching_recommendation_relationships,
+    eager_load_coaching_session_relationships,
+)
 
 # Safety disclaimer that must be included in all responses
 SAFETY_DISCLAIMER = (
@@ -791,3 +795,85 @@ class CoachingService:
 
         await self.db.commit()
         return session
+
+    async def get_sessions_for_child(
+        self,
+        child_id: UUID,
+        limit: int = 10,
+        skip: int = 0,
+    ) -> list[CoachingSession]:
+        """Retrieve coaching sessions for a child with eager loading.
+
+        Prevents N+1 queries by loading all relationships upfront:
+        - session.recommendations
+        - recommendation.evidence_sources
+
+        Args:
+            child_id: ID of the child to get sessions for
+            limit: Maximum number of sessions to return
+            skip: Number of sessions to skip (for pagination)
+
+        Returns:
+            List of CoachingSession objects with relationships loaded
+        """
+        query = (
+            select(CoachingSession)
+            .where(CoachingSession.child_id == child_id)
+            .order_by(CoachingSession.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        # Apply eager loading to prevent N+1 queries
+        query = eager_load_coaching_session_relationships(query)
+
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def get_session_by_id(
+        self,
+        session_id: UUID,
+    ) -> Optional[CoachingSession]:
+        """Retrieve a single coaching session by ID with eager loading.
+
+        Prevents N+1 queries by loading all relationships upfront.
+
+        Args:
+            session_id: ID of the session to retrieve
+
+        Returns:
+            CoachingSession if found, None otherwise
+        """
+        query = select(CoachingSession).where(CoachingSession.id == session_id)
+
+        # Apply eager loading to prevent N+1 queries
+        query = eager_load_coaching_session_relationships(query)
+
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_recommendations_for_session(
+        self,
+        session_id: UUID,
+    ) -> list[CoachingRecommendation]:
+        """Retrieve recommendations for a session with eager loading.
+
+        Prevents N+1 queries by loading all relationships upfront.
+
+        Args:
+            session_id: ID of the session
+
+        Returns:
+            List of CoachingRecommendation objects with relationships loaded
+        """
+        query = (
+            select(CoachingRecommendation)
+            .where(CoachingRecommendation.session_id == session_id)
+            .order_by(CoachingRecommendation.relevance_score.desc())
+        )
+
+        # Apply eager loading to prevent N+1 queries
+        query = eager_load_coaching_recommendation_relationships(query)
+
+        result = await self.db.execute(query)
+        return list(result.scalars().all())

@@ -9,10 +9,13 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 import jwt
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import get_db
 
 # HTTPBearer security scheme for Swagger UI integration
 security = HTTPBearer()
@@ -52,26 +55,43 @@ class TokenPayload:
 
 async def verify_token(
     credentials: HTTPAuthorizationCredentials,
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Verify and decode a JWT token.
 
     Args:
         credentials: HTTP Authorization credentials containing the Bearer token
+        db: Database session for checking token blacklist
 
     Returns:
         dict[str, Any]: Decoded token payload
 
     Raises:
-        HTTPException: 401 Unauthorized if token is invalid or expired
+        HTTPException: 401 Unauthorized if token is invalid, expired, or revoked
     """
     token = credentials.credentials
 
     try:
+        # First, decode the token to validate its signature and structure
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
+
+        # Check if token is blacklisted (after logout)
+        # Import locally to avoid circular dependency
+        from app.auth.models import TokenBlacklist
+
+        stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         return payload
 
     except jwt.ExpiredSignatureError:

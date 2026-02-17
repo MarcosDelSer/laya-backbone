@@ -7,26 +7,47 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 /// Main entry point for the LAYA Admin macOS application.
 /// Uses SwiftUI App lifecycle for modern macOS development.
+///
+/// Features:
+/// - Main window with navigation and content
+/// - Menu bar status item with quick actions
+/// - Settings window for app preferences
+/// - Custom keyboard shortcuts for navigation
 @main
 struct LAYAAdminApp: App {
 
     // MARK: - App State
 
+    /// App delegate for macOS-specific functionality
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+    /// Notification service instance
+    @StateObject private var notificationService = NotificationService.shared
+
+    /// Auth service instance for menu bar
+    @StateObject private var authService = AuthService.shared
+
+    /// Whether to show the menu bar extra
+    @AppStorage("showMenuBarExtra") private var showMenuBarExtra: Bool = true
 
     // MARK: - Body
 
+    @SceneBuilder
     var body: some Scene {
+        // Main application window
         WindowGroup {
             MainView()
+                .environmentObject(notificationService)
+                .environmentObject(authService)
         }
         .windowStyle(.automatic)
         .windowToolbarStyle(.unified)
         .commands {
-            // Custom menu commands will be added here
+            // Custom menu commands
             CommandGroup(replacing: .newItem) {
                 Button("New Child") {
                     NotificationCenter.default.post(name: .newChild, object: nil)
@@ -62,93 +83,25 @@ struct LAYAAdminApp: App {
             }
         }
 
-        #if os(macOS)
+        // Menu bar extra with quick actions
+        MenuBarExtra("LAYA Admin", systemImage: "building.2.fill") {
+            MenuBarView(
+                authService: authService,
+                notificationService: notificationService
+            )
+        }
+        .menuBarExtraStyle(.window)
+
+        // Settings window
         Settings {
             SettingsView()
+                .environmentObject(notificationService)
         }
-        #endif
     }
 }
 
-// MARK: - App Delegate
-
-/// AppDelegate for handling macOS-specific functionality
-/// including notifications and menu bar integration.
-class AppDelegate: NSObject, NSApplicationDelegate {
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        // Configure app on launch
-        configureAppearance()
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        // Cleanup on termination
-    }
-
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        // Keep app running in menu bar even if main window is closed
-        return false
-    }
-
-    private func configureAppearance() {
-        // Allow the app to follow system appearance (Dark/Light mode)
-    }
-}
-
-// MARK: - Settings View
-
-/// Placeholder settings view for app preferences
-struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettingsView()
-                .tabItem {
-                    Label("General", systemImage: "gear")
-                }
-
-            ServerSettingsView()
-                .tabItem {
-                    Label("Server", systemImage: "server.rack")
-                }
-
-            NotificationSettingsView()
-                .tabItem {
-                    Label("Notifications", systemImage: "bell")
-                }
-        }
-        .frame(width: 450, height: 300)
-    }
-}
-
-struct GeneralSettingsView: View {
-    var body: some View {
-        Form {
-            Text("General settings will be configured here.")
-                .foregroundColor(.secondary)
-        }
-        .padding()
-    }
-}
-
-struct ServerSettingsView: View {
-    var body: some View {
-        Form {
-            Text("Server connection settings will be configured here.")
-                .foregroundColor(.secondary)
-        }
-        .padding()
-    }
-}
-
-struct NotificationSettingsView: View {
-    var body: some View {
-        Form {
-            Text("Notification preferences will be configured here.")
-                .foregroundColor(.secondary)
-        }
-        .padding()
-    }
-}
+// Note: SettingsView is now defined in Views/Settings/SettingsView.swift
+// It includes General, Server, Notifications, Sync, and Data settings tabs.
 
 // MARK: - Notification Names
 

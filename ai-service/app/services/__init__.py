@@ -7,6 +7,7 @@ Modules:
     coaching_service: Service for RAG-based special needs coaching guidance
     activity_service: Service for activity intelligence and recommendations
     analytics_service: Service for business intelligence and analytics
+    development_profile_service: Service for Quebec-aligned developmental tracking
     mfa_service: Service for multi-factor authentication using TOTP
 """
 
@@ -19,6 +20,7 @@ from app.services.coaching_service import (
     InvalidChildError,
     NoSourcesFoundError,
 )
+from app.services.development_profile_service import DevelopmentProfileService
 from app.services.mfa_service import (
     InvalidCodeError,
     MFAAlreadyEnabledError,
@@ -39,6 +41,8 @@ __all__: list[str] = [
     "InvalidChildError",
     "NoSourcesFoundError",
     "SAFETY_DISCLAIMER",
+    # Development Profile
+    "DevelopmentProfileService",
     # MFA
     "MFAService",
     "MFAServiceError",

@@ -102,7 +102,12 @@ class ParentReport(Base):
 
     # Table-level indexes for common query patterns
     __table_args__ = (
+        # Composite index for child + date queries (already exists)
         Index("ix_parent_reports_child_date", "child_id", "report_date"),
+        # Index for language-specific queries
+        Index("ix_parent_reports_language", "language"),
+        # Composite index for filtering reports by date range
+        Index("ix_parent_reports_date_created", "report_date", "created_at"),
     )
 
 
@@ -188,7 +193,14 @@ class HomeActivity(Base):
 
     # Table-level indexes for common query patterns
     __table_args__ = (
+        # Index for child-specific activities
         Index("ix_home_activities_child", "child_id"),
+        # Composite index for filtering by child and completion status
+        Index("ix_home_activities_child_completed", "child_id", "is_completed"),
+        # Index for developmental area filtering
+        Index("ix_home_activities_dev_area", "developmental_area"),
+        # Composite index for language-specific queries
+        Index("ix_home_activities_language", "language"),
     )
 
 
