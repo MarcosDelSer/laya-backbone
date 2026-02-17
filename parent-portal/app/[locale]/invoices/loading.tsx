@@ -6,7 +6,13 @@
  */
 export default function InvoicesLoading() {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+    <div
+      className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading invoices"
+    >
+      <span className="sr-only">Loading invoices, please wait...</span>
       {/* Header skeleton */}
       <div className="mb-8">
         <div className="flex items-center justify-between">

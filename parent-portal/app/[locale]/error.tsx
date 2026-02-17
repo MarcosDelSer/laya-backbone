@@ -24,15 +24,20 @@ export default function Error({ error, reset }: ErrorProps) {
   }, [error]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+    <div
+      className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8"
+      role="alert"
+      aria-live="assertive"
+    >
       <div className="text-center">
         <div className="mb-8">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100" aria-hidden="true">
             <svg
               className="h-8 w-8 text-red-600"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -57,12 +62,14 @@ export default function Error({ error, reset }: ErrorProps) {
           <button
             onClick={reset}
             className="btn btn-primary"
+            aria-label="Try again to reload the page"
           >
             <svg
               className="mr-2 h-4 w-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -77,12 +84,14 @@ export default function Error({ error, reset }: ErrorProps) {
           <a
             href="/"
             className="btn btn-outline"
+            aria-label="Go back to dashboard home page"
           >
             <svg
               className="mr-2 h-4 w-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"

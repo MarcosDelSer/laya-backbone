@@ -119,13 +119,13 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
   };
 
   return (
-    <div className="card">
+    <article className="card" aria-labelledby={`document-${document.id}-title`}>
       <div className="card-body">
         <div className="flex items-start justify-between">
           {/* Document info */}
           <div className="flex items-start space-x-4">
             {/* Document type icon */}
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0" aria-hidden="true">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
                 {getDocumentTypeIcon(document.type)}
               </div>
@@ -133,7 +133,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
 
             {/* Document details */}
             <div className="flex-1 min-w-0">
-              <h3 className="text-base font-semibold text-gray-900 truncate">
+              <h3 id={`document-${document.id}-title`} className="text-base font-semibold text-gray-900 truncate">
                 {document.title}
               </h3>
               <p className="mt-1 text-sm text-gray-500">
@@ -145,12 +145,13 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
 
               {/* Signed info */}
               {document.status === 'signed' && document.signedAt && (
-                <div className="mt-2 flex items-center text-xs text-green-600">
+                <div className="mt-2 flex items-center text-xs text-green-600" role="status">
                   <svg
                     className="mr-1 h-4 w-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
+                    aria-hidden="true"
                   >
                     <path
                       strokeLinecap="round"
@@ -168,12 +169,13 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
           {/* Status badge */}
           <div className="flex-shrink-0">
             {document.status === 'signed' ? (
-              <span className="badge badge-success">
+              <span className="badge badge-success" role="status" aria-label="Document status: Signed">
                 <svg
                   className="mr-1 h-3 w-3"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -185,12 +187,13 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                 {t('common.status.signed')}
               </span>
             ) : (
-              <span className="badge badge-warning">
+              <span className="badge badge-warning" role="status" aria-label="Document status: Pending signature">
                 <svg
                   className="mr-1 h-3 w-3"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -211,6 +214,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
           <button
             type="button"
             onClick={handleDownload}
+            aria-label={`View document: ${document.title}`}
             className="btn btn-outline text-sm"
           >
             <svg
@@ -218,6 +222,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -240,6 +245,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
             <button
               type="button"
               onClick={() => onSign(document.id)}
+              aria-label={`Sign document: ${document.title}`}
               className="btn btn-primary text-sm"
             >
               <svg
@@ -247,6 +253,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -265,12 +272,14 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
               type="button"
               className="btn btn-outline text-sm text-green-600 border-green-300 hover:bg-green-50"
               onClick={() => window.open(document.signatureUrl, '_blank')}
+              aria-label="View your signature"
             >
               <svg
                 className="mr-2 h-4 w-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"

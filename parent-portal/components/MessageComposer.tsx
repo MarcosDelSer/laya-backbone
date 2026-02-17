@@ -54,20 +54,22 @@ export function MessageComposer({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border-t border-gray-200 p-4">
+    <form onSubmit={handleSubmit} className="bg-white border-t border-gray-200 p-4" aria-label="Message composer">
       <div className="flex items-end space-x-3">
         {/* Attachment button (placeholder) */}
         <button
           type="button"
           className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary rounded-full"
           disabled={disabled}
-          title={t('messages.composer.attachFile')}
+          aria-label="Attach file (coming soon)"
+          title="Attach file (coming soon)"
         >
           <svg
             className="h-5 w-5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -88,11 +90,15 @@ export function MessageComposer({
             placeholder={placeholderText}
             disabled={disabled}
             rows={1}
+            aria-label="Message text"
+            aria-describedby="message-help-text"
             className="w-full resize-none rounded-2xl border border-gray-300 bg-gray-50 px-4 py-3 pr-12 text-sm focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-100 disabled:text-gray-500"
           />
           {/* Character count (optional) */}
           {message.length > 200 && (
             <span
+              role="status"
+              aria-live="polite"
               className={`absolute bottom-2 right-14 text-xs ${
                 message.length > 500 ? 'text-red-500' : 'text-gray-400'
               }`}
@@ -106,6 +112,7 @@ export function MessageComposer({
         <button
           type="submit"
           disabled={disabled || !message.trim()}
+          aria-label="Send message"
           className="flex-shrink-0 rounded-full bg-primary p-3 text-white transition-colors hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
           <svg
@@ -113,6 +120,7 @@ export function MessageComposer({
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -123,8 +131,8 @@ export function MessageComposer({
           </svg>
         </button>
       </div>
-      <p className="mt-2 text-xs text-gray-400 text-center">
-        {t('messages.composer.sendHint')}
+      <p id="message-help-text" className="mt-2 text-xs text-gray-400 text-center">
+        Press Enter to send, Shift+Enter for new line
       </p>
     </form>
   );

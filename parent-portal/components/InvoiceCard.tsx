@@ -53,12 +53,12 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
   };
 
   return (
-    <div className="card">
+    <article className="card" aria-labelledby={`invoice-${invoice.id}-title`}>
       {/* Invoice Header */}
       <div className="card-header">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100" aria-hidden="true">
               <svg
                 className="h-6 w-6 text-blue-600"
                 fill="none"
@@ -74,8 +74,8 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {t('invoices.invoiceNumber', { number: invoice.number })}
+              <h3 id={`invoice-${invoice.id}-title`} className="text-lg font-semibold text-gray-900">
+                Invoice #{invoice.number}
               </h3>
               <p className="text-sm text-gray-600">
                 {t('invoices.issued', { date: formatDate(invoice.date) })}
@@ -115,20 +115,20 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
           <div className="mb-6">
             <h4 className="font-medium text-gray-900 mb-3">{t('invoices.invoiceDetails')}</h4>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label="Invoice items">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('invoices.table.description')}
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Description
                     </th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('invoices.table.qty')}
+                    <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Qty
                     </th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('invoices.table.unitPrice')}
+                    <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Unit Price
                     </th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('invoices.table.total')}
+                    <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Total
                     </th>
                   </tr>
                 </thead>
@@ -152,9 +152,9 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
                 </tbody>
                 <tfoot className="bg-gray-50">
                   <tr>
-                    <td colSpan={3} className="px-3 py-2 text-sm font-medium text-gray-900 text-right">
-                      {t('invoices.table.total')}
-                    </td>
+                    <th scope="row" colSpan={3} className="px-3 py-2 text-sm font-medium text-gray-900 text-right">
+                      Total
+                    </th>
                     <td className="px-3 py-2 text-sm font-bold text-gray-900 text-right">
                       {formatCurrency(invoice.amount)}
                     </td>
@@ -170,6 +170,7 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
           <button
             type="button"
             onClick={handleDownload}
+            aria-label={`Download PDF for invoice ${invoice.number}`}
             className="btn btn-outline flex-1 sm:flex-none"
           >
             <svg
@@ -177,6 +178,7 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -192,12 +194,14 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
               type="button"
               className="btn btn-primary flex-1 sm:flex-none"
               disabled
+              aria-label={`Pay invoice ${invoice.number} (Coming soon)`}
             >
               <svg
                 className="mr-2 h-4 w-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"

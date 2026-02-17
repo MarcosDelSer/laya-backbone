@@ -102,9 +102,9 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
   const formattedDate = getFormattedDate(report.date);
 
   return (
-    <div className="card">
+    <article className="card">
       {/* Report Header */}
-      <div className="card-header">
+      <header className="card-header">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100">
@@ -148,30 +148,22 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
             )}
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="card-body">
+      <section className="card-body">
         {/* Photos Section */}
         {report.photos.length > 0 && (
-          <div className="mb-6">
-            <SectionHeader
-              title={t('dailyReports.sections.photos')}
-              count={report.photos.length}
-              entryLabel={t('common.entry', { count: report.photos.length })}
-            />
+          <section className="mb-6">
+            <SectionHeader title="Photos" count={report.photos.length} />
             <PhotoGallery photos={report.photos} maxDisplay={4} />
-          </div>
+          </section>
         )}
 
         {/* Two-column layout for meals and naps */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 mb-6">
           {/* Meals Section */}
-          <div>
-            <SectionHeader
-              title={t('dailyReports.sections.meals')}
-              count={report.meals.length}
-              entryLabel={t('common.entry', { count: report.meals.length })}
-            />
+          <section>
+            <SectionHeader title="Meals" count={report.meals.length} />
             {report.meals.length > 0 ? (
               <div className="space-y-4">
                 {report.meals.map((meal) => (
@@ -181,15 +173,11 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
             ) : (
               <EmptyState message={t('dailyReports.emptyStates.noMealsRecorded')} />
             )}
-          </div>
+          </section>
 
           {/* Naps Section */}
-          <div>
-            <SectionHeader
-              title={t('dailyReports.sections.napTime')}
-              count={report.naps.length}
-              entryLabel={t('common.entry', { count: report.naps.length })}
-            />
+          <section>
+            <SectionHeader title="Nap Time" count={report.naps.length} />
             {report.naps.length > 0 ? (
               <div className="space-y-4">
                 {report.naps.map((nap) => (
@@ -199,16 +187,12 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
             ) : (
               <EmptyState message={t('dailyReports.emptyStates.noNapsRecorded')} />
             )}
-          </div>
+          </section>
         </div>
 
         {/* Activities Section */}
-        <div>
-          <SectionHeader
-            title={t('dailyReports.sections.activities')}
-            count={report.activities.length}
-            entryLabel={t('common.entry', { count: report.activities.length })}
-          />
+        <section>
+          <SectionHeader title="Activities" count={report.activities.length} />
           {report.activities.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {report.activities.map((activity) => (
@@ -218,8 +202,8 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
           ) : (
             <EmptyState message={t('dailyReports.emptyStates.noActivitiesRecorded')} />
           )}
-        </div>
-      </div>
-    </div>
+        </section>
+      </section>
+    </article>
   );
 }

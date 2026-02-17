@@ -65,8 +65,8 @@ export function NapEntry({ nap }: NapEntryProps) {
   const duration = calculateDuration(nap.startTime, nap.endTime);
 
   return (
-    <div className="flex items-start space-x-3">
-      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
+    <div className="flex items-start space-x-3" role="listitem" aria-label={`Nap from ${nap.startTime} to ${nap.endTime}, duration ${duration}`}>
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100" aria-hidden="true">
         <svg
           className="h-5 w-5 text-blue-600"
           fill="none"
@@ -84,11 +84,13 @@ export function NapEntry({ nap }: NapEntryProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
           <p className="font-medium text-gray-900">{duration}</p>
-          <span className="text-sm text-gray-500">
+          <time className="text-sm text-gray-500">
             {nap.startTime} - {nap.endTime}
-          </span>
+          </time>
         </div>
-        <span className={`badge mt-1 ${badgeClass}`}>{qualityLabel}</span>
+        <span className={`badge mt-1 ${qualityInfo.badgeClass}`} role="status" aria-label={`Sleep quality: ${qualityInfo.label}`}>
+          {qualityInfo.label}
+        </span>
       </div>
     </div>
   );
