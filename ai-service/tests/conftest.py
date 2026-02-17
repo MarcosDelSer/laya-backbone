@@ -91,6 +91,54 @@ TestAsyncSessionLocal = sessionmaker(
 pytest_plugins = ("pytest_asyncio",)
 
 
+# SQLite-compatible auth tables (converted from PostgreSQL)
+SQLITE_CREATE_AUTH_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS ix_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS ix_users_is_active ON users(is_active);
+
+CREATE TABLE IF NOT EXISTS token_blacklist (
+    id TEXT PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    blacklisted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_token_blacklist_token ON token_blacklist(token);
+CREATE INDEX IF NOT EXISTS ix_token_blacklist_user_id ON token_blacklist(user_id);
+CREATE INDEX IF NOT EXISTS ix_token_blacklist_expires_at ON token_blacklist(expires_at);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id TEXT PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    is_used INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_email ON password_reset_tokens(email);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_is_used ON password_reset_tokens(is_used);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
+"""
+
+
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -403,6 +451,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     Yields:
         AsyncSession: Async database session for testing.
     """
+    # Create auth tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_AUTH_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     # Create coaching tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
         for statement in SQLITE_CREATE_COACHING_TABLES_SQL.strip().split(';'):
@@ -1857,6 +1912,96 @@ class MockStorageQuota:
         )
 
 
+class MockMFASettings:
+    """Mock MFASettings object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        user_id,
+        is_enabled,
+        method,
+        secret_key,
+        recovery_email,
+        last_verified_at,
+        failed_attempts,
+        locked_until,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.user_id = user_id
+        self.is_enabled = is_enabled
+        self.method = method
+        self.secret_key = secret_key
+        self.recovery_email = recovery_email
+        self.last_verified_at = last_verified_at
+        self.failed_attempts = failed_attempts
+        self.locked_until = locked_until
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<MFASettings(id={self.id}, user_id={self.user_id}, "
+            f"enabled={self.is_enabled}, method={self.method})>"
+        )
+
+
+class MockMFABackupCode:
+    """Mock MFABackupCode object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        mfa_settings_id,
+        code_hash,
+        is_used,
+        used_at,
+        created_at,
+    ):
+        self.id = id
+        self.mfa_settings_id = mfa_settings_id
+        self.code_hash = code_hash
+        self.is_used = is_used
+        self.used_at = used_at
+        self.created_at = created_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<MFABackupCode(id={self.id}, mfa_settings_id={self.mfa_settings_id}, "
+            f"used={self.is_used})>"
+        )
+
+
+class MockMFAIPWhitelist:
+    """Mock MFAIPWhitelist object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        mfa_settings_id,
+        ip_address,
+        description,
+        is_active,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.mfa_settings_id = mfa_settings_id
+        self.ip_address = ip_address
+        self.description = description
+        self.is_active = is_active
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<MFAIPWhitelist(id={self.id}, ip={self.ip_address}, "
+            f"active={self.is_active})>"
+        )
+
+
 async def create_file_in_db(
     session: AsyncSession,
     owner_id: UUID,
@@ -2006,6 +2151,62 @@ async def create_storage_quota_in_db(
         quota_bytes=quota_bytes,
         used_bytes=used_bytes,
         file_count=file_count,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_mfa_settings_in_db(
+    session: AsyncSession,
+    user_id: UUID,
+    is_enabled: bool = False,
+    method: str = "totp",
+    secret_key: Optional[str] = None,
+    recovery_email: Optional[str] = None,
+    last_verified_at: Optional[datetime] = None,
+    failed_attempts: int = 0,
+    locked_until: Optional[datetime] = None,
+) -> MockMFASettings:
+    """Helper function to create MFA settings directly in SQLite database."""
+    settings_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO mfa_settings (
+                id, user_id, is_enabled, method, secret_key, recovery_email,
+                last_verified_at, failed_attempts, locked_until, created_at, updated_at
+            ) VALUES (
+                :id, :user_id, :is_enabled, :method, :secret_key, :recovery_email,
+                :last_verified_at, :failed_attempts, :locked_until, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": settings_id,
+            "user_id": str(user_id),
+            "is_enabled": 1 if is_enabled else 0,
+            "method": method,
+            "secret_key": secret_key,
+            "recovery_email": recovery_email,
+            "last_verified_at": last_verified_at.isoformat() if last_verified_at else None,
+            "failed_attempts": failed_attempts,
+            "locked_until": locked_until.isoformat() if locked_until else None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockMFASettings(
+        id=UUID(settings_id),
+        user_id=user_id,
+        is_enabled=is_enabled,
+        method=method,
+        secret_key=secret_key,
+        recovery_email=recovery_email,
+        last_verified_at=last_verified_at,
+        failed_attempts=failed_attempts,
+        locked_until=locked_until,
         created_at=now,
         updated_at=now,
     )
