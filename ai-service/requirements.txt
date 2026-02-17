@@ -17,6 +17,12 @@ httpx>=0.26.0
 # Configuration
 pydantic-settings>=2.1.0
 
+# Redis cache
+redis[hiredis]>=5.0.0
+
+# System monitoring
+psutil>=5.9.0
+
 # Form data parsing
 python-multipart>=0.0.6
 
