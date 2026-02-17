@@ -5,12 +5,13 @@ versioning, progress tracking, and review scheduling for special needs support.
 The service implements the 8-part intervention plan structure.
 """
 
+import logging
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -916,6 +917,31 @@ class InterventionPlanService:
         Returns:
             Dictionary representation of the plan
         """
+        # Validate that relationships are loaded before snapshot
+        logger = logging.getLogger(__name__)
+        plan_state = inspect(plan)
+
+        relationships_to_check = [
+            "strengths",
+            "needs",
+            "goals",
+            "strategies",
+            "monitoring",
+            "parent_involvements",
+            "consultations",
+        ]
+
+        unloaded_relationships = []
+        for rel_name in relationships_to_check:
+            if rel_name in plan_state.unloaded:
+                unloaded_relationships.append(rel_name)
+
+        if unloaded_relationships:
+            logger.warning(
+                f"Creating plan snapshot with unloaded relationships: {', '.join(unloaded_relationships)}. "
+                f"Plan ID: {plan.id}. This may result in incomplete snapshot data."
+            )
+
         # Get the most recent version to track lineage
         parent_version_id = None
         version_query = (

@@ -1,15 +1,15 @@
 {
   "active": true,
-  "spec": "043-performance-optimization",
+  "spec": "094-fix-plan-snapshot-bug",
   "state": "building",
   "subtasks": {
-    "completed": 6,
-    "total": 10,
+    "completed": 3,
+    "total": 20,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Phase 4: Documentation and Hardening",
+    "current": "Fix Snapshot Creation Logic",
     "id": null,
     "total": 4
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 2,
-    "started_at": "2026-02-16T16:54:27.528327"
+    "number": 3,
+    "started_at": "2026-02-17T15:04:44.929311"
   },
-  "last_update": "2026-02-16T16:59:42.585746"
+  "last_update": "2026-02-17T15:10:46.633238"
 }
