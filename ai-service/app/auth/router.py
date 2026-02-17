@@ -18,6 +18,8 @@ from app.auth.schemas import (
     PasswordResetRequestResponse,
     PasswordResetConfirm,
     PasswordResetConfirmResponse,
+    TokenRevocationRequest,
+    TokenRevocationResponse,
 )
 from app.auth.service import AuthService
 from app.auth.dependencies import get_current_user, require_role
@@ -403,3 +405,55 @@ async def financial_staff_test(
         "user": current_user.get("email", "unknown"),
         "role": current_user.get("role", "unknown"),
     }
+
+
+@router.post(
+    "/admin/revoke-token",
+    response_model=TokenRevocationResponse,
+    summary="Revoke a token (Admin only)",
+    description="Revoke a specific JWT token by adding it to the blacklist.",
+)
+async def revoke_token(
+    revocation_request: TokenRevocationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN)),
+) -> TokenRevocationResponse:
+    """Revoke a JWT token (admin only).
+
+    This endpoint allows administrators to revoke any JWT token by adding it
+    to the Redis blacklist. This is useful for security incidents where a token
+    needs to be immediately invalidated (e.g., compromised credentials, suspicious
+    activity, or terminated employees).
+
+    The token is validated before being added to the blacklist. Once blacklisted,
+    the token cannot be used for authentication until it expires naturally.
+
+    Args:
+        revocation_request: Request containing the token to revoke
+        db: Async database session (injected)
+        current_user: Current admin user from JWT token (injected)
+
+    Returns:
+        TokenRevocationResponse containing:
+            - message: Confirmation message
+            - revoked: Boolean indicating successful revocation
+
+    Raises:
+        HTTPException: 401 Unauthorized if token is invalid or malformed
+        HTTPException: 403 Forbidden if user is not an admin
+
+    Example:
+        POST /api/v1/auth/admin/revoke-token
+        Authorization: Bearer <admin_access_token>
+        {
+            "token": "eyJhbGc..."
+        }
+
+        Response:
+        {
+            "message": "Token has been successfully revoked",
+            "revoked": true
+        }
+    """
+    service = AuthService(db)
+    return await service.revoke_token(revocation_request)

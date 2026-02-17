@@ -23,6 +23,8 @@ from app.auth.schemas import (
     PasswordResetRequestResponse,
     PasswordResetConfirm,
     PasswordResetConfirmResponse,
+    TokenRevocationRequest,
+    TokenRevocationResponse,
 )
 from app.auth.jwt import create_token as create_jwt_token, decode_token
 from app.auth.blacklist import TokenBlacklistService
@@ -496,4 +498,58 @@ class AuthService:
 
         return PasswordResetConfirmResponse(
             message="Password has been successfully reset",
+        )
+
+    async def revoke_token(
+        self, revocation_request: TokenRevocationRequest
+    ) -> TokenRevocationResponse:
+        """Revoke a token by adding it to the blacklist.
+
+        This method is intended for admin use to revoke compromised or suspicious tokens.
+        The token is validated and then added to the Redis blacklist.
+
+        Args:
+            revocation_request: Request containing the token to revoke
+
+        Returns:
+            TokenRevocationResponse confirming successful revocation
+
+        Raises:
+            HTTPException: 401 Unauthorized if token is invalid
+        """
+        # Decode and validate the token
+        try:
+            payload = decode_token(revocation_request.token)
+        except HTTPException as e:
+            # Re-raise with more specific message for admin context
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: cannot revoke malformed token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Get token expiration timestamp
+        exp_timestamp = payload.get("exp")
+        if not exp_timestamp:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing expiration",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+
+        # Use Redis blacklist service
+        blacklist_service = TokenBlacklistService()
+        try:
+            # Add token to blacklist
+            await blacklist_service.add_token_to_blacklist(
+                revocation_request.token, expires_at
+            )
+        finally:
+            await blacklist_service.close()
+
+        return TokenRevocationResponse(
+            message="Token has been successfully revoked",
+            revoked=True,
         )
