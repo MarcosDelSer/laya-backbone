@@ -6,8 +6,10 @@ from typing import Any
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.context import get_correlation_id, get_request_id
 from app.core.logging import configure_logging, get_logger
 from app.dependencies import get_current_user
+from app.middleware.correlation import CorrelationMiddleware
 from app.middleware.error_handler import ErrorHandlerMiddleware
 from app.routers import coaching
 from app.routers.activities import router as activities_router
@@ -31,7 +33,11 @@ app = FastAPI(
 
 logger.info("Starting LAYA AI Service", version="0.1.0", log_level=log_level)
 
-# Configure error handler middleware (should be first to catch all exceptions)
+# Configure middleware (order matters - first added is last executed)
+# 1. Correlation middleware sets request/correlation IDs in context
+app.add_middleware(CorrelationMiddleware)
+
+# 2. Error handler middleware uses IDs from context for error responses
 app.add_middleware(ErrorHandlerMiddleware)
 
 # Configure CORS middleware for frontend integration
@@ -56,12 +62,14 @@ async def health_check() -> dict:
     """Health check endpoint.
 
     Returns:
-        dict: Service status information
+        dict: Service status information with request tracking IDs
     """
     return {
         "status": "healthy",
         "service": "ai-service",
         "version": "0.1.0",
+        "request_id": get_request_id(),
+        "correlation_id": get_correlation_id(),
     }
 
 

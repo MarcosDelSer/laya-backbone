@@ -11,6 +11,7 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.context import get_correlation_id, get_request_id
 from app.core.logging import bind_request_id, get_logger
 
 logger = get_logger(__name__)
@@ -20,10 +21,13 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
     """Middleware for catching and handling all unhandled exceptions.
 
     This middleware:
-    - Extracts or generates a request ID from X-Request-ID header
+    - Uses request ID and correlation ID from context
     - Catches all unhandled exceptions during request processing
-    - Returns structured JSON error responses with request ID
+    - Returns structured JSON error responses with request ID and correlation ID
     - Logs exceptions with request context for debugging
+
+    Note: This middleware should be added AFTER CorrelationMiddleware
+    to ensure IDs are already set in the context.
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -36,37 +40,36 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
         Returns:
             Response: The HTTP response, either from the handler or error response
         """
-        # Extract or generate request ID
-        request_id = request.headers.get("X-Request-ID")
+        # Get request and correlation IDs from context (set by CorrelationMiddleware)
+        # Fall back to generating new ones if not set
+        request_id = get_request_id()
         if not request_id:
-            request_id = str(uuid.uuid4())
+            request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+            request.state.request_id = request_id
 
-        # Store request_id in request state for access in route handlers
-        request.state.request_id = request_id
+        correlation_id = get_correlation_id()
+        if not correlation_id:
+            correlation_id = request.headers.get("X-Correlation-ID", request_id)
+            request.state.correlation_id = correlation_id
 
-        # Bind request ID to logger for this request
-        request_logger = bind_request_id(logger, request_id)
+        # Bind both IDs to logger for this request
+        request_logger = logger.bind(
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
 
         try:
-            # Log incoming request
-            request_logger.info(
-                "Incoming request",
-                method=request.method,
-                path=request.url.path,
-                client=request.client.host if request.client else None,
-            )
-
             # Process the request
+            # Note: CorrelationMiddleware handles request/response logging
+            # This middleware only catches and handles exceptions
             response = await call_next(request)
 
-            # Add request ID to response headers
-            response.headers["X-Request-ID"] = request_id
-
-            # Log successful response
-            request_logger.info(
-                "Request completed",
-                status_code=response.status_code,
-            )
+            # Add request and correlation IDs to response headers only if not already set
+            # (CorrelationMiddleware adds them, but this ensures they're present even without it)
+            if "X-Request-ID" not in response.headers:
+                response.headers["X-Request-ID"] = request_id
+            if "X-Correlation-ID" not in response.headers:
+                response.headers["X-Correlation-ID"] = correlation_id
 
             return response
 
@@ -89,10 +92,10 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
         Args:
             exc: The exception that was raised
             request_id: The request ID for traceability
-            request_logger: Logger with bound request_id
+            request_logger: Logger with bound request_id and correlation_id
 
         Returns:
-            JSONResponse: Structured error response with request ID
+            JSONResponse: Structured error response with request ID and correlation ID
         """
         # Determine status code based on exception type
         from fastapi import HTTPException
@@ -124,12 +127,16 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 exc_info=True,
             )
 
+        # Get correlation ID from context
+        correlation_id = get_correlation_id() or request_id
+
         # Build structured error response
         error_response = {
             "error": {
                 "type": error_type,
                 "message": message,
                 "request_id": request_id,
+                "correlation_id": correlation_id,
             }
         }
 
@@ -144,7 +151,10 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
         return JSONResponse(
             status_code=status_code,
             content=error_response,
-            headers={"X-Request-ID": request_id},
+            headers={
+                "X-Request-ID": request_id,
+                "X-Correlation-ID": correlation_id,
+            },
         )
 
 
