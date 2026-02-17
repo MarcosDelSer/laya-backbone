@@ -2,6 +2,7 @@
 
 Provides full-text search functionality across multiple entity types
 using PostgreSQL's tsvector and tsquery capabilities.
+Falls back to ILIKE for databases that don't support tsvector (e.g., SQLite for testing).
 """
 
 from typing import Optional
@@ -19,7 +20,8 @@ class SearchService:
     """Service for full-text search across entities.
 
     Provides methods for searching activities, children, coaching sessions,
-    and other entities using PostgreSQL full-text search.
+    and other entities using PostgreSQL full-text search with automatic
+    fallback to ILIKE for SQLite testing.
 
     Attributes:
         db: Async database session
@@ -33,6 +35,16 @@ class SearchService:
         """
         self.db = db
 
+    def _is_postgresql(self) -> bool:
+        """Check if the database is PostgreSQL.
+
+        Returns:
+            bool: True if using PostgreSQL, False otherwise
+        """
+        # Get the database dialect name
+        dialect_name = self.db.bind.dialect.name if self.db.bind else ""
+        return dialect_name == "postgresql"
+
     async def search_activities(
         self,
         query: str,
@@ -42,7 +54,10 @@ class SearchService:
         """Search activities using full-text search.
 
         Uses PostgreSQL's tsvector and tsquery for efficient full-text
-        search across activity names, descriptions, and materials.
+        search across activity names, descriptions, and special needs adaptations.
+        Results are ranked by relevance using ts_rank.
+
+        Falls back to ILIKE for databases that don't support tsvector (e.g., SQLite).
 
         Args:
             query: Search query string
@@ -52,12 +67,100 @@ class SearchService:
         Returns:
             Tuple of (search results, total count)
         """
-        # Create search term for PostgreSQL full-text search
-        # Use plainto_tsquery for simple search (no operators needed)
         search_term = query.strip()
 
+        # Check if we're using PostgreSQL with tsvector support
+        if self._is_postgresql():
+            # Use PostgreSQL tsvector full-text search
+            return await self._search_activities_pg(search_term, skip, limit)
+        else:
+            # Fallback to ILIKE for SQLite/other databases
+            return await self._search_activities_fallback(search_term, skip, limit)
+
+    async def _search_activities_pg(
+        self,
+        search_term: str,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[SearchResult], int]:
+        """Search activities using PostgreSQL tsvector.
+
+        Args:
+            search_term: Search query string
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+
+        Returns:
+            Tuple of (search results, total count)
+        """
+        # Create tsquery from search term
+        # plainto_tsquery automatically handles stop words, stemming, and special chars
+        tsquery = func.plainto_tsquery('english', search_term)
+
+        # Calculate relevance score using ts_rank
+        # ts_rank scores how well the document matches the query
+        relevance = func.ts_rank(Activity.search_vector, tsquery).label('relevance')
+
+        # Build query using tsvector full-text search
+        stmt = (
+            select(Activity, relevance)
+            .where(
+                Activity.is_active == True,  # noqa: E712
+            )
+            .where(
+                Activity.search_vector.op('@@')(tsquery)
+            )
+            .order_by(relevance.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        # Get total count
+        count_stmt = (
+            select(func.count())
+            .select_from(Activity)
+            .where(
+                Activity.is_active == True,  # noqa: E712
+            )
+            .where(
+                Activity.search_vector.op('@@')(tsquery)
+            )
+        )
+        count_result = await self.db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        # Convert to search results
+        results = []
+        for activity, relevance_score in rows:
+            # Normalize relevance score to 0-1 range
+            # ts_rank typically returns values between 0 and 1, but can be higher
+            # Clamp to max of 1.0
+            normalized_score = min(relevance_score, 1.0)
+
+            results.append(self._activity_to_search_result(activity, normalized_score))
+
+        return results, total
+
+    async def _search_activities_fallback(
+        self,
+        search_term: str,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[SearchResult], int]:
+        """Search activities using ILIKE fallback for SQLite.
+
+        Args:
+            search_term: Search query string
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+
+        Returns:
+            Tuple of (search results, total count)
+        """
         # Build query using ILIKE for simple pattern matching
-        # In production, this should use tsvector/tsquery for better performance
         stmt = (
             select(Activity)
             .where(
@@ -108,38 +211,53 @@ class SearchService:
             else:
                 relevance = 0.6
 
-            result = SearchResult(
-                type=SearchResultType.ACTIVITY,
-                id=activity.id,
-                title=activity.name,
-                description=activity.description[:200] + "..."
-                if len(activity.description) > 200
-                else activity.description,
-                relevance_score=relevance,
-                data=ActivityResponse(
-                    id=activity.id,
-                    name=activity.name,
-                    description=activity.description,
-                    activity_type=activity.activity_type,
-                    difficulty=activity.difficulty,
-                    duration_minutes=activity.duration_minutes,
-                    materials_needed=activity.materials_needed,
-                    age_range={
-                        "min_months": activity.min_age_months,
-                        "max_months": activity.max_age_months,
-                    }
-                    if activity.min_age_months is not None
-                    and activity.max_age_months is not None
-                    else None,
-                    special_needs_adaptations=activity.special_needs_adaptations,
-                    is_active=activity.is_active,
-                    created_at=activity.created_at,
-                    updated_at=activity.updated_at,
-                ),
-            )
-            results.append(result)
+            results.append(self._activity_to_search_result(activity, relevance))
 
         return results, total
+
+    def _activity_to_search_result(
+        self,
+        activity: Activity,
+        relevance_score: float,
+    ) -> SearchResult:
+        """Convert an Activity to a SearchResult.
+
+        Args:
+            activity: Activity model instance
+            relevance_score: Relevance score for this result
+
+        Returns:
+            SearchResult instance
+        """
+        return SearchResult(
+            type=SearchResultType.ACTIVITY,
+            id=activity.id,
+            title=activity.name,
+            description=activity.description[:200] + "..."
+            if len(activity.description) > 200
+            else activity.description,
+            relevance_score=relevance_score,
+            data=ActivityResponse(
+                id=activity.id,
+                name=activity.name,
+                description=activity.description,
+                activity_type=activity.activity_type,
+                difficulty=activity.difficulty,
+                duration_minutes=activity.duration_minutes,
+                materials_needed=activity.materials_needed,
+                age_range={
+                    "min_months": activity.min_age_months,
+                    "max_months": activity.max_age_months,
+                }
+                if activity.min_age_months is not None
+                and activity.max_age_months is not None
+                else None,
+                special_needs_adaptations=activity.special_needs_adaptations,
+                is_active=activity.is_active,
+                created_at=activity.created_at,
+                updated_at=activity.updated_at,
+            ),
+        )
 
     async def search_children(
         self,

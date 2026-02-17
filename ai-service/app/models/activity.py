@@ -20,8 +20,8 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR, UUID as PGUUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, deferred
 
 
 class Base(DeclarativeBase):
@@ -85,6 +85,7 @@ class Activity(Base):
         max_age_months: Maximum target age in months
         special_needs_adaptations: Adaptations for children with special needs
         is_active: Whether the activity is currently active
+        search_vector: Full-text search tsvector (auto-maintained by trigger)
         created_at: Timestamp when the record was created
         updated_at: Timestamp when the record was last updated
     """
@@ -142,6 +143,15 @@ class Activity(Base):
         nullable=False,
         default=True,
         index=True,
+    )
+    search_vector: Mapped[Optional[str]] = deferred(
+        mapped_column(
+            TSVECTOR,
+            nullable=True,
+            # This column is automatically maintained by a database trigger
+            # It combines name, description, and special_needs_adaptations
+            # for full-text search with weighted ranking
+        )
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
