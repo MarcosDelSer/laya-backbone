@@ -10,6 +10,7 @@ from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
 from app.routers.communication import router as communication_router
+from app.routers.medical import router as medical_router
 from app.routers.webhooks import router as webhooks_router
 
 app = FastAPI(
@@ -32,6 +33,7 @@ app.include_router(coaching.router, prefix="/api/v1/coaching", tags=["coaching"]
 app.include_router(activities_router)
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(communication_router, prefix="/api/v1/communication", tags=["communication"])
+app.include_router(medical_router)
 app.include_router(webhooks_router, prefix="/api/v1/webhook", tags=["webhooks"])
 
 
