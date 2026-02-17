@@ -133,12 +133,7 @@ async def list_profiles(
         HTTPException: 401 if not authenticated.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
-
     return await service.list_profiles(
-        user_id=user_id,
-        user_role=user_role,
         skip=skip,
         limit=limit,
         is_active=is_active,
@@ -169,15 +164,15 @@ async def get_profile_by_child(
 
     Raises:
         HTTPException: 404 if profile not found.
+        HTTPException: 403 if user does not have access to the profile.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the profile.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
-        profile = await service.get_profile_by_child_id(child_id, user_id, user_role)
+        user_id = UUID(current_user["sub"])
+
+        profile = await service.get_profile_by_child_id(child_id, user_id)
 
         if profile is None:
             raise HTTPException(
@@ -187,7 +182,10 @@ async def get_profile_by_child(
 
         return profile
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.get(
@@ -213,15 +211,15 @@ async def get_profile(
 
     Raises:
         HTTPException: 404 if profile not found.
+        HTTPException: 403 if user does not have access to the profile.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the profile.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
-        profile = await service.get_profile_by_id(profile_id, user_id, user_role)
+        user_id = UUID(current_user["sub"])
+
+        profile = await service.get_profile_by_id(profile_id, user_id)
 
         if profile is None:
             raise HTTPException(
@@ -231,7 +229,10 @@ async def get_profile(
 
         return profile
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.put(
@@ -259,15 +260,15 @@ async def update_profile(
 
     Raises:
         HTTPException: 404 if profile not found.
+        HTTPException: 403 if user does not have access to the profile.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to update the profile.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
-        profile = await service.update_profile(profile_id, request, user_id, user_role)
+        user_id = UUID(current_user["sub"])
+
+        profile = await service.update_profile(profile_id, request, user_id)
 
         if profile is None:
             raise HTTPException(
@@ -277,7 +278,10 @@ async def update_profile(
 
         return profile
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.delete(
@@ -301,22 +305,15 @@ async def delete_profile(
     Raises:
         HTTPException: 404 if profile not found.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to delete the profile.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
+    deleted = await service.delete_profile(profile_id)
 
-    try:
-        deleted = await service.delete_profile(profile_id, user_id, user_role)
-
-        if not deleted:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Development profile with id {profile_id} not found",
-            )
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Development profile with id {profile_id} not found",
+        )
 
 
 # =============================================================================
@@ -352,7 +349,6 @@ async def create_skill_assessment(
     Raises:
         HTTPException: 400 if profile not found or request validation fails.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the profile.
     """
     # Ensure profile_id in path matches request body
     if request.profile_id != profile_id:
@@ -362,15 +358,10 @@ async def create_skill_assessment(
         )
 
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
-
     try:
-        return await service.create_skill_assessment(request, user_id, user_role)
+        return await service.create_skill_assessment(request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.get(
@@ -420,26 +411,15 @@ async def list_skill_assessments(
 
     Raises:
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the profile.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
-
-    try:
-        return await service.list_skill_assessments(
-            profile_id=profile_id,
-            user_id=user_id,
-            user_role=user_role,
-            domain=domain,
-            status=skill_status,
-            skip=skip,
-            limit=limit,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    return await service.list_skill_assessments(
+        profile_id=profile_id,
+        domain=domain,
+        status=skill_status,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get(
@@ -467,17 +447,15 @@ async def get_skill_assessment(
 
     Raises:
         HTTPException: 404 if assessment not found.
+        HTTPException: 403 if user does not have access to the assessment.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the assessment.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
-        assessment = await service.get_skill_assessment_by_id(
-            assessment_id, user_id, user_role
-        )
+        user_id = UUID(current_user["sub"])
+
+        assessment = await service.get_skill_assessment_by_id(assessment_id, user_id)
 
         if assessment is None or assessment.profile_id != profile_id:
             raise HTTPException(
@@ -487,7 +465,10 @@ async def get_skill_assessment(
 
         return assessment
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.patch(
@@ -517,30 +498,29 @@ async def update_skill_assessment(
 
     Raises:
         HTTPException: 404 if assessment not found.
+        HTTPException: 403 if user does not have access to the assessment.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to update the assessment.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
+        user_id = UUID(current_user["sub"])
+
         # Verify assessment exists and belongs to this profile
-        existing = await service.get_skill_assessment_by_id(
-            assessment_id, user_id, user_role
-        )
+        existing = await service.get_skill_assessment_by_id(assessment_id, user_id)
         if existing is None or existing.profile_id != profile_id:
             raise HTTPException(
                 status_code=404,
                 detail=f"Skill assessment {assessment_id} not found in profile {profile_id}",
             )
 
-        assessment = await service.update_skill_assessment(
-            assessment_id, request, user_id, user_role
-        )
+        assessment = await service.update_skill_assessment(assessment_id, request, user_id)
         return assessment
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.delete(
@@ -566,26 +546,18 @@ async def delete_skill_assessment(
     Raises:
         HTTPException: 404 if assessment not found.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to delete the assessment.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
-    try:
-        # Verify assessment exists and belongs to this profile
-        existing = await service.get_skill_assessment_by_id(
-            assessment_id, user_id, user_role
+    # Verify assessment exists and belongs to this profile
+    existing = await service.get_skill_assessment_by_id(assessment_id)
+    if existing is None or existing.profile_id != profile_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Skill assessment {assessment_id} not found in profile {profile_id}",
         )
-        if existing is None or existing.profile_id != profile_id:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Skill assessment {assessment_id} not found in profile {profile_id}",
-            )
 
-        await service.delete_skill_assessment(assessment_id, user_id, user_role)
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    await service.delete_skill_assessment(assessment_id)
 
 
 # =============================================================================
@@ -630,15 +602,10 @@ async def create_observation(
         )
 
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
-
     try:
-        return await service.create_observation(request, user_id, user_role)
+        return await service.create_observation(request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.get(
@@ -697,28 +664,17 @@ async def list_observations(
 
     Raises:
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the profile.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
-
-    try:
-        return await service.list_observations(
-            profile_id=profile_id,
-            user_id=user_id,
-            user_role=user_role,
-            domain=domain,
-            is_milestone=is_milestone,
-            is_concern=is_concern,
-            observer_type=observer_type,
-            skip=skip,
-            limit=limit,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    return await service.list_observations(
+        profile_id=profile_id,
+        domain=domain,
+        is_milestone=is_milestone,
+        is_concern=is_concern,
+        observer_type=observer_type,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get(
@@ -746,17 +702,15 @@ async def get_observation(
 
     Raises:
         HTTPException: 404 if observation not found.
+        HTTPException: 403 if user does not have access to the observation.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the observation.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
-        observation = await service.get_observation_by_id(
-            observation_id, user_id, user_role
-        )
+        user_id = UUID(current_user["sub"])
+
+        observation = await service.get_observation_by_id(observation_id, user_id)
 
         if observation is None or observation.profile_id != profile_id:
             raise HTTPException(
@@ -766,7 +720,10 @@ async def get_observation(
 
         return observation
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.patch(
@@ -796,30 +753,29 @@ async def update_observation(
 
     Raises:
         HTTPException: 404 if observation not found.
+        HTTPException: 403 if user does not have access to the observation.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to update the observation.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
+        user_id = UUID(current_user["sub"])
+
         # Verify observation exists and belongs to this profile
-        existing = await service.get_observation_by_id(
-            observation_id, user_id, user_role
-        )
+        existing = await service.get_observation_by_id(observation_id, user_id)
         if existing is None or existing.profile_id != profile_id:
             raise HTTPException(
                 status_code=404,
                 detail=f"Observation {observation_id} not found in profile {profile_id}",
             )
 
-        observation = await service.update_observation(
-            observation_id, request, user_id, user_role
-        )
+        observation = await service.update_observation(observation_id, request, user_id)
         return observation
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.delete(
@@ -845,26 +801,18 @@ async def delete_observation(
     Raises:
         HTTPException: 404 if observation not found.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to delete the observation.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
-    try:
-        # Verify observation exists and belongs to this profile
-        existing = await service.get_observation_by_id(
-            observation_id, user_id, user_role
+    # Verify observation exists and belongs to this profile
+    existing = await service.get_observation_by_id(observation_id)
+    if existing is None or existing.profile_id != profile_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Observation {observation_id} not found in profile {profile_id}",
         )
-        if existing is None or existing.profile_id != profile_id:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Observation {observation_id} not found in profile {profile_id}",
-            )
 
-        await service.delete_observation(observation_id, user_id, user_role)
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    await service.delete_observation(observation_id)
 
 
 # =============================================================================
@@ -909,15 +857,10 @@ async def create_monthly_snapshot(
         )
 
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
-
     try:
-        return await service.create_monthly_snapshot(request, user_id, user_role)
+        return await service.create_monthly_snapshot(request)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.post(
@@ -959,24 +902,16 @@ async def generate_monthly_snapshot(
     Raises:
         HTTPException: 400 if profile not found or snapshot already exists.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the profile.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
-
     try:
         return await service.generate_monthly_snapshot(
             profile_id=profile_id,
             snapshot_month=snapshot_month,
-            user_id=user_id,
-            user_role=user_role,
             generated_by_id=generated_by_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.get(
@@ -1027,23 +962,13 @@ async def list_monthly_snapshots(
         HTTPException: 401 if not authenticated.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
-
-    try:
-        return await service.list_monthly_snapshots(
-            profile_id=profile_id,
-            user_id=user_id,
-            user_role=user_role,
-            start_month=start_month,
-            end_month=end_month,
-            skip=skip,
-            limit=limit,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    return await service.list_monthly_snapshots(
+        profile_id=profile_id,
+        start_month=start_month,
+        end_month=end_month,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get(
@@ -1071,17 +996,15 @@ async def get_monthly_snapshot(
 
     Raises:
         HTTPException: 404 if snapshot not found.
+        HTTPException: 403 if user does not have access to the snapshot.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the snapshot.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
-        snapshot = await service.get_monthly_snapshot_by_id(
-            snapshot_id, user_id, user_role
-        )
+        user_id = UUID(current_user["sub"])
+
+        snapshot = await service.get_monthly_snapshot_by_id(snapshot_id, user_id)
 
         if snapshot is None or snapshot.profile_id != profile_id:
             raise HTTPException(
@@ -1091,7 +1014,10 @@ async def get_monthly_snapshot(
 
         return snapshot
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.patch(
@@ -1121,30 +1047,29 @@ async def update_monthly_snapshot(
 
     Raises:
         HTTPException: 404 if snapshot not found.
+        HTTPException: 403 if user does not have access to the snapshot.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to update the snapshot.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
+        user_id = UUID(current_user["sub"])
+
         # Verify snapshot exists and belongs to this profile
-        existing = await service.get_monthly_snapshot_by_id(
-            snapshot_id, user_id, user_role
-        )
+        existing = await service.get_monthly_snapshot_by_id(snapshot_id, user_id)
         if existing is None or existing.profile_id != profile_id:
             raise HTTPException(
                 status_code=404,
                 detail=f"Monthly snapshot {snapshot_id} not found in profile {profile_id}",
             )
 
-        snapshot = await service.update_monthly_snapshot(
-            snapshot_id, request, user_id, user_role
-        )
+        snapshot = await service.update_monthly_snapshot(snapshot_id, request, user_id)
         return snapshot
     except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.delete(
@@ -1170,26 +1095,18 @@ async def delete_monthly_snapshot(
     Raises:
         HTTPException: 404 if snapshot not found.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to delete the snapshot.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
-    try:
-        # Verify snapshot exists and belongs to this profile
-        existing = await service.get_monthly_snapshot_by_id(
-            snapshot_id, user_id, user_role
+    # Verify snapshot exists and belongs to this profile
+    existing = await service.get_monthly_snapshot_by_id(snapshot_id)
+    if existing is None or existing.profile_id != profile_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Monthly snapshot {snapshot_id} not found in profile {profile_id}",
         )
-        if existing is None or existing.profile_id != profile_id:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Monthly snapshot {snapshot_id} not found in profile {profile_id}",
-            )
 
-        await service.delete_monthly_snapshot(snapshot_id, user_id, user_role)
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    await service.delete_monthly_snapshot(snapshot_id)
 
 
 # =============================================================================
@@ -1240,23 +1157,25 @@ async def get_growth_trajectory(
 
     Raises:
         HTTPException: 404 if profile not found.
+        HTTPException: 403 if user does not have access to the profile.
         HTTPException: 401 if not authenticated.
-        HTTPException: 403 if user lacks permission to access the profile.
     """
     service = DevelopmentProfileService(db)
-    user_id = UUID(current_user["sub"])
-    user_role = current_user.get("role")
 
     try:
+        user_id = UUID(current_user["sub"])
+
         return await service.get_growth_trajectory(
             profile_id=profile_id,
             user_id=user_id,
-            user_role=user_role,
             start_month=start_month,
             end_month=end_month,
             domains=domains,
         )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except UnauthorizedAccessError as e:
-        raise HTTPException(status_code=403, detail=str(e))

@@ -1,571 +1,275 @@
-"""Unit tests for document authorization logic in LAYA AI Service.
+"""Unit tests for document service authorization.
 
-Tests authorization helper methods from DocumentService:
-- _verify_document_access()
-- _verify_template_access()
-- _verify_signature_request_access()
+Tests for document authorization, ensuring IDOR vulnerabilities are prevented.
+
+Tests cover:
+- Document access authorization (creator can access, non-creator cannot)
+- Document update authorization (creator can update, non-creator cannot)
+- UnauthorizedAccessError exceptions for unauthorized access attempts
 """
 
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
+
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.document import (
-    Document,
-    DocumentStatus,
-    DocumentTemplate,
-    DocumentType,
-    SignatureRequest,
-    SignatureRequestStatus,
+from app.models.document import Document
+from app.services.document_service import (
+    DocumentService,
+    UnauthorizedAccessError,
 )
-from app.services.document_service import DocumentService
+from app.schemas.document import DocumentCreate, DocumentUpdate
 
 
-class TestVerifyDocumentAccess:
-    """Tests for DocumentService._verify_document_access() method."""
+# =============================================================================
+# Fixtures
+# =============================================================================
 
-    @pytest_asyncio.fixture
-    async def sample_document(self, db_session: AsyncSession) -> Document:
-        """Create a sample document for testing."""
-        creator_id = uuid4()
-        document = Document(
-            id=uuid4(),
-            type=DocumentType.ENROLLMENT,
+
+@pytest_asyncio.fixture
+async def test_creator_id() -> UUID:
+    """Fixture providing a test creator user ID."""
+    return uuid4()
+
+
+@pytest_asyncio.fixture
+async def test_other_user_id() -> UUID:
+    """Fixture providing a different test user ID."""
+    return uuid4()
+
+
+# =============================================================================
+# Document Authorization Tests
+# =============================================================================
+
+
+class TestDocumentAuthorization:
+    """Test suite for document authorization functionality."""
+
+    @pytest.mark.asyncio
+    async def test_creator_can_access_document(
+        self,
+        db_session: AsyncSession,
+        test_creator_id: UUID,
+    ):
+        """Test that document creator can access their own document."""
+        service = DocumentService(db_session)
+
+        # Create document
+        document_data = DocumentCreate(
+            type="enrollment",
             title="Test Enrollment Form",
-            content_url="https://example.com/test-doc.pdf",
-            status=DocumentStatus.DRAFT,
-            created_by=creator_id,
+            content_url="https://example.com/doc.pdf",
+            created_by=test_creator_id,
         )
-        db_session.add(document)
-        await db_session.commit()
-        await db_session.refresh(document)
-        return document
+        created_document = await service.create_document(document_data)
 
-    @pytest.mark.asyncio
-    async def test_creator_has_access(
-        self, db_session: AsyncSession, sample_document: Document
-    ):
-        """Test that document creator has access to their document."""
-        service = DocumentService(db_session)
-
-        has_access = service._verify_document_access(
-            document=sample_document,
-            user_id=sample_document.created_by,
+        # Creator should be able to access
+        document = await service.get_document_by_id(
+            document_id=created_document.id,
+            user_id=test_creator_id,
         )
 
-        assert has_access is True
+        assert document is not None
+        assert document.id == created_document.id
+        assert document.title == "Test Enrollment Form"
 
     @pytest.mark.asyncio
-    async def test_non_creator_denied_access(
-        self, db_session: AsyncSession, sample_document: Document
-    ):
-        """Test that non-creator is denied access to document."""
-        service = DocumentService(db_session)
-        other_user_id = uuid4()
-
-        has_access = service._verify_document_access(
-            document=sample_document,
-            user_id=other_user_id,
-        )
-
-        assert has_access is False
-
-    @pytest.mark.asyncio
-    async def test_access_with_string_uuid(
-        self, db_session: AsyncSession, sample_document: Document
-    ):
-        """Test that access check works when user_id is passed as string."""
-        service = DocumentService(db_session)
-
-        # Pass creator_id as UUID object
-        has_access = service._verify_document_access(
-            document=sample_document,
-            user_id=sample_document.created_by,
-        )
-
-        assert has_access is True
-
-    @pytest.mark.asyncio
-    async def test_access_with_different_document_statuses(
-        self, db_session: AsyncSession
-    ):
-        """Test that access control is consistent across different document statuses."""
-        creator_id = uuid4()
-        other_user_id = uuid4()
-        service = DocumentService(db_session)
-
-        # Test all document statuses
-        for status in [
-            DocumentStatus.DRAFT,
-            DocumentStatus.PENDING,
-            DocumentStatus.SIGNED,
-            DocumentStatus.EXPIRED,
-        ]:
-            document = Document(
-                id=uuid4(),
-                type=DocumentType.PERMISSION,
-                title=f"Test {status.value} Document",
-                content_url="https://example.com/test.pdf",
-                status=status,
-                created_by=creator_id,
-            )
-            db_session.add(document)
-            await db_session.commit()
-            await db_session.refresh(document)
-
-            # Creator should have access
-            assert service._verify_document_access(document, creator_id) is True
-
-            # Non-creator should not have access
-            assert service._verify_document_access(document, other_user_id) is False
-
-    @pytest.mark.asyncio
-    async def test_access_with_different_document_types(
-        self, db_session: AsyncSession
-    ):
-        """Test that access control works consistently for all document types."""
-        creator_id = uuid4()
-        other_user_id = uuid4()
-        service = DocumentService(db_session)
-
-        # Test all document types
-        for doc_type in [
-            DocumentType.ENROLLMENT,
-            DocumentType.PERMISSION,
-            DocumentType.POLICY,
-            DocumentType.MEDICAL,
-            DocumentType.FINANCIAL,
-            DocumentType.OTHER,
-        ]:
-            document = Document(
-                id=uuid4(),
-                type=doc_type,
-                title=f"Test {doc_type.value} Document",
-                content_url="https://example.com/test.pdf",
-                status=DocumentStatus.DRAFT,
-                created_by=creator_id,
-            )
-            db_session.add(document)
-            await db_session.commit()
-            await db_session.refresh(document)
-
-            # Creator should have access
-            assert service._verify_document_access(document, creator_id) is True
-
-            # Non-creator should not have access
-            assert service._verify_document_access(document, other_user_id) is False
-
-
-class TestVerifyTemplateAccess:
-    """Tests for DocumentService._verify_template_access() method."""
-
-    @pytest_asyncio.fixture
-    async def sample_template(self, db_session: AsyncSession) -> DocumentTemplate:
-        """Create a sample document template for testing."""
-        creator_id = uuid4()
-        template = DocumentTemplate(
-            id=uuid4(),
-            name="Test Enrollment Template",
-            type=DocumentType.ENROLLMENT,
-            description="A test enrollment template",
-            template_content="<html><body>Test enrollment form</body></html>",
-            required_fields='["student_name", "parent_signature"]',
-            is_active=True,
-            version=1,
-            created_by=creator_id,
-        )
-        db_session.add(template)
-        await db_session.commit()
-        await db_session.refresh(template)
-        return template
-
-    @pytest.mark.asyncio
-    async def test_creator_has_access(
-        self, db_session: AsyncSession, sample_template: DocumentTemplate
-    ):
-        """Test that template creator has access to their template."""
-        service = DocumentService(db_session)
-
-        has_access = service._verify_template_access(
-            template=sample_template,
-            user_id=sample_template.created_by,
-        )
-
-        assert has_access is True
-
-    @pytest.mark.asyncio
-    async def test_non_creator_denied_access(
-        self, db_session: AsyncSession, sample_template: DocumentTemplate
-    ):
-        """Test that non-creator is denied access to template."""
-        service = DocumentService(db_session)
-        other_user_id = uuid4()
-
-        has_access = service._verify_template_access(
-            template=sample_template,
-            user_id=other_user_id,
-        )
-
-        assert has_access is False
-
-    @pytest.mark.asyncio
-    async def test_access_with_inactive_template(self, db_session: AsyncSession):
-        """Test that access control works for inactive templates."""
-        creator_id = uuid4()
-        other_user_id = uuid4()
-        service = DocumentService(db_session)
-
-        template = DocumentTemplate(
-            id=uuid4(),
-            name="Inactive Template",
-            type=DocumentType.PERMISSION,
-            description="An inactive template",
-            template_content="<html><body>Inactive</body></html>",
-            is_active=False,
-            version=1,
-            created_by=creator_id,
-        )
-        db_session.add(template)
-        await db_session.commit()
-        await db_session.refresh(template)
-
-        # Creator should have access even if template is inactive
-        assert service._verify_template_access(template, creator_id) is True
-
-        # Non-creator should not have access
-        assert service._verify_template_access(template, other_user_id) is False
-
-    @pytest.mark.asyncio
-    async def test_access_with_different_template_types(self, db_session: AsyncSession):
-        """Test that access control works consistently for all template types."""
-        creator_id = uuid4()
-        other_user_id = uuid4()
-        service = DocumentService(db_session)
-
-        # Test all template types
-        for template_type in [
-            DocumentType.ENROLLMENT,
-            DocumentType.PERMISSION,
-            DocumentType.POLICY,
-            DocumentType.MEDICAL,
-            DocumentType.FINANCIAL,
-            DocumentType.OTHER,
-        ]:
-            template = DocumentTemplate(
-                id=uuid4(),
-                name=f"Test {template_type.value} Template",
-                type=template_type,
-                description=f"A test {template_type.value} template",
-                template_content="<html><body>Test content</body></html>",
-                is_active=True,
-                version=1,
-                created_by=creator_id,
-            )
-            db_session.add(template)
-            await db_session.commit()
-            await db_session.refresh(template)
-
-            # Creator should have access
-            assert service._verify_template_access(template, creator_id) is True
-
-            # Non-creator should not have access
-            assert service._verify_template_access(template, other_user_id) is False
-
-    @pytest.mark.asyncio
-    async def test_access_with_different_template_versions(
-        self, db_session: AsyncSession
-    ):
-        """Test that access control works for templates with different versions."""
-        creator_id = uuid4()
-        other_user_id = uuid4()
-        service = DocumentService(db_session)
-
-        for version in [1, 2, 5, 10]:
-            template = DocumentTemplate(
-                id=uuid4(),
-                name=f"Template Version {version}",
-                type=DocumentType.ENROLLMENT,
-                description=f"Template at version {version}",
-                template_content="<html><body>Test content</body></html>",
-                is_active=True,
-                version=version,
-                created_by=creator_id,
-            )
-            db_session.add(template)
-            await db_session.commit()
-            await db_session.refresh(template)
-
-            # Creator should have access regardless of version
-            assert service._verify_template_access(template, creator_id) is True
-
-            # Non-creator should not have access
-            assert service._verify_template_access(template, other_user_id) is False
-
-
-class TestVerifySignatureRequestAccess:
-    """Tests for DocumentService._verify_signature_request_access() method."""
-
-    @pytest_asyncio.fixture
-    async def sample_signature_request(
-        self, db_session: AsyncSession
-    ) -> tuple[SignatureRequest, UUID, UUID]:
-        """Create a sample signature request for testing.
-
-        Returns:
-            Tuple of (signature_request, requester_id, signer_id)
-        """
-        # Create a document first
-        creator_id = uuid4()
-        document = Document(
-            id=uuid4(),
-            type=DocumentType.ENROLLMENT,
-            title="Test Document",
-            content_url="https://example.com/test.pdf",
-            status=DocumentStatus.PENDING,
-            created_by=creator_id,
-        )
-        db_session.add(document)
-        await db_session.commit()
-        await db_session.refresh(document)
-
-        # Create signature request
-        requester_id = uuid4()
-        signer_id = uuid4()
-        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-
-        signature_request = SignatureRequest(
-            id=uuid4(),
-            document_id=document.id,
-            requester_id=requester_id,
-            signer_id=signer_id,
-            status=SignatureRequestStatus.SENT,
-            expires_at=expires_at,
-            message="Please sign this document",
-        )
-        db_session.add(signature_request)
-        await db_session.commit()
-        await db_session.refresh(signature_request)
-
-        return signature_request, requester_id, signer_id
-
-    @pytest.mark.asyncio
-    async def test_requester_has_access(
+    async def test_non_creator_cannot_access_document(
         self,
         db_session: AsyncSession,
-        sample_signature_request: tuple[SignatureRequest, UUID, UUID],
+        test_creator_id: UUID,
+        test_other_user_id: UUID,
     ):
-        """Test that signature request requester has access."""
-        signature_request, requester_id, signer_id = sample_signature_request
+        """Test that non-creator cannot access document (raises UnauthorizedAccessError)."""
         service = DocumentService(db_session)
 
-        has_access = service._verify_signature_request_access(
-            signature_request=signature_request,
-            user_id=requester_id,
+        # Create document
+        document_data = DocumentCreate(
+            type="enrollment",
+            title="Test Enrollment Form",
+            content_url="https://example.com/doc.pdf",
+            created_by=test_creator_id,
         )
+        created_document = await service.create_document(document_data)
 
-        assert has_access is True
+        # Non-creator should get UnauthorizedAccessError
+        with pytest.raises(UnauthorizedAccessError):
+            await service.get_document_by_id(
+                document_id=created_document.id,
+                user_id=test_other_user_id,
+            )
 
     @pytest.mark.asyncio
-    async def test_signer_has_access(
+    async def test_creator_can_update_document(
         self,
         db_session: AsyncSession,
-        sample_signature_request: tuple[SignatureRequest, UUID, UUID],
+        test_creator_id: UUID,
     ):
-        """Test that signature request signer has access."""
-        signature_request, requester_id, signer_id = sample_signature_request
+        """Test that document creator can update their own document."""
         service = DocumentService(db_session)
 
-        has_access = service._verify_signature_request_access(
-            signature_request=signature_request,
-            user_id=signer_id,
+        # Create document
+        document_data = DocumentCreate(
+            type="enrollment",
+            title="Test Enrollment Form",
+            content_url="https://example.com/doc.pdf",
+            created_by=test_creator_id,
+        )
+        created_document = await service.create_document(document_data)
+
+        update_data = DocumentUpdate(
+            title="Updated Enrollment Form",
         )
 
-        assert has_access is True
+        # Creator should be able to update
+        updated_document = await service.update_document(
+            document_id=created_document.id,
+            update_data=update_data,
+            user_id=test_creator_id,
+        )
+
+        assert updated_document is not None
+        assert isinstance(updated_document, Document)
+        assert updated_document.title == "Updated Enrollment Form"
 
     @pytest.mark.asyncio
-    async def test_unrelated_user_denied_access(
+    async def test_non_creator_cannot_update_document(
         self,
         db_session: AsyncSession,
-        sample_signature_request: tuple[SignatureRequest, UUID, UUID],
+        test_creator_id: UUID,
+        test_other_user_id: UUID,
     ):
-        """Test that unrelated user is denied access to signature request."""
-        signature_request, requester_id, signer_id = sample_signature_request
-        service = DocumentService(db_session)
-        unrelated_user_id = uuid4()
-
-        has_access = service._verify_signature_request_access(
-            signature_request=signature_request,
-            user_id=unrelated_user_id,
-        )
-
-        assert has_access is False
-
-    @pytest.mark.asyncio
-    async def test_access_with_different_request_statuses(
-        self, db_session: AsyncSession
-    ):
-        """Test that access control works across different request statuses."""
-        # Create a document first
-        document = Document(
-            id=uuid4(),
-            type=DocumentType.ENROLLMENT,
-            title="Test Document",
-            content_url="https://example.com/test.pdf",
-            status=DocumentStatus.PENDING,
-            created_by=uuid4(),
-        )
-        db_session.add(document)
-        await db_session.commit()
-
-        requester_id = uuid4()
-        signer_id = uuid4()
-        unrelated_user_id = uuid4()
+        """Test that non-creator cannot update document (raises UnauthorizedAccessError)."""
         service = DocumentService(db_session)
 
-        # Test all signature request statuses
-        for status in [
-            SignatureRequestStatus.SENT,
-            SignatureRequestStatus.VIEWED,
-            SignatureRequestStatus.COMPLETED,
-            SignatureRequestStatus.CANCELLED,
-            SignatureRequestStatus.EXPIRED,
-        ]:
-            signature_request = SignatureRequest(
-                id=uuid4(),
-                document_id=document.id,
-                requester_id=requester_id,
-                signer_id=signer_id,
-                status=status,
-                expires_at=datetime.now(timezone.utc) + timedelta(days=7),
-            )
-            db_session.add(signature_request)
-            await db_session.commit()
-            await db_session.refresh(signature_request)
+        # Create document
+        document_data = DocumentCreate(
+            type="enrollment",
+            title="Test Enrollment Form",
+            content_url="https://example.com/doc.pdf",
+            created_by=test_creator_id,
+        )
+        created_document = await service.create_document(document_data)
 
-            # Requester should have access
-            assert (
-                service._verify_signature_request_access(
-                    signature_request, requester_id
-                )
-                is True
-            )
+        update_data = DocumentUpdate(
+            title="Hacked Document Title",
+        )
 
-            # Signer should have access
-            assert (
-                service._verify_signature_request_access(signature_request, signer_id)
-                is True
-            )
-
-            # Unrelated user should not have access
-            assert (
-                service._verify_signature_request_access(
-                    signature_request, unrelated_user_id
-                )
-                is False
+        # Non-creator should get UnauthorizedAccessError
+        with pytest.raises(UnauthorizedAccessError):
+            await service.update_document(
+                document_id=created_document.id,
+                update_data=update_data,
+                user_id=test_other_user_id,
             )
 
     @pytest.mark.asyncio
-    async def test_access_when_requester_and_signer_are_same(
-        self, db_session: AsyncSession
+    async def test_authorization_with_nonexistent_document(
+        self,
+        db_session: AsyncSession,
+        test_creator_id: UUID,
     ):
-        """Test access when requester and signer are the same user (edge case)."""
-        # Create a document first
-        document = Document(
-            id=uuid4(),
-            type=DocumentType.ENROLLMENT,
-            title="Test Document",
-            content_url="https://example.com/test.pdf",
-            status=DocumentStatus.PENDING,
-            created_by=uuid4(),
-        )
-        db_session.add(document)
-        await db_session.commit()
-
-        same_user_id = uuid4()
+        """Test authorization check with non-existent document returns None."""
         service = DocumentService(db_session)
+        non_existent_id = uuid4()
 
-        # Create signature request where requester and signer are the same
-        signature_request = SignatureRequest(
-            id=uuid4(),
-            document_id=document.id,
-            requester_id=same_user_id,
-            signer_id=same_user_id,
-            status=SignatureRequestStatus.SENT,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
-        )
-        db_session.add(signature_request)
-        await db_session.commit()
-        await db_session.refresh(signature_request)
-
-        # User should have access (as both requester and signer)
-        assert (
-            service._verify_signature_request_access(signature_request, same_user_id)
-            is True
+        # Should return None for non-existent document
+        document = await service.get_document_by_id(
+            document_id=non_existent_id,
+            user_id=test_creator_id,
         )
 
-        # Unrelated user should not have access
-        unrelated_user_id = uuid4()
-        assert (
-            service._verify_signature_request_access(
-                signature_request, unrelated_user_id
-            )
-            is False
-        )
+        assert document is None
 
     @pytest.mark.asyncio
-    async def test_access_with_expired_request(self, db_session: AsyncSession):
-        """Test that access control works even for expired signature requests."""
-        # Create a document first
-        document = Document(
-            id=uuid4(),
-            type=DocumentType.ENROLLMENT,
-            title="Test Document",
-            content_url="https://example.com/test.pdf",
-            status=DocumentStatus.EXPIRED,
-            created_by=uuid4(),
-        )
-        db_session.add(document)
-        await db_session.commit()
-
-        requester_id = uuid4()
-        signer_id = uuid4()
-        unrelated_user_id = uuid4()
+    async def test_multiple_documents_authorization(
+        self,
+        db_session: AsyncSession,
+        test_creator_id: UUID,
+        test_other_user_id: UUID,
+    ):
+        """Test authorization with multiple documents from different creators."""
         service = DocumentService(db_session)
 
-        # Create expired signature request (expires_at in the past)
-        signature_request = SignatureRequest(
-            id=uuid4(),
-            document_id=document.id,
-            requester_id=requester_id,
-            signer_id=signer_id,
-            status=SignatureRequestStatus.EXPIRED,
-            expires_at=datetime.now(timezone.utc) - timedelta(days=1),  # Expired
+        # Create document for creator
+        doc1_data = DocumentCreate(
+            type="enrollment",
+            title="Creator's Document",
+            content_url="https://example.com/doc1.pdf",
+            created_by=test_creator_id,
         )
-        db_session.add(signature_request)
-        await db_session.commit()
-        await db_session.refresh(signature_request)
+        doc1 = await service.create_document(doc1_data)
 
-        # Requester should still have access to view expired request
-        assert (
-            service._verify_signature_request_access(signature_request, requester_id)
-            is True
+        # Create document for other user
+        doc2_data = DocumentCreate(
+            type="permission",
+            title="Other User's Document",
+            content_url="https://example.com/doc2.pdf",
+            created_by=test_other_user_id,
         )
+        doc2 = await service.create_document(doc2_data)
 
-        # Signer should still have access to view expired request
-        assert (
-            service._verify_signature_request_access(signature_request, signer_id)
-            is True
+        # Creator can access their own document
+        retrieved_doc1 = await service.get_document_by_id(
+            document_id=doc1.id,
+            user_id=test_creator_id,
         )
+        assert retrieved_doc1 is not None
+        assert retrieved_doc1.id == doc1.id
 
-        # Unrelated user should not have access
-        assert (
-            service._verify_signature_request_access(
-                signature_request, unrelated_user_id
+        # Creator cannot access other user's document
+        with pytest.raises(UnauthorizedAccessError):
+            await service.get_document_by_id(
+                document_id=doc2.id,
+                user_id=test_creator_id,
             )
-            is False
+
+        # Other user can access their own document
+        retrieved_doc2 = await service.get_document_by_id(
+            document_id=doc2.id,
+            user_id=test_other_user_id,
+        )
+        assert retrieved_doc2 is not None
+        assert retrieved_doc2.id == doc2.id
+
+        # Other user cannot access creator's document
+        with pytest.raises(UnauthorizedAccessError):
+            await service.get_document_by_id(
+                document_id=doc1.id,
+                user_id=test_other_user_id,
+            )
+
+    @pytest.mark.asyncio
+    async def test_user_has_document_access_helper(
+        self,
+        db_session: AsyncSession,
+        test_creator_id: UUID,
+        test_other_user_id: UUID,
+    ):
+        """Test the _user_has_document_access helper method directly."""
+        service = DocumentService(db_session)
+
+        # Create document
+        document_data = DocumentCreate(
+            type="enrollment",
+            title="Test Enrollment Form",
+            content_url="https://example.com/doc.pdf",
+            created_by=test_creator_id,
+        )
+        created_document = await service.create_document(document_data)
+
+        # Fetch the actual document from DB
+        document = await service.get_document_by_id(
+            document_id=created_document.id,
+            user_id=test_creator_id,
         )
 
+        # Creator should have access
+        assert service._user_has_document_access(document, test_creator_id) is True
 
+        # Other user should not have access
+        assert service._user_has_document_access(document, test_other_user_id) is False

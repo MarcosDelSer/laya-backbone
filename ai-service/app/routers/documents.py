@@ -29,11 +29,7 @@ from app.schemas.document import (
     SignatureResponse,
 )
 from app.services.document_service import (
-    DocumentNotFoundError,
     DocumentService,
-    DocumentServiceError,
-    SignatureRequestNotFoundError,
-    TemplateNotFoundError,
     UnauthorizedAccessError,
 )
 
@@ -87,28 +83,17 @@ async def get_signature_dashboard(
     """
     service = DocumentService(db)
 
-    try:
-        # If no user_id provided, use current user
-        if user_id is None:
-            user_id = UUID(current_user.get("id") or current_user.get("sub"))
+    # If no user_id provided, use current user
+    if user_id is None:
+        user_id = UUID(current_user.get("id") or current_user.get("sub"))
 
-        dashboard_data = await service.get_signature_dashboard(
-            user_id=user_id,
-            limit_recent=limit_recent,
-        )
+    dashboard_data = await service.get_signature_dashboard(
+        user_id=user_id,
+        limit_recent=limit_recent,
+    )
 
-        # Convert to response schema
-        return SignatureDashboardResponse(**dashboard_data)
-    except UnauthorizedAccessError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+    # Convert to response schema
+    return SignatureDashboardResponse(**dashboard_data)
 
 
 # Document Template Endpoints
@@ -146,20 +131,8 @@ async def create_template(
         HTTPException: 400 if validation fails.
     """
     service = DocumentService(db)
-
-    try:
-        template = await service.create_template(template_data)
-        return service._template_to_response(template)
-    except UnauthorizedAccessError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+    template = await service.create_template(template_data)
+    return service._template_to_response(template)
 
 
 @router.get(
@@ -188,27 +161,15 @@ async def get_template(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    template = await service.get_template_by_id(template_id)
 
-    try:
-        template = await service.get_template_by_id(template_id)
-
-        if template is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Template with id {template_id} not found",
-            )
-
-        return service._template_to_response(template)
-    except UnauthorizedAccessError as e:
+    if template is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Template with id {template_id} not found",
         )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+
+    return service._template_to_response(template)
 
 
 @router.get(
@@ -257,33 +218,21 @@ async def list_templates(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    templates, total = await service.list_templates(
+        skip=skip,
+        limit=limit,
+        template_type=template_type,
+        is_active=is_active,
+    )
 
-    try:
-        templates, total = await service.list_templates(
-            skip=skip,
-            limit=limit,
-            template_type=template_type,
-            is_active=is_active,
-        )
+    items = [service._template_to_response(template) for template in templates]
 
-        items = [service._template_to_response(template) for template in templates]
-
-        return DocumentTemplateListResponse(
-            items=items,
-            total=total,
-            skip=skip,
-            limit=limit,
-        )
-    except UnauthorizedAccessError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+    return DocumentTemplateListResponse(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.patch(
@@ -315,27 +264,15 @@ async def update_template(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    template = await service.update_template(template_id, update_data)
 
-    try:
-        template = await service.update_template(template_id, update_data)
-
-        if template is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Template with id {template_id} not found",
-            )
-
-        return service._template_to_response(template)
-    except UnauthorizedAccessError as e:
+    if template is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Template with id {template_id} not found",
         )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+
+    return service._template_to_response(template)
 
 
 @router.delete(
@@ -362,24 +299,12 @@ async def delete_template(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    success = await service.delete_template(template_id)
 
-    try:
-        success = await service.delete_template(template_id)
-
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Template with id {template_id} not found",
-            )
-    except UnauthorizedAccessError as e:
+    if not success:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Template with id {template_id} not found",
         )
 
 
@@ -425,32 +350,21 @@ async def send_signature_request(
     """
     service = DocumentService(db)
 
-    try:
-        # Extract requester_id from current_user
-        requester_id = UUID(current_user.get("id") or current_user.get("sub"))
+    # Extract requester_id from current_user
+    requester_id = UUID(current_user.get("id") or current_user.get("sub"))
 
-        signature_request = await service.send_signature_request(
-            request_data=request_data,
-            requester_id=requester_id,
-        )
+    signature_request = await service.send_signature_request(
+        request_data=request_data,
+        requester_id=requester_id,
+    )
 
-        if signature_request is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot send signature request. Document not found or not in DRAFT status.",
-            )
-
-        return service._signature_request_to_response(signature_request)
-    except UnauthorizedAccessError as e:
+    if signature_request is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot send signature request. Document not found or not in DRAFT status.",
         )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+
+    return service._signature_request_to_response(signature_request)
 
 
 @router.get(
@@ -479,27 +393,15 @@ async def get_signature_request(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    signature_request = await service.get_signature_request_by_id(request_id)
 
-    try:
-        signature_request = await service.get_signature_request_by_id(request_id)
-
-        if signature_request is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Signature request with id {request_id} not found",
-            )
-
-        return service._signature_request_to_response(signature_request)
-    except UnauthorizedAccessError as e:
+    if signature_request is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Signature request with id {request_id} not found",
         )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+
+    return service._signature_request_to_response(signature_request)
 
 
 @router.patch(
@@ -531,27 +433,15 @@ async def mark_signature_request_viewed(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    signature_request = await service.mark_request_viewed(request_id)
 
-    try:
-        signature_request = await service.mark_request_viewed(request_id)
-
-        if signature_request is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Signature request with id {request_id} not found",
-            )
-
-        return service._signature_request_to_response(signature_request)
-    except UnauthorizedAccessError as e:
+    if signature_request is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Signature request with id {request_id} not found",
         )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+
+    return service._signature_request_to_response(signature_request)
 
 
 @router.get(
@@ -601,28 +491,17 @@ async def list_my_signature_requests(
     """
     service = DocumentService(db)
 
-    try:
-        # Extract user_id from current_user
-        user_id = UUID(current_user.get("id") or current_user.get("sub"))
+    # Extract user_id from current_user
+    user_id = UUID(current_user.get("id") or current_user.get("sub"))
 
-        requests, total = await service.list_signature_requests_for_signer(
-            signer_id=user_id,
-            status=status_filter,
-            skip=skip,
-            limit=limit,
-        )
+    requests, total = await service.list_signature_requests_for_signer(
+        signer_id=user_id,
+        status=status_filter,
+        skip=skip,
+        limit=limit,
+    )
 
-        return [service._signature_request_to_response(req) for req in requests]
-    except UnauthorizedAccessError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+    return [service._signature_request_to_response(req) for req in requests]
 
 
 # Audit Log Endpoints (static paths before dynamic document endpoints)
@@ -675,32 +554,21 @@ async def get_user_audit_logs(
     """
     service = DocumentService(db)
 
-    try:
-        audit_logs, total = await service.get_audit_logs_for_user(
-            user_id=user_id,
-            skip=skip,
-            limit=limit,
-            event_type=event_type,
-        )
+    audit_logs, total = await service.get_audit_logs_for_user(
+        user_id=user_id,
+        skip=skip,
+        limit=limit,
+        event_type=event_type,
+    )
 
-        items = [service._audit_log_to_response(log) for log in audit_logs]
+    items = [service._audit_log_to_response(log) for log in audit_logs]
 
-        return DocumentAuditLogListResponse(
-            items=items,
-            total=total,
-            skip=skip,
-            limit=limit,
-        )
-    except UnauthorizedAccessError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+    return DocumentAuditLogListResponse(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
 # Document Endpoints (dynamic routes with /{document_id} must come after static routes)
@@ -735,34 +603,23 @@ async def create_document(
     """
     service = DocumentService(db)
 
-    try:
-        # If template_id provided, create from template
-        if document_data.template_id:
-            document = await service.create_document_from_template(
-                template_id=document_data.template_id,
-                title=document_data.title,
-                content_url=document_data.content_url,
-                created_by=document_data.created_by,
+    # If template_id provided, create from template
+    if document_data.template_id:
+        document = await service.create_document_from_template(
+            template_id=document_data.template_id,
+            title=document_data.title,
+            content_url=document_data.content_url,
+            created_by=document_data.created_by,
+        )
+        if document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Template with id {document_data.template_id} not found or inactive",
             )
-            if document is None:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Template with id {document_data.template_id} not found or inactive",
-                )
-        else:
-            document = await service.create_document(document_data)
+    else:
+        document = await service.create_document(document_data)
 
-        return service._document_to_response(document)
-    except UnauthorizedAccessError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+    return service._document_to_response(document)
 
 
 @router.get(
@@ -816,34 +673,22 @@ async def list_documents(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    documents, total = await service.list_documents(
+        skip=skip,
+        limit=limit,
+        document_type=document_type,
+        status=status,
+        created_by=created_by,
+    )
 
-    try:
-        documents, total = await service.list_documents(
-            skip=skip,
-            limit=limit,
-            document_type=document_type,
-            status=status,
-            created_by=created_by,
-        )
+    items = [service._document_to_response(document) for document in documents]
 
-        items = [service._document_to_response(document) for document in documents]
-
-        return DocumentListResponse(
-            items=items,
-            total=total,
-            skip=skip,
-            limit=limit,
-        )
-    except UnauthorizedAccessError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+    return DocumentListResponse(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get(
@@ -869,12 +714,18 @@ async def get_document(
 
     Raises:
         HTTPException: 404 if document not found.
+        HTTPException: 403 if user does not have access to the document.
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
 
     try:
-        document = await service.get_document_by_id(document_id)
+        user_id = UUID(current_user["sub"])
+
+        document = await service.get_document_by_id(
+            document_id=document_id,
+            user_id=user_id,
+        )
 
         if document is None:
             raise HTTPException(
@@ -887,11 +738,6 @@ async def get_document(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
         )
 
 
@@ -920,13 +766,20 @@ async def update_document(
 
     Raises:
         HTTPException: 404 if document not found.
+        HTTPException: 403 if user does not have access to the document.
         HTTPException: 400 if document is signed (immutable).
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
 
     try:
-        result = await service.update_document(document_id, update_data)
+        user_id = UUID(current_user["sub"])
+
+        result = await service.update_document(
+            document_id=document_id,
+            update_data=update_data,
+            user_id=user_id,
+        )
 
         if result is None:
             raise HTTPException(
@@ -946,11 +799,6 @@ async def update_document(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
         )
 
 
@@ -995,27 +843,15 @@ async def create_signature(
         )
 
     service = DocumentService(db)
+    signature = await service.create_signature(signature_data)
 
-    try:
-        signature = await service.create_signature(signature_data)
-
-        if signature is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document with id {document_id} not found",
-            )
-
-        return service._signature_to_response(signature)
-    except UnauthorizedAccessError as e:
+    if signature is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with id {document_id} not found",
         )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+
+    return service._signature_to_response(signature)
 
 
 @router.get(
@@ -1043,21 +879,9 @@ async def get_document_signatures(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    signatures = await service.get_signatures_for_document(document_id)
 
-    try:
-        signatures = await service.get_signatures_for_document(document_id)
-
-        return [service._signature_to_response(sig) for sig in signatures]
-    except UnauthorizedAccessError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+    return [service._signature_to_response(sig) for sig in signatures]
 
 
 @router.get(
@@ -1086,27 +910,15 @@ async def get_document_signature_request(
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
+    signature_request = await service.get_signature_request_by_document(document_id)
 
-    try:
-        signature_request = await service.get_signature_request_by_document(document_id)
-
-        if signature_request is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No signature request found for document {document_id}",
-            )
-
-        return service._signature_request_to_response(signature_request)
-    except UnauthorizedAccessError as e:
+    if signature_request is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No signature request found for document {document_id}",
         )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+
+    return service._signature_request_to_response(signature_request)
 
 
 @router.get(
@@ -1153,36 +965,25 @@ async def get_document_audit_logs(
     """
     service = DocumentService(db)
 
-    try:
-        # Verify document exists
-        document = await service.get_document_by_id(document_id)
-        if document is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document with id {document_id} not found",
-            )
-
-        audit_logs, total = await service.get_audit_logs_for_document(
-            document_id=document_id,
-            skip=skip,
-            limit=limit,
-        )
-
-        items = [service._audit_log_to_response(log) for log in audit_logs]
-
-        return DocumentAuditLogListResponse(
-            items=items,
-            total=total,
-            skip=skip,
-            limit=limit,
-        )
-    except UnauthorizedAccessError as e:
+    # Verify document exists
+    document = await service.get_document_by_id(document_id)
+    if document is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with id {document_id} not found",
         )
-    except DocumentServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document service error: {str(e)}",
-        )
+
+    audit_logs, total = await service.get_audit_logs_for_document(
+        document_id=document_id,
+        skip=skip,
+        limit=limit,
+    )
+
+    items = [service._audit_log_to_response(log) for log in audit_logs]
+
+    return DocumentAuditLogListResponse(
+        items=items,
+        total=total,
+        skip=skip,
+        limit=limit,
+    )

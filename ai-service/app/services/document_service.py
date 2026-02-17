@@ -4,8 +4,6 @@ Provides business logic for document template management, document creation,
 and signature workflows. Implements CRUD operations and document lifecycle management.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -55,26 +53,8 @@ class DocumentServiceError(Exception):
     pass
 
 
-class DocumentNotFoundError(DocumentServiceError):
-    """Raised when the specified document is not found."""
-
-    pass
-
-
-class TemplateNotFoundError(DocumentServiceError):
-    """Raised when the specified template is not found."""
-
-    pass
-
-
 class UnauthorizedAccessError(DocumentServiceError):
     """Raised when the user does not have permission to access a resource."""
-
-    pass
-
-
-class SignatureRequestNotFoundError(DocumentServiceError):
-    """Raised when the specified signature request is not found."""
 
     pass
 
@@ -366,22 +346,35 @@ class DocumentService:
 
         return document
 
-    async def get_document_by_id(self, document_id: UUID) -> Optional[Document]:
+    async def get_document_by_id(
+        self, document_id: UUID, user_id: UUID
+    ) -> Optional[Document]:
         """Retrieve a document by ID.
 
         Args:
             document_id: Unique identifier of the document.
+            user_id: ID of the user requesting the document.
 
         Returns:
             Document if found, None otherwise.
-        """
-        from sqlalchemy import cast, String
 
-        query = select(Document).where(
-            cast(Document.id, String) == str(document_id)
-        )
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
+        """
+        query = select(Document).where(Document.id == document_id)
         result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+        document = result.scalar_one_or_none()
+
+        if not document:
+            return None
+
+        # Verify user has access to the document
+        if not self._user_has_document_access(document, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this document"
+            )
+
+        return document
 
     async def list_documents(
         self,
@@ -432,7 +425,7 @@ class DocumentService:
         return documents, total
 
     async def update_document(
-        self, document_id: UUID, update_data: DocumentUpdate
+        self, document_id: UUID, update_data: DocumentUpdate, user_id: UUID
     ) -> Optional[Union[Document, str]]:
         """Update a document.
 
@@ -441,13 +434,17 @@ class DocumentService:
         Args:
             document_id: ID of the document to update.
             update_data: Fields to update.
+            user_id: ID of the user updating the document.
 
         Returns:
             Updated Document if found and updatable.
             None if document not found.
             "immutable" string if document is signed and cannot be modified.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
-        document = await self.get_document_by_id(document_id)
+        document = await self.get_document_by_id(document_id, user_id)
         if not document:
             return None
 
@@ -1324,18 +1321,14 @@ class DocumentService:
             created_at=audit_log.created_at,
         )
 
-    # =========================================================================
-    # Authorization Helper Methods
-    # =========================================================================
-
-    def _verify_document_access(
+    def _user_has_document_access(
         self,
         document: Document,
         user_id: UUID,
     ) -> bool:
-        """Verify if a user has access to a document.
+        """Check if a user has access to a document.
 
-        User has access if they are the creator of the document.
+        User has access if they are the creator.
 
         Args:
             document: The document to check access for
@@ -1346,54 +1339,6 @@ class DocumentService:
         """
         # Creator always has access
         if str(document.created_by) == str(user_id):
-            return True
-
-        return False
-
-    def _verify_template_access(
-        self,
-        template: DocumentTemplate,
-        user_id: UUID,
-    ) -> bool:
-        """Verify if a user has access to a document template.
-
-        User has access if they are the creator of the template.
-
-        Args:
-            template: The template to check access for
-            user_id: ID of the user to check
-
-        Returns:
-            True if user has access, False otherwise
-        """
-        # Creator always has access
-        if str(template.created_by) == str(user_id):
-            return True
-
-        return False
-
-    def _verify_signature_request_access(
-        self,
-        signature_request: SignatureRequest,
-        user_id: UUID,
-    ) -> bool:
-        """Verify if a user has access to a signature request.
-
-        User has access if they are the requester or the signer.
-
-        Args:
-            signature_request: The signature request to check access for
-            user_id: ID of the user to check
-
-        Returns:
-            True if user has access, False otherwise
-        """
-        # Requester has access
-        if str(signature_request.requester_id) == str(user_id):
-            return True
-
-        # Signer has access
-        if str(signature_request.signer_id) == str(user_id):
             return True
 
         return False
