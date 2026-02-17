@@ -127,7 +127,7 @@ class DevelopmentProfileService:
             Development profile if found, None otherwise.
         """
         query = select(DevelopmentProfile).where(
-            cast(DevelopmentProfile.id, String) == str(profile_id)
+            DevelopmentProfile.id == profile_id
         )
 
         if include_relations:
@@ -160,7 +160,7 @@ class DevelopmentProfileService:
             Development profile if found, None otherwise.
         """
         query = select(DevelopmentProfile).where(
-            cast(DevelopmentProfile.child_id, String) == str(child_id)
+            DevelopmentProfile.child_id == child_id
         )
 
         if include_relations:
@@ -193,7 +193,7 @@ class DevelopmentProfileService:
             Updated profile response if found, None otherwise.
         """
         query = select(DevelopmentProfile).where(
-            cast(DevelopmentProfile.id, String) == str(profile_id)
+            DevelopmentProfile.id == profile_id
         )
         result = await self.db.execute(query)
         profile = result.scalar_one_or_none()
@@ -221,7 +221,7 @@ class DevelopmentProfileService:
             True if profile was deleted, False if not found.
         """
         query = select(DevelopmentProfile).where(
-            cast(DevelopmentProfile.id, String) == str(profile_id)
+            DevelopmentProfile.id == profile_id
         )
         result = await self.db.execute(query)
         profile = result.scalar_one_or_none()
@@ -259,7 +259,7 @@ class DevelopmentProfileService:
 
         if educator_id is not None:
             query = query.where(
-                cast(DevelopmentProfile.educator_id, String) == str(educator_id)
+                DevelopmentProfile.educator_id == educator_id
             )
 
         # Get total count
@@ -1125,7 +1125,7 @@ class DevelopmentProfileService:
             DevelopmentProfile model if found, None otherwise.
         """
         query = select(DevelopmentProfile).where(
-            cast(DevelopmentProfile.id, String) == str(profile_id)
+            DevelopmentProfile.id == profile_id
         )
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
