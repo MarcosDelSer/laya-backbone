@@ -15,9 +15,12 @@ import { locales, defaultLocale, type Locale } from '../i18n';
  * and messages to use. It dynamically imports the translation files
  * based on the requested locale.
  */
-export default getRequestConfig(async ({ locale }) => {
+export default getRequestConfig(async ({ requestLocale }) => {
+  // Get the locale from the request (e.g., from the URL segment)
+  const locale = await requestLocale;
+
   // Validate the locale parameter
-  const validLocale: Locale = locales.includes(locale as Locale)
+  const validLocale: Locale = locale && locales.includes(locale as Locale)
     ? (locale as Locale)
     : defaultLocale;
 
@@ -25,6 +28,7 @@ export default getRequestConfig(async ({ locale }) => {
   const messages = (await import(`../messages/${validLocale}.json`)).default;
 
   return {
+    locale: validLocale,
     messages,
     // Configure time zone for Quebec
     timeZone: 'America/Toronto',

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { notFound } from 'next/navigation';
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages } from 'next-intl/server';
+import { getMessages, setRequestLocale } from 'next-intl/server';
 import { locales, type Locale, isValidLocale } from '@/i18n';
 import { Navigation } from '@/components/Navigation';
 
@@ -53,6 +53,9 @@ export default async function LocaleLayout({
   if (!isValidLocale(locale)) {
     notFound();
   }
+
+  // Enable static rendering for this locale
+  setRequestLocale(locale);
 
   // Load messages for the current locale
   const messages = await getMessages();
