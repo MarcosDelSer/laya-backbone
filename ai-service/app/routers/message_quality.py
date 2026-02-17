@@ -11,8 +11,9 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import require_role
+from app.auth.models import UserRole
 from app.database import get_db
-from app.dependencies import get_current_user
 from app.schemas.message_quality import (
     Language,
     MessageAnalysisRequest,
@@ -39,7 +40,7 @@ router = APIRouter()
 async def analyze_message(
     request: MessageAnalysisRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
 ) -> MessageAnalysisResponse:
     """Analyze message quality against Quebec 'Bonne Message' standards.
 
@@ -127,7 +128,7 @@ async def get_templates(
         description="Number of templates to skip for pagination",
     ),
     db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
 ) -> MessageTemplateListResponse:
     """Get message templates for positive parent communication.
 
@@ -179,7 +180,7 @@ async def get_templates(
 async def create_template(
     request: MessageTemplateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
 ) -> MessageTemplateResponse:
     """Create a custom message template.
 
@@ -259,7 +260,7 @@ async def get_training_examples(
         description="Number of training examples to skip for pagination",
     ),
     db: AsyncSession = Depends(get_db),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
 ) -> TrainingExampleListResponse:
     """Get training examples for educator learning.
 
