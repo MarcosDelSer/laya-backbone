@@ -62,6 +62,10 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     $childID = $_POST['gibbonPersonID'] ?? null;
 
     if (!empty($action) && !empty($childID)) {
+        // CSRF check
+        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $session->get('csrf_token')) {
+            $page->addError(__('Your request failed because you do not have access to this action.'));
+        } else {
         $time = date('H:i:s');
         $lateArrival = $_POST['lateArrival'] ?? 'N';
         $notes = $_POST['notes'] ?? null;
@@ -143,6 +147,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                 }
             }
         }
+        }
     }
 
     // Page header with date selector
@@ -188,6 +193,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         echo '<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">';
         echo '<form method="post" action="' . $session->get('absoluteURL') . '/index.php?q=/modules/CareTracking/careTracking_attendance.php&date=' . $date . '">';
         echo '<input type="hidden" name="action" value="checkIn">';
+        echo '<input type="hidden" name="csrf_token" value="' . $session->get('csrf_token') . '">';
 
         echo '<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">';
         foreach ($notCheckedIn as $child) {
@@ -226,6 +232,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         echo '<div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">';
         echo '<form method="post" action="' . $session->get('absoluteURL') . '/index.php?q=/modules/CareTracking/careTracking_attendance.php&date=' . $date . '">';
         echo '<input type="hidden" name="action" value="checkOut">';
+        echo '<input type="hidden" name="csrf_token" value="' . $session->get('csrf_token') . '">';
 
         echo '<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">';
         foreach ($currentlyCheckedIn as $child) {
