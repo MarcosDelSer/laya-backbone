@@ -18,6 +18,7 @@ import type {
   LoginResponse,
   RefreshResponse,
 } from '../types';
+import {getCurrentUser as fetchCurrentUser} from '../api/authApi';
 
 /**
  * Authentication error codes
@@ -252,7 +253,8 @@ export async function loginWithBiometrics(): Promise<AuthResult<LoginResponse>> 
 
   // Use refresh token to get new session
   try {
-    const response = await api.post<LoginResponse>(
+    // RefreshResponse only contains tokens, not user data
+    const response = await api.post<RefreshResponse>(
       API_CONFIG.endpoints.auth.refreshToken,
       {
         refreshToken: storedCredentials.refreshToken,
@@ -261,14 +263,34 @@ export async function loginWithBiometrics(): Promise<AuthResult<LoginResponse>> 
 
     if (response.success && response.data) {
       setSessionToken(response.data.accessToken);
-      currentUser = response.data.user;
 
       // Update stored refresh token
       storedCredentials.refreshToken = response.data.refreshToken;
 
+      // Fetch current user since RefreshResponse doesn't include user data
+      const userResult = await fetchCurrentUser();
+      if (userResult.success && userResult.data) {
+        currentUser = userResult.data;
+
+        return {
+          success: true,
+          data: {
+            accessToken: response.data.accessToken,
+            refreshToken: response.data.refreshToken,
+            expiresIn: response.data.expiresIn,
+            user: userResult.data,
+          },
+        };
+      }
+
+      // User fetch failed, but tokens are valid - use stored user ID to maintain session
+      // This shouldn't normally happen, but handle gracefully
       return {
-        success: true,
-        data: response.data,
+        success: false,
+        error: {
+          code: 'UNKNOWN_ERROR',
+          message: 'Failed to fetch user profile after token refresh.',
+        },
       };
     }
 

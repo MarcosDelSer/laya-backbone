@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { MessageThread, ThreadPreview } from '@/components/MessageThread';
-import { MessageComposer } from '@/components/MessageComposer';
+import { EnhancedMessageComposer } from '@/components/EnhancedMessageComposer';
 
 // Type definitions for messaging
 interface Message {
@@ -373,9 +373,10 @@ export default function MessagesPage() {
               />
 
               {/* Message composer */}
-              <MessageComposer
+              <EnhancedMessageComposer
                 onSendMessage={handleSendMessage}
                 placeholder="Type a message to the teacher..."
+                showQualityCoach
               />
             </>
           ) : (

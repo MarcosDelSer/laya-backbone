@@ -9,7 +9,7 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
-    document: Models for document e-signature domain
+    development_profile: Models for Quebec-aligned developmental tracking
 """
 
 from app.models.base import Base
@@ -38,16 +38,13 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
-from app.models.document import (
-    Document,
-    DocumentAuditEventType,
-    DocumentAuditLog,
-    DocumentStatus,
-    DocumentTemplate,
-    DocumentType,
-    Signature,
-    SignatureRequest,
-    SignatureRequestStatus,
+from app.models.development_profile import (
+    DevelopmentProfile,
+    DevelopmentalDomain,
+    MonthlySnapshot,
+    Observation,
+    SkillAssessment,
+    SkillStatus,
 )
 
 __all__ = [
@@ -73,14 +70,11 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
-    # Document models
-    "Document",
-    "DocumentAuditEventType",
-    "DocumentAuditLog",
-    "DocumentStatus",
-    "DocumentTemplate",
-    "DocumentType",
-    "Signature",
-    "SignatureRequest",
-    "SignatureRequestStatus",
+    # Development Profile models
+    "DevelopmentProfile",
+    "DevelopmentalDomain",
+    "SkillStatus",
+    "SkillAssessment",
+    "Observation",
+    "MonthlySnapshot",
 ]

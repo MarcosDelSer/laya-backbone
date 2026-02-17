@@ -91,6 +91,12 @@ if (!file_exists($dbConfigPath)) {
 
 require_once $dbConfigPath;
 
+// SECURITY NOTE: This API endpoint is called by mobile apps with app-level authentication.
+// The gibbonPersonID is passed in the request and validated against the authenticated user
+// at the app layer (e.g., JWT token validation in the parent-portal).
+// In a production environment with server-side session validation, this would extract the
+// user ID from a validated session or JWT token rather than accepting it as a parameter.
+
 try {
     // Connect to database
     $pdo = new PDO(

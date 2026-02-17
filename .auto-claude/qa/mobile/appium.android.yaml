@@ -1,0 +1,119 @@
+# Android Emulator Appium Capability Configuration
+# Used for LLM-driven mobile exploratory QA on Android emulators
+# Driver: UiAutomator2
+
+# Base capabilities for Android emulator testing
+capabilities:
+  # Platform identification
+  platformName: Android
+  automationName: UiAutomator2
+
+  # Device configuration (defaults for Pixel 6 emulator)
+  deviceName: Pixel_6_API_33
+  platformVersion: "13.0"
+
+  # Android Virtual Device settings
+  avd: Pixel_6_API_33
+  avdLaunchTimeout: 180000
+  avdReadyTimeout: 120000
+  avdArgs: -no-snapshot-load -no-audio -no-boot-anim
+
+  # App configuration (override per test session)
+  # Set via environment: ANDROID_APP_PATH, ANDROID_APP_PACKAGE, ANDROID_APP_ACTIVITY
+  appPackage: ${ANDROID_APP_PACKAGE:-com.laya.teacherapp}
+  appActivity: ${ANDROID_APP_ACTIVITY:-.MainActivity}
+  app: ${ANDROID_APP_PATH:-}
+
+  # Auto-grant runtime permissions
+  autoGrantPermissions: true
+
+  # Reset strategies
+  noReset: false
+  fullReset: false
+
+  # UiAutomator2 specific settings
+  uiautomator2ServerLaunchTimeout: 60000
+  uiautomator2ServerInstallTimeout: 60000
+  skipServerInstallation: false
+  skipDeviceInitialization: false
+
+  # Keyboard settings
+  unicodeKeyboard: true
+  resetKeyboard: true
+
+  # Timeouts (ms)
+  newCommandTimeout: 300
+  adbExecTimeout: 60000
+
+  # Element location strategy
+  ignoreUnimportantViews: true
+  disableAndroidWatchers: true
+
+  # Wait for app stability
+  appWaitForLaunch: true
+  appWaitDuration: 20000
+
+  # Locale settings (override as needed)
+  language: en
+  locale: US
+
+# Evidence collection settings
+evidence:
+  # Enable video recording
+  video:
+    enabled: true
+    timeLimit: 300
+    bitRate: 4000000
+    videoSize: 1280x720
+    forceRestart: true
+
+  # Screenshot capture on failures
+  screenshots:
+    enabled: true
+    onFailure: true
+    onStep: false
+
+  # Device log collection
+  logs:
+    enabled: true
+    filterSpecs:
+      - "*:E"
+      - "ReactNativeJS:*"
+      - "ReactNative:*"
+    clearOnStart: true
+
+# App profiles for different test targets
+profiles:
+  teacher-app:
+    appPackage: com.laya.teacherapp
+    appActivity: .MainActivity
+    appWaitActivity: .MainActivity
+
+  parent-app:
+    appPackage: com.laya.parentapp
+    appActivity: .MainActivity
+    appWaitActivity: .MainActivity
+
+# Emulator hardware profiles
+emulators:
+  # Default emulator for CI
+  default:
+    avd: Pixel_6_API_33
+    platformVersion: "13.0"
+
+  # Larger screen for tablet testing
+  tablet:
+    avd: Pixel_C_API_33
+    platformVersion: "13.0"
+
+  # Older API level for compatibility
+  legacy:
+    avd: Pixel_4_API_28
+    platformVersion: "9.0"
+
+# Retry configuration for flaky interactions
+retry:
+  maxAttempts: 3
+  delayMs: 1000
+  exponentialBackoff: true
+  backoffMultiplier: 1.5

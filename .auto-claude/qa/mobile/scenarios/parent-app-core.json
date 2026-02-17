@@ -1,0 +1,970 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "metadata": {
+    "name": "Parent App Core Scenarios",
+    "description": "LLM-driven exploratory test scenarios for the Parent App covering authentication, child progress monitoring, communication with teachers, and engagement workflows",
+    "version": "1.0.0",
+    "app": {
+      "bundleId": "com.laya.parentapp",
+      "packageName": "com.laya.parentapp",
+      "minVersion": "1.0.0"
+    },
+    "platforms": ["ios", "android"],
+    "tags": ["core", "smoke", "exploratory"]
+  },
+  "config": {
+    "defaultTimeout": 30000,
+    "waitAfterNavigation": 2000,
+    "delayAwareActions": {
+      "enabled": true,
+      "useExplicitWaits": true,
+      "captureEvidenceOnFailure": true
+    },
+    "retryOnFlake": {
+      "maxAttempts": 3,
+      "exponentialBackoff": true
+    }
+  },
+  "sharedElements": {
+    "loginEmail": {
+      "ios": { "strategy": "accessibilityId", "selector": "emailInput" },
+      "android": { "strategy": "id", "selector": "com.laya.parentapp:id/email_input" },
+      "description": "Email input field on login screen"
+    },
+    "loginPassword": {
+      "ios": { "strategy": "accessibilityId", "selector": "passwordInput" },
+      "android": { "strategy": "id", "selector": "com.laya.parentapp:id/password_input" },
+      "description": "Password input field on login screen"
+    },
+    "loginButton": {
+      "ios": { "strategy": "accessibilityId", "selector": "loginButton" },
+      "android": { "strategy": "id", "selector": "com.laya.parentapp:id/login_button" },
+      "description": "Login submit button"
+    },
+    "logoutButton": {
+      "ios": { "strategy": "accessibilityId", "selector": "logoutButton" },
+      "android": { "strategy": "id", "selector": "com.laya.parentapp:id/logout_button" },
+      "description": "Logout button in settings"
+    },
+    "dashboardHeader": {
+      "ios": { "strategy": "accessibilityId", "selector": "dashboardHeader" },
+      "android": { "strategy": "id", "selector": "com.laya.parentapp:id/dashboard_header" },
+      "description": "Dashboard header indicating successful login"
+    },
+    "errorMessage": {
+      "ios": { "strategy": "-ios predicate string", "selector": "type == 'XCUIElementTypeStaticText' AND name CONTAINS 'Error'" },
+      "android": { "strategy": "xpath", "selector": "//*[contains(@text, 'Error')]" },
+      "description": "Error message element for failed operations"
+    },
+    "loadingIndicator": {
+      "ios": { "strategy": "accessibilityId", "selector": "loadingIndicator" },
+      "android": { "strategy": "id", "selector": "com.laya.parentapp:id/loading_indicator" },
+      "description": "Loading spinner/indicator"
+    },
+    "childCard": {
+      "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[`name CONTAINS 'childCard'`]" },
+      "android": { "strategy": "xpath", "selector": "//android.widget.LinearLayout[contains(@resource-id, 'child_card')]" },
+      "description": "Child card element in the children list"
+    },
+    "progressSummary": {
+      "ios": { "strategy": "accessibilityId", "selector": "progressSummary" },
+      "android": { "strategy": "id", "selector": "com.laya.parentapp:id/progress_summary" },
+      "description": "Progress summary card on dashboard"
+    },
+    "notificationBadge": {
+      "ios": { "strategy": "accessibilityId", "selector": "notificationBadge" },
+      "android": { "strategy": "id", "selector": "com.laya.parentapp:id/notification_badge" },
+      "description": "Notification badge indicator"
+    }
+  },
+  "journeys": [
+    {
+      "id": "parent-login-happy-path",
+      "name": "Parent Login - Happy Path",
+      "description": "Standard login flow with valid credentials leading to parent dashboard",
+      "category": "authentication",
+      "priority": "critical",
+      "tags": ["login", "happy-path", "smoke"],
+      "preconditions": [
+        "App is freshly installed or logged out",
+        "Network connectivity is available",
+        "Valid test credentials exist"
+      ],
+      "testData": {
+        "validEmail": "${TEST_PARENT_EMAIL:-parent@laya.test}",
+        "validPassword": "${TEST_PARENT_PASSWORD:-TestPassword123!}"
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "loginEmail",
+          "description": "Wait for login screen to load",
+          "waitCondition": "visible",
+          "timeout": 30000
+        },
+        {
+          "id": "step-2",
+          "action": "typeText",
+          "target": "loginEmail",
+          "value": "${testData.validEmail}",
+          "description": "Enter email address",
+          "clearFirst": true
+        },
+        {
+          "id": "step-3",
+          "action": "typeText",
+          "target": "loginPassword",
+          "value": "${testData.validPassword}",
+          "description": "Enter password",
+          "clearFirst": true,
+          "hideKeyboardAfter": true
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "loginButton",
+          "description": "Tap login button"
+        },
+        {
+          "id": "step-5",
+          "action": "waitForElement",
+          "target": "dashboardHeader",
+          "description": "Verify dashboard loads after login",
+          "waitCondition": "visible",
+          "timeout": 45000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "User is logged in and sees the parent dashboard",
+          "verifyElement": "dashboardHeader"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog", "elementHierarchy"]
+      }
+    },
+    {
+      "id": "parent-login-invalid-credentials",
+      "name": "Parent Login - Invalid Credentials",
+      "description": "Login attempt with invalid credentials should show error",
+      "category": "authentication",
+      "priority": "high",
+      "tags": ["login", "unhappy-path", "error-handling"],
+      "preconditions": [
+        "App is on login screen",
+        "Network connectivity is available"
+      ],
+      "testData": {
+        "invalidEmail": "invalid@notreal.test",
+        "invalidPassword": "wrongpassword123"
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "loginEmail",
+          "description": "Wait for login screen",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-2",
+          "action": "typeText",
+          "target": "loginEmail",
+          "value": "${testData.invalidEmail}",
+          "description": "Enter invalid email",
+          "clearFirst": true
+        },
+        {
+          "id": "step-3",
+          "action": "typeText",
+          "target": "loginPassword",
+          "value": "${testData.invalidPassword}",
+          "description": "Enter invalid password",
+          "clearFirst": true,
+          "hideKeyboardAfter": true
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "loginButton",
+          "description": "Tap login button"
+        },
+        {
+          "id": "step-5",
+          "action": "waitForElement",
+          "target": "errorMessage",
+          "description": "Verify error message appears",
+          "waitCondition": "visible",
+          "timeout": 15000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Error message displayed indicating invalid credentials",
+          "verifyElement": "errorMessage"
+        },
+        "noNavigation": true
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog"]
+      }
+    },
+    {
+      "id": "parent-login-forgot-password",
+      "name": "Parent Login - Forgot Password Flow",
+      "description": "Test the forgot password/reset password flow",
+      "category": "authentication",
+      "priority": "medium",
+      "tags": ["login", "password-reset", "unhappy-path"],
+      "preconditions": [
+        "App is on login screen"
+      ],
+      "customElements": {
+        "forgotPasswordLink": {
+          "ios": { "strategy": "accessibilityId", "selector": "forgotPasswordLink" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/forgot_password_link" },
+          "description": "Forgot password link"
+        },
+        "resetEmailInput": {
+          "ios": { "strategy": "accessibilityId", "selector": "resetEmailInput" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/reset_email_input" },
+          "description": "Email input on reset password screen"
+        },
+        "sendResetButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "sendResetButton" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/send_reset_button" },
+          "description": "Send reset email button"
+        },
+        "resetSuccessMessage": {
+          "ios": { "strategy": "-ios predicate string", "selector": "type == 'XCUIElementTypeStaticText' AND (name CONTAINS 'sent' OR name CONTAINS 'email')" },
+          "android": { "strategy": "xpath", "selector": "//*[contains(@text, 'sent') or contains(@text, 'email')]" },
+          "description": "Reset email sent confirmation"
+        },
+        "backToLoginButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "backToLoginButton" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/back_to_login" },
+          "description": "Back to login button"
+        }
+      },
+      "testData": {
+        "resetEmail": "${TEST_PARENT_EMAIL:-parent@laya.test}"
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "loginEmail",
+          "description": "Ensure on login screen",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-2",
+          "action": "tap",
+          "target": "forgotPasswordLink",
+          "description": "Tap forgot password link"
+        },
+        {
+          "id": "step-3",
+          "action": "waitForElement",
+          "target": "resetEmailInput",
+          "description": "Wait for reset password screen",
+          "waitCondition": "visible",
+          "timeout": 15000
+        },
+        {
+          "id": "step-4",
+          "action": "typeText",
+          "target": "resetEmailInput",
+          "value": "${testData.resetEmail}",
+          "description": "Enter email for password reset",
+          "clearFirst": true
+        },
+        {
+          "id": "step-5",
+          "action": "tap",
+          "target": "sendResetButton",
+          "description": "Request password reset"
+        },
+        {
+          "id": "step-6",
+          "action": "waitForElement",
+          "target": "resetSuccessMessage",
+          "description": "Verify success message",
+          "waitCondition": "visible",
+          "timeout": 20000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Password reset email sent confirmation shown",
+          "verifyElement": "resetSuccessMessage"
+        }
+      }
+    },
+    {
+      "id": "parent-view-child-progress",
+      "name": "Parent View Child Progress",
+      "description": "Navigate to child's profile and view learning progress",
+      "category": "child-monitoring",
+      "priority": "critical",
+      "tags": ["children", "progress", "happy-path"],
+      "preconditions": [
+        "User is logged in as parent",
+        "Parent has at least one linked child"
+      ],
+      "customElements": {
+        "childrenNavItem": {
+          "ios": { "strategy": "accessibilityId", "selector": "childrenTab" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/nav_children" },
+          "description": "Children tab in navigation"
+        },
+        "childrenListContainer": {
+          "ios": { "strategy": "accessibilityId", "selector": "childrenListContainer" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/children_list" },
+          "description": "Container for children list"
+        },
+        "firstChildCard": {
+          "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[`name CONTAINS 'childCard'`][1]" },
+          "android": { "strategy": "xpath", "selector": "(//android.widget.LinearLayout[contains(@resource-id, 'child_card')])[1]" },
+          "description": "First child card in list"
+        },
+        "childProfileHeader": {
+          "ios": { "strategy": "accessibilityId", "selector": "childProfileHeader" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/child_profile_header" },
+          "description": "Child profile screen header"
+        },
+        "progressTab": {
+          "ios": { "strategy": "accessibilityId", "selector": "progressTab" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/progress_tab" },
+          "description": "Progress tab in child profile"
+        },
+        "progressChart": {
+          "ios": { "strategy": "accessibilityId", "selector": "progressChart" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/progress_chart" },
+          "description": "Progress visualization chart"
+        },
+        "weeklyProgressSummary": {
+          "ios": { "strategy": "accessibilityId", "selector": "weeklyProgressSummary" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/weekly_progress" },
+          "description": "Weekly progress summary section"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "dashboardHeader",
+          "description": "Verify on dashboard",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-2",
+          "action": "tap",
+          "target": "childrenNavItem",
+          "description": "Navigate to children section"
+        },
+        {
+          "id": "step-3",
+          "action": "waitAfterNavigation",
+          "description": "Wait for navigation to complete"
+        },
+        {
+          "id": "step-4",
+          "action": "waitForElement",
+          "target": "childrenListContainer",
+          "description": "Wait for children list to load",
+          "waitCondition": "visible",
+          "timeout": 30000
+        },
+        {
+          "id": "step-5",
+          "action": "tap",
+          "target": "firstChildCard",
+          "description": "Tap on first child card"
+        },
+        {
+          "id": "step-6",
+          "action": "waitAfterNavigation",
+          "description": "Wait for profile to load"
+        },
+        {
+          "id": "step-7",
+          "action": "waitForElement",
+          "target": "childProfileHeader",
+          "description": "Verify child profile loads",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-8",
+          "action": "tap",
+          "target": "progressTab",
+          "description": "Navigate to progress tab"
+        },
+        {
+          "id": "step-9",
+          "action": "waitForElement",
+          "target": "progressChart",
+          "description": "Wait for progress chart to load",
+          "waitCondition": "visible",
+          "timeout": 30000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Child progress chart is displayed",
+          "verifyElement": "progressChart"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog", "elementHierarchy"]
+      }
+    },
+    {
+      "id": "parent-view-child-activities",
+      "name": "Parent View Child Activities",
+      "description": "View assigned and completed activities for a child",
+      "category": "child-monitoring",
+      "priority": "high",
+      "tags": ["children", "activities", "happy-path"],
+      "preconditions": [
+        "User is logged in as parent",
+        "On child profile screen"
+      ],
+      "customElements": {
+        "activitiesTab": {
+          "ios": { "strategy": "accessibilityId", "selector": "activitiesTab" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/activities_tab" },
+          "description": "Activities tab in child profile"
+        },
+        "activitiesListContainer": {
+          "ios": { "strategy": "accessibilityId", "selector": "activitiesListContainer" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/activities_list" },
+          "description": "Container for activities list"
+        },
+        "activityCard": {
+          "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[`name CONTAINS 'activityCard'`]" },
+          "android": { "strategy": "xpath", "selector": "//android.widget.LinearLayout[contains(@resource-id, 'activity_card')]" },
+          "description": "Activity card element"
+        },
+        "completedFilter": {
+          "ios": { "strategy": "accessibilityId", "selector": "filterCompleted" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/filter_completed" },
+          "description": "Filter for completed activities"
+        },
+        "pendingFilter": {
+          "ios": { "strategy": "accessibilityId", "selector": "filterPending" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/filter_pending" },
+          "description": "Filter for pending activities"
+        },
+        "emptyActivitiesMessage": {
+          "ios": { "strategy": "accessibilityId", "selector": "noActivitiesMessage" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/empty_activities_text" },
+          "description": "Empty state message for no activities"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "childProfileHeader",
+          "description": "Verify on child profile",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-2",
+          "action": "tap",
+          "target": "activitiesTab",
+          "description": "Navigate to activities tab"
+        },
+        {
+          "id": "step-3",
+          "action": "waitForElement",
+          "target": "activitiesListContainer",
+          "description": "Wait for activities list to load",
+          "waitCondition": "visible",
+          "timeout": 30000
+        },
+        {
+          "id": "step-4",
+          "action": "verifyElementExists",
+          "target": "activityCard",
+          "orTarget": "emptyActivitiesMessage",
+          "description": "Verify activities are shown or empty state"
+        },
+        {
+          "id": "step-5",
+          "action": "tap",
+          "target": "completedFilter",
+          "description": "Filter by completed activities",
+          "optional": true
+        },
+        {
+          "id": "step-6",
+          "action": "waitForElement",
+          "target": "activitiesListContainer",
+          "description": "Wait for filtered list to update",
+          "waitCondition": "visible",
+          "timeout": 10000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Activities list or empty state is displayed",
+          "verifyElement": "activitiesListContainer"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog"]
+      }
+    },
+    {
+      "id": "parent-message-teacher",
+      "name": "Parent Message Teacher",
+      "description": "Send a message to child's teacher through the app",
+      "category": "communication",
+      "priority": "high",
+      "tags": ["messaging", "communication", "happy-path"],
+      "preconditions": [
+        "User is logged in as parent",
+        "Parent has at least one linked child with a teacher"
+      ],
+      "customElements": {
+        "messagesNavItem": {
+          "ios": { "strategy": "accessibilityId", "selector": "messagesTab" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/nav_messages" },
+          "description": "Messages tab in navigation"
+        },
+        "messagesListContainer": {
+          "ios": { "strategy": "accessibilityId", "selector": "messagesListContainer" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/messages_list" },
+          "description": "Container for messages/conversations list"
+        },
+        "newMessageButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "newMessageButton" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/new_message_fab" },
+          "description": "New message floating action button"
+        },
+        "teacherSelector": {
+          "ios": { "strategy": "accessibilityId", "selector": "teacherSelector" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/teacher_selector" },
+          "description": "Teacher selection dropdown"
+        },
+        "firstTeacherOption": {
+          "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[1]" },
+          "android": { "strategy": "xpath", "selector": "(//android.widget.LinearLayout[contains(@resource-id, 'teacher_option')])[1]" },
+          "description": "First teacher option in list"
+        },
+        "messageInput": {
+          "ios": { "strategy": "accessibilityId", "selector": "messageInput" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/message_input" },
+          "description": "Message text input field"
+        },
+        "sendButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "sendButton" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/send_button" },
+          "description": "Send message button"
+        },
+        "sentMessageBubble": {
+          "ios": { "strategy": "-ios predicate string", "selector": "type == 'XCUIElementTypeCell' AND name CONTAINS 'sentMessage'" },
+          "android": { "strategy": "xpath", "selector": "//android.widget.LinearLayout[contains(@resource-id, 'sent_message')]" },
+          "description": "Sent message bubble"
+        }
+      },
+      "testData": {
+        "messageText": "Hello, this is an automated test message from the LLM QA system."
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "tap",
+          "target": "messagesNavItem",
+          "description": "Navigate to messages section"
+        },
+        {
+          "id": "step-2",
+          "action": "waitAfterNavigation",
+          "description": "Wait for navigation"
+        },
+        {
+          "id": "step-3",
+          "action": "waitForElement",
+          "target": "messagesListContainer",
+          "description": "Wait for messages screen to load",
+          "waitCondition": "visible",
+          "timeout": 30000
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "newMessageButton",
+          "description": "Tap new message button"
+        },
+        {
+          "id": "step-5",
+          "action": "waitForElement",
+          "target": "teacherSelector",
+          "description": "Wait for new message screen",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-6",
+          "action": "tap",
+          "target": "teacherSelector",
+          "description": "Open teacher selection"
+        },
+        {
+          "id": "step-7",
+          "action": "tap",
+          "target": "firstTeacherOption",
+          "description": "Select first teacher"
+        },
+        {
+          "id": "step-8",
+          "action": "typeText",
+          "target": "messageInput",
+          "value": "${testData.messageText}",
+          "description": "Enter message text",
+          "clearFirst": true
+        },
+        {
+          "id": "step-9",
+          "action": "tap",
+          "target": "sendButton",
+          "description": "Send the message"
+        },
+        {
+          "id": "step-10",
+          "action": "waitForElement",
+          "target": "sentMessageBubble",
+          "description": "Verify message appears in conversation",
+          "waitCondition": "visible",
+          "timeout": 20000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Message is sent and appears in conversation",
+          "verifyElement": "sentMessageBubble"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog", "elementHierarchy"]
+      }
+    },
+    {
+      "id": "parent-view-notifications",
+      "name": "Parent View Notifications",
+      "description": "Access and view notification center",
+      "category": "notifications",
+      "priority": "medium",
+      "tags": ["notifications", "happy-path"],
+      "preconditions": [
+        "User is logged in as parent"
+      ],
+      "customElements": {
+        "notificationIcon": {
+          "ios": { "strategy": "accessibilityId", "selector": "notificationIcon" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/notification_icon" },
+          "description": "Notification bell icon"
+        },
+        "notificationsListContainer": {
+          "ios": { "strategy": "accessibilityId", "selector": "notificationsListContainer" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/notifications_list" },
+          "description": "Container for notifications list"
+        },
+        "notificationItem": {
+          "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[`name CONTAINS 'notificationItem'`]" },
+          "android": { "strategy": "xpath", "selector": "//android.widget.LinearLayout[contains(@resource-id, 'notification_item')]" },
+          "description": "Notification list item"
+        },
+        "emptyNotificationsMessage": {
+          "ios": { "strategy": "accessibilityId", "selector": "noNotificationsMessage" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/empty_notifications_text" },
+          "description": "Empty state message"
+        },
+        "markAllReadButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "markAllReadButton" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/mark_all_read" },
+          "description": "Mark all as read button"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "dashboardHeader",
+          "description": "Ensure on main screen",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-2",
+          "action": "tap",
+          "target": "notificationIcon",
+          "description": "Tap notification icon"
+        },
+        {
+          "id": "step-3",
+          "action": "waitAfterNavigation",
+          "description": "Wait for notifications to load"
+        },
+        {
+          "id": "step-4",
+          "action": "waitForElement",
+          "target": "notificationsListContainer",
+          "description": "Wait for notifications screen",
+          "waitCondition": "visible",
+          "timeout": 20000
+        },
+        {
+          "id": "step-5",
+          "action": "verifyElementExists",
+          "target": "notificationItem",
+          "orTarget": "emptyNotificationsMessage",
+          "description": "Verify notifications list or empty state"
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Notifications list or empty state is displayed",
+          "verifyElement": "notificationsListContainer"
+        }
+      }
+    },
+    {
+      "id": "parent-logout",
+      "name": "Parent Logout",
+      "description": "Navigate to settings and log out of the application",
+      "category": "authentication",
+      "priority": "high",
+      "tags": ["logout", "happy-path"],
+      "preconditions": [
+        "User is logged in as parent"
+      ],
+      "customElements": {
+        "settingsNavItem": {
+          "ios": { "strategy": "accessibilityId", "selector": "settingsTab" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/nav_settings" },
+          "description": "Settings tab in navigation"
+        },
+        "settingsHeader": {
+          "ios": { "strategy": "accessibilityId", "selector": "settingsHeader" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/settings_header" },
+          "description": "Settings screen header"
+        },
+        "confirmLogoutButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "confirmLogoutButton" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/confirm_logout" },
+          "description": "Confirm logout in dialog"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "tap",
+          "target": "settingsNavItem",
+          "description": "Navigate to settings"
+        },
+        {
+          "id": "step-2",
+          "action": "waitForElement",
+          "target": "settingsHeader",
+          "description": "Verify settings screen loads",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-3",
+          "action": "scrollToElement",
+          "target": "logoutButton",
+          "description": "Scroll to logout button",
+          "scrollDirection": "down",
+          "maxScrolls": 3
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "logoutButton",
+          "description": "Tap logout button"
+        },
+        {
+          "id": "step-5",
+          "action": "waitForElement",
+          "target": "confirmLogoutButton",
+          "description": "Wait for confirmation dialog",
+          "waitCondition": "visible",
+          "timeout": 5000
+        },
+        {
+          "id": "step-6",
+          "action": "tap",
+          "target": "confirmLogoutButton",
+          "description": "Confirm logout"
+        },
+        {
+          "id": "step-7",
+          "action": "waitForElement",
+          "target": "loginEmail",
+          "description": "Verify returned to login screen",
+          "waitCondition": "visible",
+          "timeout": 15000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "User is logged out and returned to login screen",
+          "verifyElement": "loginEmail"
+        }
+      }
+    },
+    {
+      "id": "parent-network-error-handling",
+      "name": "Parent Network Error Handling",
+      "description": "Verify app handles network errors gracefully",
+      "category": "error-handling",
+      "priority": "medium",
+      "tags": ["network", "error-handling", "unhappy-path"],
+      "preconditions": [
+        "User is logged in as parent",
+        "Network can be toggled (simulator/emulator capability)"
+      ],
+      "customElements": {
+        "retryButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "retryButton" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/retry_button" },
+          "description": "Retry button for failed requests"
+        },
+        "networkErrorMessage": {
+          "ios": { "strategy": "-ios predicate string", "selector": "type == 'XCUIElementTypeStaticText' AND (name CONTAINS 'network' OR name CONTAINS 'connection' OR name CONTAINS 'offline')" },
+          "android": { "strategy": "xpath", "selector": "//*[contains(@text, 'network') or contains(@text, 'connection') or contains(@text, 'offline')]" },
+          "description": "Network error message"
+        },
+        "offlineBanner": {
+          "ios": { "strategy": "accessibilityId", "selector": "offlineBanner" },
+          "android": { "strategy": "id", "selector": "com.laya.parentapp:id/offline_banner" },
+          "description": "Offline status banner"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "llmExplore",
+          "description": "LLM: Navigate to data-heavy screen and observe network handling",
+          "llmPrompt": "Navigate to a screen that loads data (children list, activities, or messages) and observe how the app handles potential network issues"
+        },
+        {
+          "id": "step-2",
+          "action": "verifyElementExists",
+          "target": "networkErrorMessage",
+          "orTarget": "retryButton",
+          "orTarget2": "offlineBanner",
+          "description": "Verify error handling UI if network fails",
+          "optional": true
+        },
+        {
+          "id": "step-3",
+          "action": "llmExplore",
+          "description": "LLM: Test recovery if possible",
+          "llmPrompt": "If a retry button or pull-to-refresh is available, test the recovery mechanism"
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "App shows appropriate error state or data loads successfully",
+          "acceptableStates": ["networkErrorMessage", "retryButton", "offlineBanner", "childrenListContainer", "dashboardHeader"]
+        }
+      },
+      "evidenceCollection": {
+        "always": ["screenshot", "deviceLog"]
+      }
+    },
+    {
+      "id": "parent-full-journey-smoke",
+      "name": "Parent Full Journey Smoke Test",
+      "description": "Complete end-to-end journey: login -> view children -> view progress -> view activities -> logout",
+      "category": "smoke-test",
+      "priority": "critical",
+      "tags": ["e2e", "smoke", "critical-path"],
+      "preconditions": [
+        "App is freshly installed or logged out",
+        "Valid test parent account exists",
+        "Test parent has linked children"
+      ],
+      "testData": {
+        "validEmail": "${TEST_PARENT_EMAIL:-parent@laya.test}",
+        "validPassword": "${TEST_PARENT_PASSWORD:-TestPassword123!}"
+      },
+      "composedOf": [
+        "parent-login-happy-path",
+        "parent-view-child-progress",
+        "parent-view-child-activities",
+        "parent-logout"
+      ],
+      "steps": [
+        {
+          "id": "composite-step",
+          "action": "runJourney",
+          "journeyId": "parent-login-happy-path",
+          "description": "Execute login journey"
+        },
+        {
+          "id": "composite-step-2",
+          "action": "runJourney",
+          "journeyId": "parent-view-child-progress",
+          "description": "Execute view progress journey"
+        },
+        {
+          "id": "composite-step-3",
+          "action": "runJourney",
+          "journeyId": "parent-view-child-activities",
+          "description": "Execute view activities journey"
+        },
+        {
+          "id": "composite-step-4",
+          "action": "runJourney",
+          "journeyId": "parent-logout",
+          "description": "Execute logout journey"
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Full journey completes successfully ending on login screen"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot", "video"],
+        "onFailure": ["screenshot", "video", "deviceLog", "elementHierarchy"]
+      }
+    }
+  ],
+  "llmExploratoryHints": {
+    "focusAreas": [
+      "Authentication edge cases (session expiry, biometric login)",
+      "Child progress data visualization and accuracy",
+      "Teacher communication workflows",
+      "Notification handling and deep links",
+      "Multi-child switching and data isolation",
+      "Offline mode and data caching",
+      "Pull-to-refresh functionality",
+      "Navigation consistency and back button behavior"
+    ],
+    "commonIssues": [
+      "Child progress data loading slowly on large datasets",
+      "Message threads not updating in real-time",
+      "Keyboard overlapping input fields on smaller screens",
+      "iOS simulator tap delays on buttons",
+      "Stale element references after switching children",
+      "Push notification handling when app is backgrounded"
+    ],
+    "explorationBoundaries": {
+      "maxDepth": 5,
+      "avoidScreens": ["payment", "subscription", "admin", "debug"],
+      "focusScreens": ["login", "dashboard", "children", "progress", "activities", "messages", "notifications", "settings"]
+    }
+  }
+}

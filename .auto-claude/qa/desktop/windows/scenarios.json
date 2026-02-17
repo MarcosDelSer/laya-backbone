@@ -1,0 +1,1109 @@
+{
+  "$schema": "./scenarios.schema.json",
+  "platform": "windows",
+  "app": {
+    "name": "LAYA Desktop",
+    "type": "electron",
+    "description": "Windows wrapper for parent-portal (childcare management for parents)"
+  },
+  "automation": {
+    "framework": "winappdriver",
+    "port": 4723,
+    "capabilities": {
+      "app": "LAYA Desktop",
+      "deviceName": "WindowsPC",
+      "platformName": "Windows"
+    }
+  },
+  "suites": {
+    "smoke": {
+      "description": "Critical path validation for Windows VM/emulator runs",
+      "timeout_seconds": 300,
+      "scenarios": [
+        {
+          "id": "smoke-001",
+          "name": "Application Launch",
+          "category": "launch",
+          "priority": "critical",
+          "steps": [
+            {
+              "action": "launch_app",
+              "description": "Launch LAYA Desktop application"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='app-container']",
+              "timeout_ms": 10000,
+              "description": "Wait for main application container to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "app_launched"
+            }
+          ],
+          "expected_outcomes": [
+            "Application window opens without crash",
+            "Login page or dashboard is displayed",
+            "No error dialogs appear"
+          ]
+        },
+        {
+          "id": "smoke-002",
+          "name": "Login with Valid Credentials",
+          "category": "authentication",
+          "priority": "critical",
+          "preconditions": ["Application is launched", "User is on login page"],
+          "steps": [
+            {
+              "action": "input_text",
+              "selector": "[data-testid='email-input']",
+              "value": "{{TEST_USER_EMAIL}}",
+              "description": "Enter test user email"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='password-input']",
+              "value": "{{TEST_USER_PASSWORD}}",
+              "description": "Enter test user password"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='login-button']",
+              "description": "Click login button"
+            },
+            {
+              "action": "wait_for_navigation",
+              "target": "/dashboard",
+              "timeout_ms": 15000,
+              "description": "Wait for dashboard redirect"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "login_success"
+            }
+          ],
+          "expected_outcomes": [
+            "User is redirected to dashboard",
+            "User name or welcome message is displayed",
+            "Navigation menu is visible"
+          ]
+        },
+        {
+          "id": "smoke-003",
+          "name": "View Daily Reports",
+          "category": "navigation",
+          "priority": "critical",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-daily-reports']",
+              "description": "Navigate to Daily Reports"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='daily-reports-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for daily reports to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "daily_reports_view"
+            }
+          ],
+          "expected_outcomes": [
+            "Daily reports page loads",
+            "Child activities are displayed",
+            "Date selector is functional"
+          ]
+        },
+        {
+          "id": "smoke-004",
+          "name": "Logout",
+          "category": "authentication",
+          "priority": "critical",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='user-menu']",
+              "description": "Open user menu"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='logout-button']",
+              "description": "Click logout button"
+            },
+            {
+              "action": "wait_for_navigation",
+              "target": "/auth/login",
+              "timeout_ms": 10000,
+              "description": "Wait for login page redirect"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "logout_success"
+            }
+          ],
+          "expected_outcomes": [
+            "User is redirected to login page",
+            "Session is cleared",
+            "Protected routes are no longer accessible"
+          ]
+        }
+      ]
+    },
+    "full": {
+      "description": "Comprehensive feature coverage for Windows desktop application",
+      "timeout_seconds": 600,
+      "scenarios": [
+        {
+          "id": "full-001",
+          "name": "Login with Invalid Credentials",
+          "category": "authentication",
+          "priority": "high",
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/auth/login",
+              "description": "Navigate to login page"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='email-input']",
+              "value": "invalid@example.com",
+              "description": "Enter invalid email"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='password-input']",
+              "value": "wrongpassword123",
+              "description": "Enter wrong password"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='login-button']",
+              "description": "Click login button"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='error-message']",
+              "timeout_ms": 5000,
+              "description": "Wait for error message"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "login_error"
+            }
+          ],
+          "expected_outcomes": [
+            "Error message is displayed",
+            "User remains on login page",
+            "Password field is cleared"
+          ]
+        },
+        {
+          "id": "full-002",
+          "name": "Forgot Password Flow",
+          "category": "authentication",
+          "priority": "high",
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/auth/login",
+              "description": "Navigate to login page"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='forgot-password-link']",
+              "description": "Click forgot password link"
+            },
+            {
+              "action": "wait_for_navigation",
+              "target": "/auth/forgot-password",
+              "timeout_ms": 5000,
+              "description": "Wait for forgot password page"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='email-input']",
+              "value": "{{TEST_USER_EMAIL}}",
+              "description": "Enter email address"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='submit-button']",
+              "description": "Submit forgot password request"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='success-message']",
+              "timeout_ms": 10000,
+              "description": "Wait for success confirmation"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "forgot_password_success"
+            }
+          ],
+          "expected_outcomes": [
+            "Success message is displayed",
+            "Instructions for password reset are shown",
+            "Return to login link is available"
+          ]
+        },
+        {
+          "id": "full-003",
+          "name": "Child Selector Navigation",
+          "category": "navigation",
+          "priority": "high",
+          "preconditions": ["User is logged in", "User has multiple children"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='child-selector']",
+              "description": "Open child selector dropdown"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='child-selector-options']",
+              "timeout_ms": 3000,
+              "description": "Wait for dropdown options"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "child_selector_open"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='child-option']:nth-child(2)",
+              "description": "Select second child"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='daily-reports-list']",
+              "timeout_ms": 5000,
+              "description": "Wait for content to update"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "child_switched"
+            }
+          ],
+          "expected_outcomes": [
+            "Child selector shows all enrolled children",
+            "Selecting a child updates displayed content",
+            "Selected child name is shown in header"
+          ]
+        },
+        {
+          "id": "full-004",
+          "name": "View Documents Section",
+          "category": "navigation",
+          "priority": "medium",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-documents']",
+              "description": "Navigate to Documents"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='documents-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for documents to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "documents_view"
+            }
+          ],
+          "expected_outcomes": [
+            "Documents page loads",
+            "Document list or empty state is displayed",
+            "Document cards show title and status"
+          ]
+        },
+        {
+          "id": "full-005",
+          "name": "View Government Documents",
+          "category": "navigation",
+          "priority": "medium",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-government-documents']",
+              "description": "Navigate to Government Documents"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='government-documents-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for government documents to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "government_documents_view"
+            }
+          ],
+          "expected_outcomes": [
+            "Government documents page loads",
+            "Document checklist is displayed",
+            "Upload functionality is available"
+          ]
+        },
+        {
+          "id": "full-006",
+          "name": "View Invoices",
+          "category": "navigation",
+          "priority": "medium",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-invoices']",
+              "description": "Navigate to Invoices"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='invoices-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for invoices to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "invoices_view"
+            }
+          ],
+          "expected_outcomes": [
+            "Invoices page loads",
+            "Invoice list or empty state is displayed",
+            "Payment status badges are shown"
+          ]
+        },
+        {
+          "id": "full-007",
+          "name": "View Messages",
+          "category": "navigation",
+          "priority": "medium",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-messages']",
+              "description": "Navigate to Messages"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='messages-container']",
+              "timeout_ms": 10000,
+              "description": "Wait for messages to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "messages_view"
+            }
+          ],
+          "expected_outcomes": [
+            "Messages page loads",
+            "Message threads or empty state is displayed",
+            "Compose button is available"
+          ]
+        },
+        {
+          "id": "full-008",
+          "name": "View Daily Report Details",
+          "category": "daily_reports",
+          "priority": "high",
+          "preconditions": ["User is logged in", "Daily reports exist"],
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/daily-reports",
+              "description": "Navigate to daily reports"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='daily-report-card']",
+              "timeout_ms": 10000,
+              "description": "Wait for report cards to load"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='daily-report-card']:first-child",
+              "description": "Click on first daily report"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='report-details']",
+              "timeout_ms": 5000,
+              "description": "Wait for report details"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "daily_report_details"
+            }
+          ],
+          "expected_outcomes": [
+            "Report details are displayed",
+            "Activities timeline is visible",
+            "Meal, nap, and activity entries are shown"
+          ]
+        },
+        {
+          "id": "full-009",
+          "name": "Photo Gallery Browsing",
+          "category": "daily_reports",
+          "priority": "medium",
+          "preconditions": ["User is logged in", "Photos exist in daily report"],
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/daily-reports",
+              "description": "Navigate to daily reports"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='photo-gallery']",
+              "timeout_ms": 10000,
+              "description": "Wait for photo gallery"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='photo-thumbnail']:first-child",
+              "description": "Click on first photo thumbnail"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='photo-lightbox']",
+              "timeout_ms": 5000,
+              "description": "Wait for photo lightbox"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "photo_lightbox"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='lightbox-close']",
+              "description": "Close lightbox"
+            }
+          ],
+          "expected_outcomes": [
+            "Photos are displayed in gallery",
+            "Clicking photo opens lightbox",
+            "Photo can be viewed full-size",
+            "Lightbox closes properly"
+          ]
+        },
+        {
+          "id": "full-010",
+          "name": "Notification Inbox",
+          "category": "notifications",
+          "priority": "medium",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='notification-bell']",
+              "description": "Click notification bell"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='notification-inbox']",
+              "timeout_ms": 5000,
+              "description": "Wait for notification inbox"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "notification_inbox"
+            }
+          ],
+          "expected_outcomes": [
+            "Notification inbox opens",
+            "Notifications are listed with timestamps",
+            "Unread count is accurate"
+          ]
+        },
+        {
+          "id": "full-011",
+          "name": "Document Signature Flow",
+          "category": "documents",
+          "priority": "high",
+          "preconditions": ["User is logged in", "Unsigned document exists"],
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/documents",
+              "description": "Navigate to documents"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='document-card'][data-status='pending']",
+              "description": "Click on pending document"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='signature-canvas']",
+              "timeout_ms": 5000,
+              "description": "Wait for signature canvas"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "document_signature_view"
+            }
+          ],
+          "expected_outcomes": [
+            "Document content is displayed",
+            "Signature canvas is available",
+            "Submit button is visible"
+          ]
+        },
+        {
+          "id": "full-012",
+          "name": "Window Resize Handling",
+          "category": "ui",
+          "priority": "low",
+          "preconditions": ["Application is running", "User is logged in"],
+          "steps": [
+            {
+              "action": "resize_window",
+              "width": 800,
+              "height": 600,
+              "description": "Resize to smaller window"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "window_small"
+            },
+            {
+              "action": "resize_window",
+              "width": 1920,
+              "height": 1080,
+              "description": "Resize to full HD"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "window_large"
+            }
+          ],
+          "expected_outcomes": [
+            "UI adapts to window size",
+            "Navigation remains accessible",
+            "Content is readable at all sizes"
+          ]
+        }
+      ]
+    },
+    "exploratory": {
+      "description": "Edge cases, error states, and unusual user journeys",
+      "timeout_seconds": 900,
+      "llm_guidance": {
+        "objective": "Discover unexpected behaviors and edge cases in the Windows desktop application",
+        "focus_areas": [
+          "Network disconnection handling",
+          "Session timeout behavior",
+          "Concurrent operations",
+          "Data edge cases",
+          "Accessibility compliance"
+        ]
+      },
+      "scenarios": [
+        {
+          "id": "exp-001",
+          "name": "Network Disconnection During Login",
+          "category": "error_handling",
+          "priority": "high",
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/auth/login",
+              "description": "Navigate to login page"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='email-input']",
+              "value": "{{TEST_USER_EMAIL}}",
+              "description": "Enter email"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='password-input']",
+              "value": "{{TEST_USER_PASSWORD}}",
+              "description": "Enter password"
+            },
+            {
+              "action": "simulate_network",
+              "state": "offline",
+              "description": "Disable network connectivity"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='login-button']",
+              "description": "Attempt login"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='network-error']",
+              "timeout_ms": 10000,
+              "description": "Wait for network error handling"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "network_error_login"
+            },
+            {
+              "action": "simulate_network",
+              "state": "online",
+              "description": "Restore network connectivity"
+            }
+          ],
+          "expected_outcomes": [
+            "Network error is displayed gracefully",
+            "Application does not crash",
+            "Retry option is available",
+            "App recovers when network returns"
+          ]
+        },
+        {
+          "id": "exp-002",
+          "name": "Session Timeout Handling",
+          "category": "error_handling",
+          "priority": "high",
+          "steps": [
+            {
+              "action": "login",
+              "email": "{{TEST_USER_EMAIL}}",
+              "password": "{{TEST_USER_PASSWORD}}",
+              "description": "Login with valid credentials"
+            },
+            {
+              "action": "invalidate_session",
+              "description": "Simulate session expiration"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-daily-reports']",
+              "description": "Attempt navigation requiring auth"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='session-expired-modal']",
+              "timeout_ms": 5000,
+              "description": "Wait for session expired handling"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "session_expired"
+            }
+          ],
+          "expected_outcomes": [
+            "Session expiration is handled gracefully",
+            "User is prompted to re-login",
+            "No sensitive data is exposed",
+            "User is redirected to login page"
+          ]
+        },
+        {
+          "id": "exp-003",
+          "name": "Empty State Displays",
+          "category": "ui",
+          "priority": "medium",
+          "preconditions": ["User is logged in", "Account has no data"],
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/daily-reports",
+              "description": "Navigate to daily reports"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='empty-state']",
+              "timeout_ms": 5000,
+              "description": "Wait for empty state"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "empty_daily_reports"
+            },
+            {
+              "action": "navigate",
+              "target": "/documents",
+              "description": "Navigate to documents"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='empty-state']",
+              "timeout_ms": 5000,
+              "description": "Wait for empty state"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "empty_documents"
+            },
+            {
+              "action": "navigate",
+              "target": "/invoices",
+              "description": "Navigate to invoices"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='empty-state']",
+              "timeout_ms": 5000,
+              "description": "Wait for empty state"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "empty_invoices"
+            }
+          ],
+          "expected_outcomes": [
+            "Empty states are user-friendly",
+            "Helpful messaging is displayed",
+            "No broken UI elements"
+          ]
+        },
+        {
+          "id": "exp-004",
+          "name": "Rapid Navigation Stress Test",
+          "category": "performance",
+          "priority": "medium",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-daily-reports']",
+              "description": "Navigate to daily reports"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-documents']",
+              "description": "Quickly navigate to documents"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-invoices']",
+              "description": "Quickly navigate to invoices"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-messages']",
+              "description": "Quickly navigate to messages"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-daily-reports']",
+              "description": "Return to daily reports"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='daily-reports-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for final page to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "rapid_navigation_end"
+            }
+          ],
+          "expected_outcomes": [
+            "Application handles rapid navigation",
+            "No visual glitches",
+            "Final page loads correctly",
+            "Memory usage remains stable"
+          ]
+        },
+        {
+          "id": "exp-005",
+          "name": "Long Content Scrolling",
+          "category": "ui",
+          "priority": "low",
+          "preconditions": ["User is logged in", "Account has many daily reports"],
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/daily-reports",
+              "description": "Navigate to daily reports"
+            },
+            {
+              "action": "scroll",
+              "direction": "down",
+              "distance": 5000,
+              "description": "Scroll down extensively"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "scrolled_content"
+            },
+            {
+              "action": "scroll",
+              "direction": "up",
+              "distance": 5000,
+              "description": "Scroll back to top"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "scrolled_back_to_top"
+            }
+          ],
+          "expected_outcomes": [
+            "Scrolling is smooth",
+            "Content loads as needed",
+            "Header remains accessible",
+            "Scroll position is accurate"
+          ]
+        },
+        {
+          "id": "exp-006",
+          "name": "Special Characters in Input Fields",
+          "category": "input_validation",
+          "priority": "medium",
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/messages",
+              "description": "Navigate to messages"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='compose-message']",
+              "description": "Open message composer"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='message-input']",
+              "value": "Test <script>alert('xss')</script> & special chars: '\"\u00e9\u00e0\u00fc",
+              "description": "Enter text with special characters"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "special_chars_input"
+            }
+          ],
+          "expected_outcomes": [
+            "Special characters are handled safely",
+            "No XSS vulnerabilities",
+            "Unicode characters display correctly",
+            "Input is sanitized appropriately"
+          ]
+        },
+        {
+          "id": "exp-007",
+          "name": "Keyboard Navigation",
+          "category": "accessibility",
+          "priority": "medium",
+          "preconditions": ["User is logged in"],
+          "steps": [
+            {
+              "action": "focus",
+              "selector": "body",
+              "description": "Focus on page body"
+            },
+            {
+              "action": "press_key",
+              "key": "Tab",
+              "repeat": 5,
+              "description": "Tab through focusable elements"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "keyboard_focus_1"
+            },
+            {
+              "action": "press_key",
+              "key": "Enter",
+              "description": "Activate focused element"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "keyboard_activated"
+            }
+          ],
+          "expected_outcomes": [
+            "Tab order is logical",
+            "Focus indicators are visible",
+            "All interactive elements are reachable",
+            "Enter activates buttons and links"
+          ]
+        },
+        {
+          "id": "exp-008",
+          "name": "Application Minimize and Restore",
+          "category": "window_management",
+          "priority": "low",
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/daily-reports",
+              "description": "Navigate to daily reports"
+            },
+            {
+              "action": "minimize_window",
+              "description": "Minimize application window"
+            },
+            {
+              "action": "wait",
+              "duration_ms": 2000,
+              "description": "Wait while minimized"
+            },
+            {
+              "action": "restore_window",
+              "description": "Restore application window"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "window_restored"
+            }
+          ],
+          "expected_outcomes": [
+            "Application restores correctly",
+            "UI state is preserved",
+            "No visual glitches",
+            "Content remains loaded"
+          ]
+        },
+        {
+          "id": "exp-009",
+          "name": "Multiple Login Attempts Lockout",
+          "category": "security",
+          "priority": "high",
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/auth/login",
+              "description": "Navigate to login page"
+            },
+            {
+              "action": "loop",
+              "count": 5,
+              "steps": [
+                {
+                  "action": "clear_input",
+                  "selector": "[data-testid='email-input']",
+                  "description": "Clear email field"
+                },
+                {
+                  "action": "input_text",
+                  "selector": "[data-testid='email-input']",
+                  "value": "test@example.com",
+                  "description": "Enter email"
+                },
+                {
+                  "action": "clear_input",
+                  "selector": "[data-testid='password-input']",
+                  "description": "Clear password field"
+                },
+                {
+                  "action": "input_text",
+                  "selector": "[data-testid='password-input']",
+                  "value": "wrongpassword",
+                  "description": "Enter wrong password"
+                },
+                {
+                  "action": "click",
+                  "selector": "[data-testid='login-button']",
+                  "description": "Attempt login"
+                },
+                {
+                  "action": "wait",
+                  "duration_ms": 1000,
+                  "description": "Wait between attempts"
+                }
+              ]
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "lockout_state"
+            }
+          ],
+          "expected_outcomes": [
+            "Account lockout triggers after threshold",
+            "Clear lockout message is displayed",
+            "Rate limiting is enforced",
+            "No password hints are revealed"
+          ]
+        },
+        {
+          "id": "exp-010",
+          "name": "Deep Link Navigation",
+          "category": "navigation",
+          "priority": "medium",
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/daily-reports?date=2026-01-15&child=12345",
+              "description": "Navigate with query parameters"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='daily-reports-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for filtered content"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "deep_link_result"
+            },
+            {
+              "action": "verify_element_text",
+              "selector": "[data-testid='selected-date']",
+              "contains": "January 15",
+              "description": "Verify date filter applied"
+            }
+          ],
+          "expected_outcomes": [
+            "Query parameters are respected",
+            "Content is filtered correctly",
+            "URL state is preserved",
+            "Browser back button works"
+          ]
+        }
+      ]
+    }
+  },
+  "test_data": {
+    "credentials": {
+      "valid_user": {
+        "email": "{{TEST_USER_EMAIL}}",
+        "password": "{{TEST_USER_PASSWORD}}"
+      },
+      "admin_user": {
+        "email": "{{TEST_ADMIN_EMAIL}}",
+        "password": "{{TEST_ADMIN_PASSWORD}}"
+      }
+    },
+    "children": {
+      "primary": {
+        "id": "{{TEST_CHILD_ID}}",
+        "name": "{{TEST_CHILD_NAME}}"
+      }
+    }
+  },
+  "evidence_capture": {
+    "screenshots": {
+      "on_failure": true,
+      "on_success": true,
+      "format": "png",
+      "directory": ".auto-claude/qa/runs/desktop/windows/{{timestamp}}/screenshots"
+    },
+    "logs": {
+      "console_logs": true,
+      "network_logs": true,
+      "directory": ".auto-claude/qa/runs/desktop/windows/{{timestamp}}/logs"
+    },
+    "video": {
+      "enabled": false,
+      "format": "mp4",
+      "directory": ".auto-claude/qa/runs/desktop/windows/{{timestamp}}/video"
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "created": "2026-02-16",
+    "last_updated": "2026-02-16",
+    "author": "auto-claude",
+    "target_app_version": ">=0.1.0"
+  }
+}

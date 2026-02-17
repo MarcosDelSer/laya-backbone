@@ -14,6 +14,7 @@ import {
   decodeToken,
   isTokenExpired,
   getUserFromToken,
+  getValidatedUserFromToken,
   createAuthHeaders,
   getRedirectAfterLogin,
   setRedirectAfterLogin,
@@ -390,6 +391,64 @@ describe('Token Management', () => {
 
       it('returns null for invalid token', () => {
         const user = getUserFromToken('invalid-token');
+        expect(user).toBeNull();
+      });
+    });
+
+    describe('getValidatedUserFromToken', () => {
+      it('returns user for valid non-expired token', () => {
+        const payload = {
+          sub: 'user-123',
+          email: 'test@example.com',
+          role: 'parent',
+          exp: Math.floor(Date.now() / 1000) + 3600, // Expires in 1 hour
+          iat: Math.floor(Date.now() / 1000),
+        };
+
+        const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64');
+        const token = `header.${encodedPayload}.signature`;
+
+        const user = getValidatedUserFromToken(token);
+        expect(user).toEqual({
+          id: 'user-123',
+          email: 'test@example.com',
+          role: 'parent',
+        });
+      });
+
+      it('returns null for expired token', () => {
+        const payload = {
+          sub: 'user-123',
+          email: 'test@example.com',
+          role: 'parent',
+          exp: Math.floor(Date.now() / 1000) - 3600, // Expired 1 hour ago
+          iat: Math.floor(Date.now() / 1000) - 7200,
+        };
+
+        const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64');
+        const token = `header.${encodedPayload}.signature`;
+
+        const user = getValidatedUserFromToken(token);
+        expect(user).toBeNull();
+      });
+
+      it('returns null for invalid token', () => {
+        const user = getValidatedUserFromToken('invalid-token');
+        expect(user).toBeNull();
+      });
+
+      it('returns null for token without exp claim', () => {
+        const payload = {
+          sub: 'user-123',
+          email: 'test@example.com',
+          role: 'parent',
+          iat: Math.floor(Date.now() / 1000),
+        };
+
+        const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64');
+        const token = `header.${encodedPayload}.signature`;
+
+        const user = getValidatedUserFromToken(token);
         expect(user).toBeNull();
       });
     });

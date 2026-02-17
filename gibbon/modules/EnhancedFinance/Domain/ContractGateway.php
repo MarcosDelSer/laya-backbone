@@ -41,10 +41,14 @@ class ContractGateway extends QueryableGateway
     private static $tableName = 'gibbonEnhancedFinanceContract';
     private static $primaryKey = 'gibbonEnhancedFinanceContractID';
 
-    private static $searchableColumns = ['contractName', 'description', 'notes'];
+    private static $searchableColumns = ['contractNumber', 'terms'];
 
     /**
      * Query contracts by school year with pagination and filtering.
+     *
+     * Contracts are filtered by date overlap with the school year:
+     * contract start date <= school year last day AND
+     * (contract end date is NULL OR contract end date >= school year first day)
      *
      * @param QueryCriteria $criteria
      * @param int $gibbonSchoolYearID
@@ -59,24 +63,26 @@ class ContractGateway extends QueryableGateway
                 'gibbonEnhancedFinanceContract.gibbonEnhancedFinanceContractID',
                 'gibbonEnhancedFinanceContract.gibbonPersonID',
                 'gibbonEnhancedFinanceContract.gibbonFamilyID',
-                'gibbonEnhancedFinanceContract.gibbonSchoolYearID',
-                'gibbonEnhancedFinanceContract.contractName',
-                'gibbonEnhancedFinanceContract.contractType',
+                'gibbonEnhancedFinanceContract.contractNumber',
                 'gibbonEnhancedFinanceContract.startDate',
                 'gibbonEnhancedFinanceContract.endDate',
-                'gibbonEnhancedFinanceContract.amount',
-                'gibbonEnhancedFinanceContract.billingFrequency',
+                'gibbonEnhancedFinanceContract.weeklyRate',
+                'gibbonEnhancedFinanceContract.daysPerWeek',
                 'gibbonEnhancedFinanceContract.status',
-                'gibbonEnhancedFinanceContract.notes',
+                'gibbonEnhancedFinanceContract.terms',
+                'gibbonEnhancedFinanceContract.signedAt',
                 'gibbonEnhancedFinanceContract.timestampCreated',
                 'gibbonPerson.surname AS childSurname',
                 'gibbonPerson.preferredName AS childPreferredName',
                 'gibbonFamily.name AS familyName',
-                "FIND_IN_SET(gibbonEnhancedFinanceContract.status, 'Active,Pending,Suspended,Cancelled,Expired') AS defaultSortOrder"
+                'gibbonSchoolYear.name AS schoolYearName',
+                "FIND_IN_SET(gibbonEnhancedFinanceContract.status, 'Active,Suspended,Terminated,Expired') AS defaultSortOrder"
             ])
             ->leftJoin('gibbonPerson', 'gibbonEnhancedFinanceContract.gibbonPersonID = gibbonPerson.gibbonPersonID')
             ->leftJoin('gibbonFamily', 'gibbonEnhancedFinanceContract.gibbonFamilyID = gibbonFamily.gibbonFamilyID')
-            ->where('gibbonEnhancedFinanceContract.gibbonSchoolYearID = :gibbonSchoolYearID')
+            ->innerJoin('gibbonSchoolYear', 'gibbonSchoolYear.gibbonSchoolYearID = :gibbonSchoolYearID')
+            ->where('gibbonEnhancedFinanceContract.startDate <= gibbonSchoolYear.lastDay')
+            ->where('(gibbonEnhancedFinanceContract.endDate IS NULL OR gibbonEnhancedFinanceContract.endDate >= gibbonSchoolYear.firstDay)')
             ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID);
 
         $criteria->addFilterRules($this->getFilterRules());
@@ -100,23 +106,20 @@ class ContractGateway extends QueryableGateway
                 'gibbonEnhancedFinanceContract.gibbonEnhancedFinanceContractID',
                 'gibbonEnhancedFinanceContract.gibbonPersonID',
                 'gibbonEnhancedFinanceContract.gibbonFamilyID',
-                'gibbonEnhancedFinanceContract.gibbonSchoolYearID',
-                'gibbonEnhancedFinanceContract.contractName',
-                'gibbonEnhancedFinanceContract.contractType',
+                'gibbonEnhancedFinanceContract.contractNumber',
                 'gibbonEnhancedFinanceContract.startDate',
                 'gibbonEnhancedFinanceContract.endDate',
-                'gibbonEnhancedFinanceContract.amount',
-                'gibbonEnhancedFinanceContract.billingFrequency',
+                'gibbonEnhancedFinanceContract.weeklyRate',
+                'gibbonEnhancedFinanceContract.daysPerWeek',
                 'gibbonEnhancedFinanceContract.status',
-                'gibbonEnhancedFinanceContract.notes',
+                'gibbonEnhancedFinanceContract.terms',
+                'gibbonEnhancedFinanceContract.signedAt',
                 'gibbonPerson.surname AS childSurname',
                 'gibbonPerson.preferredName AS childPreferredName',
-                'gibbonFamily.name AS familyName',
-                'gibbonSchoolYear.name AS schoolYearName'
+                'gibbonFamily.name AS familyName'
             ])
             ->leftJoin('gibbonPerson', 'gibbonEnhancedFinanceContract.gibbonPersonID = gibbonPerson.gibbonPersonID')
             ->leftJoin('gibbonFamily', 'gibbonEnhancedFinanceContract.gibbonFamilyID = gibbonFamily.gibbonFamilyID')
-            ->leftJoin('gibbonSchoolYear', 'gibbonEnhancedFinanceContract.gibbonSchoolYearID = gibbonSchoolYear.gibbonSchoolYearID')
             ->where('gibbonEnhancedFinanceContract.gibbonFamilyID = :gibbonFamilyID')
             ->bindValue('gibbonFamilyID', $gibbonFamilyID);
 
@@ -141,20 +144,17 @@ class ContractGateway extends QueryableGateway
                 'gibbonEnhancedFinanceContract.gibbonEnhancedFinanceContractID',
                 'gibbonEnhancedFinanceContract.gibbonPersonID',
                 'gibbonEnhancedFinanceContract.gibbonFamilyID',
-                'gibbonEnhancedFinanceContract.gibbonSchoolYearID',
-                'gibbonEnhancedFinanceContract.contractName',
-                'gibbonEnhancedFinanceContract.contractType',
+                'gibbonEnhancedFinanceContract.contractNumber',
                 'gibbonEnhancedFinanceContract.startDate',
                 'gibbonEnhancedFinanceContract.endDate',
-                'gibbonEnhancedFinanceContract.amount',
-                'gibbonEnhancedFinanceContract.billingFrequency',
+                'gibbonEnhancedFinanceContract.weeklyRate',
+                'gibbonEnhancedFinanceContract.daysPerWeek',
                 'gibbonEnhancedFinanceContract.status',
-                'gibbonEnhancedFinanceContract.notes',
-                'gibbonFamily.name AS familyName',
-                'gibbonSchoolYear.name AS schoolYearName'
+                'gibbonEnhancedFinanceContract.terms',
+                'gibbonEnhancedFinanceContract.signedAt',
+                'gibbonFamily.name AS familyName'
             ])
             ->leftJoin('gibbonFamily', 'gibbonEnhancedFinanceContract.gibbonFamilyID = gibbonFamily.gibbonFamilyID')
-            ->leftJoin('gibbonSchoolYear', 'gibbonEnhancedFinanceContract.gibbonSchoolYearID = gibbonSchoolYear.gibbonSchoolYearID')
             ->where('gibbonEnhancedFinanceContract.gibbonPersonID = :gibbonPersonID')
             ->bindValue('gibbonPersonID', $gibbonPersonID);
 
@@ -178,14 +178,15 @@ class ContractGateway extends QueryableGateway
                 gibbonPerson.preferredName AS childPreferredName,
                 gibbonPerson.dob AS childDOB,
                 gibbonFamily.name AS familyName,
-                gibbonSchoolYear.name AS schoolYearName,
                 createdBy.surname AS createdBySurname,
-                createdBy.preferredName AS createdByPreferredName
+                createdBy.preferredName AS createdByPreferredName,
+                signedBy.surname AS signedBySurname,
+                signedBy.preferredName AS signedByPreferredName
             FROM gibbonEnhancedFinanceContract
             LEFT JOIN gibbonPerson ON gibbonEnhancedFinanceContract.gibbonPersonID = gibbonPerson.gibbonPersonID
             LEFT JOIN gibbonFamily ON gibbonEnhancedFinanceContract.gibbonFamilyID = gibbonFamily.gibbonFamilyID
-            LEFT JOIN gibbonSchoolYear ON gibbonEnhancedFinanceContract.gibbonSchoolYearID = gibbonSchoolYear.gibbonSchoolYearID
             LEFT JOIN gibbonPerson AS createdBy ON gibbonEnhancedFinanceContract.createdByID = createdBy.gibbonPersonID
+            LEFT JOIN gibbonPerson AS signedBy ON gibbonEnhancedFinanceContract.signedByID = signedBy.gibbonPersonID
             WHERE gibbonEnhancedFinanceContract.gibbonEnhancedFinanceContractID = :gibbonEnhancedFinanceContractID";
 
         return $this->db()->selectOne($sql, $data);
@@ -242,10 +243,9 @@ class ContractGateway extends QueryableGateway
      * @param string $endDate
      * @return Result
      */
-    public function selectExpiringSoon($gibbonSchoolYearID, $startDate, $endDate)
+    public function selectExpiringSoon($startDate, $endDate)
     {
         $data = [
-            'gibbonSchoolYearID' => $gibbonSchoolYearID,
             'startDate' => $startDate,
             'endDate' => $endDate
         ];
@@ -258,8 +258,7 @@ class ContractGateway extends QueryableGateway
             FROM gibbonEnhancedFinanceContract
             LEFT JOIN gibbonPerson ON gibbonEnhancedFinanceContract.gibbonPersonID = gibbonPerson.gibbonPersonID
             LEFT JOIN gibbonFamily ON gibbonEnhancedFinanceContract.gibbonFamilyID = gibbonFamily.gibbonFamilyID
-            WHERE gibbonEnhancedFinanceContract.gibbonSchoolYearID = :gibbonSchoolYearID
-            AND gibbonEnhancedFinanceContract.status = 'Active'
+            WHERE gibbonEnhancedFinanceContract.status = 'Active'
             AND gibbonEnhancedFinanceContract.endDate BETWEEN :startDate AND :endDate
             ORDER BY gibbonEnhancedFinanceContract.endDate ASC";
 
@@ -267,29 +266,28 @@ class ContractGateway extends QueryableGateway
     }
 
     /**
-     * Get contract summary statistics for a school year.
+     * Get contract summary statistics.
      *
-     * @param int $gibbonSchoolYearID
+     * Returns aggregate statistics including total contracts, active count,
+     * suspended count, terminated count, expired count, and contracts needing renewal.
+     *
      * @return array
      */
-    public function selectContractSummaryByYear($gibbonSchoolYearID)
+    public function selectContractSummary()
     {
         $data = [
-            'gibbonSchoolYearID' => $gibbonSchoolYearID,
             'today' => date('Y-m-d')
         ];
         $sql = "SELECT
                 COUNT(*) AS totalContracts,
-                SUM(amount) AS totalValue,
+                SUM(weeklyRate) AS totalValue,
                 SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) AS activeCount,
-                SUM(CASE WHEN status = 'Active' THEN amount ELSE 0 END) AS activeValue,
-                SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pendingCount,
+                SUM(CASE WHEN status = 'Active' THEN weeklyRate ELSE 0 END) AS activeValue,
                 SUM(CASE WHEN status = 'Suspended' THEN 1 ELSE 0 END) AS suspendedCount,
-                SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelledCount,
+                SUM(CASE WHEN status = 'Terminated' THEN 1 ELSE 0 END) AS terminatedCount,
                 SUM(CASE WHEN status = 'Expired' THEN 1 ELSE 0 END) AS expiredCount,
                 SUM(CASE WHEN status = 'Active' AND endDate < :today THEN 1 ELSE 0 END) AS needsRenewalCount
-            FROM gibbonEnhancedFinanceContract
-            WHERE gibbonSchoolYearID = :gibbonSchoolYearID";
+            FROM gibbonEnhancedFinanceContract";
 
         return $this->db()->selectOne($sql, $data);
     }
@@ -310,7 +308,7 @@ class ContractGateway extends QueryableGateway
             'endDate' => $endDate
         ];
         $sql = "SELECT
-                SUM(amount) AS totalContracted,
+                SUM(weeklyRate) AS totalContracted,
                 COUNT(*) AS contractCount
             FROM gibbonEnhancedFinanceContract
             WHERE gibbonPersonID = :gibbonPersonID
@@ -388,18 +386,6 @@ class ContractGateway extends QueryableGateway
                 return $query
                     ->where('gibbonEnhancedFinanceContract.gibbonPersonID = :filterPersonID')
                     ->bindValue('filterPersonID', $gibbonPersonID);
-            },
-
-            'contractType' => function ($query, $contractType) {
-                return $query
-                    ->where('gibbonEnhancedFinanceContract.contractType = :contractType')
-                    ->bindValue('contractType', $contractType);
-            },
-
-            'billingFrequency' => function ($query, $billingFrequency) {
-                return $query
-                    ->where('gibbonEnhancedFinanceContract.billingFrequency = :billingFrequency')
-                    ->bindValue('billingFrequency', $billingFrequency);
             },
 
             'startDateFrom' => function ($query, $startDateFrom) {

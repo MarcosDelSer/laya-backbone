@@ -139,3 +139,43 @@ INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `val
 ++$count;
 $sql[$count][0] = '1.0.01';
 $sql[$count][1] = "";
+
+// v1.0.02 - Add RL-24 UUID-based table and email logging table
+++$count;
+$sql[$count][0] = '1.0.02';
+$sql[$count][1] = "
+CREATE TABLE IF NOT EXISTS `enhanced_finance_releve24` (
+    `id` CHAR(36) NOT NULL PRIMARY KEY COMMENT 'UUID primary key',
+    `gibbonPersonID` INT UNSIGNED NOT NULL COMMENT 'Child',
+    `gibbonFamilyID` INT UNSIGNED NOT NULL COMMENT 'Family/recipient',
+    `document_year` YEAR NOT NULL COMMENT 'Tax year for the document',
+    `total_eligible` DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'Total eligible childcare expenses',
+    `total_paid` DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'Total amounts paid',
+    `status` ENUM('Draft','Generated','Sent','Filed','Amended') NOT NULL DEFAULT 'Draft',
+    `generated_at` DATETIME NULL COMMENT 'When PDF was generated',
+    `sent_at` DATETIME NULL COMMENT 'When email was sent to recipient',
+    `created_by` INT UNSIGNED NOT NULL COMMENT 'Staff who created',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_person` (`gibbonPersonID`),
+    INDEX `idx_family` (`gibbonFamilyID`),
+    INDEX `idx_document_year` (`document_year`),
+    INDEX `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RL-24 documents with UUID primary key for PDF generation';end
+
+CREATE TABLE IF NOT EXISTS `enhanced_finance_email_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `releve24_id` CHAR(36) NOT NULL COMMENT 'UUID of the RL-24 document',
+    `recipient_email` VARCHAR(255) NOT NULL COMMENT 'Email address sent to',
+    `success` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=success, 0=failure',
+    `error_code` VARCHAR(50) NULL COMMENT 'Error code if failed',
+    `error_message` TEXT NULL COMMENT 'Error details if failed',
+    `ip_address` VARCHAR(45) NULL COMMENT 'IP address of sender',
+    `user_agent` VARCHAR(255) NULL COMMENT 'User agent string',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_releve24` (`releve24_id`),
+    INDEX `idx_recipient` (`recipient_email`),
+    INDEX `idx_success` (`success`),
+    INDEX `idx_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Email send log for RL-24 compliance tracking';end
+";

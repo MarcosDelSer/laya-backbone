@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import and_, cast, func, or_, select, String
+from sqlalchemy import and_, case, cast, func, or_, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import (
@@ -391,19 +391,31 @@ class DocumentService:
 
     async def update_document(
         self, document_id: UUID, update_data: DocumentUpdate
-    ) -> Optional[Document]:
+    ) -> Optional[Document | str]:
         """Update a document.
+
+        Signed documents are immutable and cannot be updated.
 
         Args:
             document_id: ID of the document to update.
             update_data: Fields to update.
 
         Returns:
-            Updated Document if found, None otherwise.
+            Updated Document if found and updatable.
+            None if document not found.
+            "immutable" string if document is signed and cannot be modified.
         """
         document = await self.get_document_by_id(document_id)
         if not document:
             return None
+
+        # Enforce immutability: signed documents cannot be modified
+        if document.status == DocumentStatus.SIGNED:
+            logger.warning(
+                f"Attempted to update signed document {document_id}. "
+                "Signed documents are immutable."
+            )
+            return "immutable"
 
         # Track old values for audit logging
         old_status = document.status
@@ -464,7 +476,8 @@ class DocumentService:
     ) -> Optional[Signature]:
         """Create a signature for a document.
 
-        Automatically updates document status to SIGNED.
+        Automatically updates document status to SIGNED and completes any
+        pending signature request for this document.
 
         Args:
             signature_data: Signature creation data.
@@ -511,6 +524,19 @@ class DocumentService:
             ip_address=signature.ip_address,
             user_agent=signature.device_info,
         )
+
+        # Complete any pending signature request for this document
+        signature_request = await self.get_signature_request_by_document(
+            signature_data.document_id
+        )
+        if signature_request and signature_request.status in (
+            SignatureRequestStatus.SENT,
+            SignatureRequestStatus.VIEWED,
+        ):
+            await self.complete_signature_request(
+                request_id=signature_request.id,
+                signature=signature,
+            )
 
         return signature
 
@@ -992,15 +1018,16 @@ class DocumentService:
         signatures_this_month = sig_month_result.scalar() or 0
 
         # Get breakdown by document type with status counts
+        # Use case() for correct SQL conditional aggregation
         type_query = (
             select(
                 Document.type,
                 func.count(Document.id).label("total"),
                 func.sum(
-                    cast(Document.status == DocumentStatus.PENDING, String).cast(func.Integer())
+                    case((Document.status == DocumentStatus.PENDING, 1), else_=0)
                 ).label("pending"),
                 func.sum(
-                    cast(Document.status == DocumentStatus.SIGNED, String).cast(func.Integer())
+                    case((Document.status == DocumentStatus.SIGNED, 1), else_=0)
                 ).label("signed"),
             )
             .group_by(Document.type)
