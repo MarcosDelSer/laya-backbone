@@ -916,9 +916,24 @@ class InterventionPlanService:
         Returns:
             Dictionary representation of the plan
         """
+        # Get the most recent version to track lineage
+        parent_version_id = None
+        version_query = (
+            select(InterventionVersion)
+            .where(InterventionVersion.plan_id == plan.id)
+            .order_by(InterventionVersion.version_number.desc())
+            .limit(1)
+        )
+        version_result = await self.db.execute(version_query)
+        latest_version = version_result.scalar_one_or_none()
+        if latest_version:
+            parent_version_id = str(latest_version.id)
+
         return {
             "id": str(plan.id),
             "child_id": str(plan.child_id),
+            "created_by": str(plan.created_by) if plan.created_by else None,
+            "parent_version_id": parent_version_id,
             "title": plan.title,
             "status": plan.status,
             "version": plan.version,
