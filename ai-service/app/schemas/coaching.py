@@ -12,7 +12,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.schemas.base import BaseResponse, BaseSchema, PaginatedResponse
+from app.schemas.base import BaseResponse, BaseSchema
+from app.schemas.pagination import PaginatedResponse
 
 
 class SpecialNeedType(str, Enum):
@@ -319,14 +320,17 @@ class CoachingGuidanceResponse(BaseSchema):
     )
 
 
-class CoachingListResponse(PaginatedResponse):
+class CoachingListResponse(PaginatedResponse[CoachingResponse]):
     """Paginated list of coaching guidance.
+
+    Provides standardized pagination metadata with coaching items.
 
     Attributes:
         items: List of coaching guidance items
+        total: Total number of coaching items matching the query
+        page: Current page number (1-indexed)
+        per_page: Number of items per page
+        total_pages: Total number of pages
     """
 
-    items: list[CoachingResponse] = Field(
-        ...,
-        description="List of coaching guidance items",
-    )
+    pass
