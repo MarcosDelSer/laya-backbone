@@ -2370,3 +2370,211 @@ async def test_snapshot_timestamps_accurate(
     assert version.created_at != initial_creation_time, (
         "Version timestamp should not match original plan creation time"
     )
+
+
+@pytest.mark.asyncio
+async def test_large_plan_snapshot(
+    mock_db_session: AsyncMock,
+    mock_plan_id: UUID,
+    mock_child_id: UUID,
+    mock_user_id: UUID,
+) -> None:
+    """Test that _create_plan_snapshot handles large plans with 50+ related entities.
+
+    Verifies that the snapshot correctly captures all entities in a plan
+    with many related records across all 8 sections. This tests the
+    snapshot functionality at scale to ensure no entities are lost.
+    """
+    # Create a mock plan with many related entities across all 8 sections
+    plan = MagicMock()
+    plan.id = mock_plan_id
+    plan.child_id = mock_child_id
+    plan.created_by = mock_user_id
+    plan.title = "Large Comprehensive Plan"
+    plan.status = "draft"
+    plan.version = 1
+    plan.child_name = "Test Child"
+    plan.date_of_birth = date(2020, 1, 1)
+    plan.diagnosis = ["autism", "adhd"]
+    plan.medical_history = "Extensive medical history"
+    plan.educational_history = "Detailed education background"
+    plan.family_context = "Complex family situation"
+    plan.review_schedule = "monthly"
+    plan.next_review_date = date.today() + timedelta(days=30)
+    plan.effective_date = date.today()
+    plan.end_date = None
+    plan.parent_signed = False
+    plan.created_at = datetime.utcnow()
+    plan.updated_at = datetime.utcnow()
+
+    # Create 10 strengths
+    strengths = []
+    for i in range(10):
+        mock_strength = MagicMock()
+        mock_strength.id = uuid4()
+        mock_strength.category = ["cognitive", "social", "physical", "emotional", "communication"][i % 5]
+        mock_strength.description = f"Test strength {i + 1}"
+        mock_strength.examples = f"Example {i + 1}"
+        mock_strength.order = i
+        strengths.append(mock_strength)
+
+    # Create 10 needs
+    needs = []
+    for i in range(10):
+        mock_need = MagicMock()
+        mock_need.id = uuid4()
+        mock_need.category = ["communication", "behavior", "academic", "sensory", "motor"][i % 5]
+        mock_need.description = f"Test need {i + 1}"
+        mock_need.priority = ["low", "medium", "high", "critical"][i % 4]
+        mock_need.baseline = f"Baseline {i + 1}"
+        mock_need.order = i
+        needs.append(mock_need)
+
+    # Create 10 goals
+    goals = []
+    for i in range(10):
+        mock_goal = MagicMock()
+        mock_goal.id = uuid4()
+        mock_goal.need_id = needs[i].id
+        mock_goal.title = f"Test goal {i + 1}"
+        mock_goal.description = f"Goal description {i + 1}"
+        mock_goal.measurement_criteria = f"Criteria {i + 1}"
+        mock_goal.measurement_baseline = str(i)
+        mock_goal.measurement_target = str(i + 10)
+        mock_goal.achievability_notes = f"Achievability {i + 1}"
+        mock_goal.relevance_notes = f"Relevance {i + 1}"
+        mock_goal.target_date = date.today() + timedelta(days=30 * (i + 1))
+        mock_goal.status = ["not_started", "in_progress", "achieved"][i % 3]
+        mock_goal.progress_percentage = float(i * 10)
+        mock_goal.order = i
+        goals.append(mock_goal)
+
+    # Create 10 strategies
+    strategies = []
+    for i in range(10):
+        mock_strategy = MagicMock()
+        mock_strategy.id = uuid4()
+        mock_strategy.goal_id = goals[i].id
+        mock_strategy.title = f"Test strategy {i + 1}"
+        mock_strategy.description = f"Strategy description {i + 1}"
+        mock_strategy.responsible_party = ["educator", "parent", "therapist", "team"][i % 4]
+        mock_strategy.frequency = f"Frequency {i + 1}"
+        mock_strategy.materials_needed = f"Materials {i + 1}"
+        mock_strategy.accommodations = f"Accommodations {i + 1}"
+        mock_strategy.order = i
+        strategies.append(mock_strategy)
+
+    # Create 5 monitoring records
+    monitoring = []
+    for i in range(5):
+        mock_monitoring = MagicMock()
+        mock_monitoring.id = uuid4()
+        mock_monitoring.goal_id = goals[i].id
+        mock_monitoring.method = ["observation", "assessment", "data_collection"][i % 3]
+        mock_monitoring.description = f"Monitoring description {i + 1}"
+        mock_monitoring.frequency = f"Frequency {i + 1}"
+        mock_monitoring.responsible_party = ["educator", "parent", "therapist"][i % 3]
+        mock_monitoring.data_collection_tools = f"Tools {i + 1}"
+        mock_monitoring.success_indicators = f"Indicators {i + 1}"
+        mock_monitoring.order = i
+        monitoring.append(mock_monitoring)
+
+    # Create 5 parent involvement records
+    parent_involvements = []
+    for i in range(5):
+        mock_parent_involvement = MagicMock()
+        mock_parent_involvement.id = uuid4()
+        mock_parent_involvement.activity_type = ["home_activity", "communication", "training"][i % 3]
+        mock_parent_involvement.title = f"Parent involvement {i + 1}"
+        mock_parent_involvement.description = f"Involvement description {i + 1}"
+        mock_parent_involvement.frequency = f"Frequency {i + 1}"
+        mock_parent_involvement.resources_provided = f"Resources {i + 1}"
+        mock_parent_involvement.communication_method = f"Method {i + 1}"
+        mock_parent_involvement.order = i
+        parent_involvements.append(mock_parent_involvement)
+
+    # Create 5 consultations
+    consultations = []
+    for i in range(5):
+        mock_consultation = MagicMock()
+        mock_consultation.id = uuid4()
+        mock_consultation.specialist_type = ["speech_therapist", "occupational_therapist", "psychologist"][i % 3]
+        mock_consultation.specialist_name = f"Dr. Specialist {i + 1}"
+        mock_consultation.organization = f"Organization {i + 1}"
+        mock_consultation.purpose = f"Purpose {i + 1}"
+        mock_consultation.recommendations = f"Recommendations {i + 1}"
+        mock_consultation.consultation_date = date.today() - timedelta(days=i * 7)
+        mock_consultation.next_consultation_date = date.today() + timedelta(days=(i + 1) * 7)
+        mock_consultation.notes = f"Notes {i + 1}"
+        mock_consultation.order = i
+        consultations.append(mock_consultation)
+
+    # Set the sections on the plan
+    plan.strengths = strengths
+    plan.needs = needs
+    plan.goals = goals
+    plan.strategies = strategies
+    plan.monitoring = monitoring
+    plan.parent_involvements = parent_involvements
+    plan.consultations = consultations
+
+    # Total entities: 10 + 10 + 10 + 10 + 5 + 5 + 5 = 55 entities
+
+    # Mock the version query to return None (no parent version)
+    mock_version_result = MagicMock()
+    mock_version_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = mock_version_result
+
+    # Create the service and generate snapshot
+    service = InterventionPlanService(mock_db_session)
+    snapshot = await service._create_plan_snapshot(plan)
+
+    # Verify created_by is present
+    assert "created_by" in snapshot, "Snapshot must include created_by field"
+    assert snapshot["created_by"] == str(mock_user_id), "created_by should match user ID"
+
+    # Verify parent_version_id is present
+    assert "parent_version_id" in snapshot, "Snapshot must include parent_version_id field"
+
+    # Verify all sections are present and contain the correct number of entities
+    assert "strengths" in snapshot, "Snapshot must include strengths"
+    assert len(snapshot["strengths"]) == 10, "Should capture all 10 strengths"
+
+    assert "needs" in snapshot, "Snapshot must include needs"
+    assert len(snapshot["needs"]) == 10, "Should capture all 10 needs"
+
+    assert "goals" in snapshot, "Snapshot must include goals"
+    assert len(snapshot["goals"]) == 10, "Should capture all 10 goals"
+
+    assert "strategies" in snapshot, "Snapshot must include strategies"
+    assert len(snapshot["strategies"]) == 10, "Should capture all 10 strategies"
+
+    assert "monitoring" in snapshot, "Snapshot must include monitoring"
+    assert len(snapshot["monitoring"]) == 5, "Should capture all 5 monitoring records"
+
+    assert "parent_involvements" in snapshot, "Snapshot must include parent_involvements"
+    assert len(snapshot["parent_involvements"]) == 5, "Should capture all 5 parent involvements"
+
+    assert "consultations" in snapshot, "Snapshot must include consultations"
+    assert len(snapshot["consultations"]) == 5, "Should capture all 5 consultations"
+
+    # Verify total entity count
+    total_entities = (
+        len(snapshot["strengths"]) +
+        len(snapshot["needs"]) +
+        len(snapshot["goals"]) +
+        len(snapshot["strategies"]) +
+        len(snapshot["monitoring"]) +
+        len(snapshot["parent_involvements"]) +
+        len(snapshot["consultations"])
+    )
+    assert total_entities == 55, "Should capture all 55 related entities"
+
+    # Verify a sample entity from each section has correct data
+    assert snapshot["strengths"][0]["description"] == "Test strength 1"
+    assert snapshot["needs"][0]["description"] == "Test need 1"
+    assert snapshot["goals"][0]["title"] == "Test goal 1"
+    assert snapshot["strategies"][0]["title"] == "Test strategy 1"
+    assert snapshot["monitoring"][0]["description"] == "Monitoring description 1"
+    assert snapshot["parent_involvements"][0]["title"] == "Parent involvement 1"
+    assert snapshot["consultations"][0]["specialist_name"] == "Dr. Specialist 1"
