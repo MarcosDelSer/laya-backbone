@@ -11,10 +11,52 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi import HTTPException
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.blacklist import TokenBlacklistService
 from app.auth.jwt import create_token, decode_token
+from app.auth.models import User, UserRole
+from app.core.security import hash_password
+
+
+# ============================================================================
+# Fixtures for integration testing
+# ============================================================================
+
+
+@pytest_asyncio.fixture
+async def test_user(db_session: AsyncSession) -> User:
+    """Create a test user for authentication tests.
+
+    Creates an active teacher user with known credentials for testing login,
+    token refresh, and other auth operations.
+
+    Args:
+        db_session: Test database session
+
+    Returns:
+        User: Created test user with credentials:
+            - email: teacher@example.com
+            - password: TestPassword123!
+            - role: teacher
+            - is_active: True
+    """
+    user = User(
+        id=uuid4(),
+        email="teacher@example.com",
+        password_hash=hash_password("TestPassword123!"),
+        first_name="Test",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
 
 
 # ============================================================================
@@ -526,3 +568,113 @@ class TestBlacklistEdgeCases:
             await service.add_token_to_blacklist(token)
 
         assert "Redis connection failed" in str(exc_info.value)
+
+
+# ============================================================================
+# Integration Tests for Logout Flow
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_logout_blacklists_token(
+    client: AsyncClient, test_user: User, db_session: AsyncSession
+) -> None:
+    """Test that logout properly blacklists tokens.
+
+    This integration test verifies the complete logout flow:
+    1. User logs in and receives access and refresh tokens
+    2. Both tokens work for authentication BEFORE logout
+    3. User logs out with both tokens
+    4. Tokens are added to the blacklist database
+    5. Tokens are rejected when used AFTER logout
+    6. Error message indicates token has been revoked
+
+    This ensures that logout provides true session termination and prevents
+    token reuse attacks.
+    """
+    # Step 1: Login to get valid tokens
+    login_response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "teacher@example.com",
+            "password": "TestPassword123!",
+        },
+    )
+
+    assert login_response.status_code == 200, f"Login failed with status {login_response.status_code}: {login_response.text}"
+    login_data = login_response.json()
+    access_token = login_data["access_token"]
+    refresh_token = login_data["refresh_token"]
+
+    # Step 2: Verify access token works BEFORE logout
+    protected_response = await client.post(
+        "/protected",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert protected_response.status_code == 200, "Access token should work before logout"
+
+    # Step 3: Verify refresh token works BEFORE logout
+    refresh_response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert refresh_response.status_code == 200, "Refresh token should work before logout"
+
+    # Step 4: Logout with both tokens
+    logout_response = await client.post(
+        "/api/v1/auth/logout",
+        json={
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        },
+    )
+
+    assert logout_response.status_code == 200
+    logout_data = logout_response.json()
+
+    # Verify logout response structure
+    assert "message" in logout_data
+    assert "tokens_invalidated" in logout_data
+    assert logout_data["message"] == "Successfully logged out"
+    assert logout_data["tokens_invalidated"] == 2
+
+    # Step 5: Verify tokens were added to the blacklist database
+    from sqlalchemy import text
+
+    # Check access token is in blacklist
+    result = await db_session.execute(
+        text("SELECT COUNT(*) as count FROM token_blacklist WHERE token = :token"),
+        {"token": access_token}
+    )
+    count_row = result.fetchone()
+    assert count_row[0] == 1, "Access token should be in blacklist database"
+
+    # Check refresh token is in blacklist
+    result = await db_session.execute(
+        text("SELECT COUNT(*) as count FROM token_blacklist WHERE token = :token"),
+        {"token": refresh_token}
+    )
+    count_row = result.fetchone()
+    assert count_row[0] == 1, "Refresh token should be in blacklist database"
+
+    # Step 6: Verify access token is REJECTED after logout
+    rejected_access_response = await client.get(
+        "/protected",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert rejected_access_response.status_code == 401, "Blacklisted access token must be rejected with 401"
+    rejected_access_data = rejected_access_response.json()
+    assert "detail" in rejected_access_data
+    assert "revoked" in rejected_access_data["detail"].lower(), \
+        f"Error should mention token revocation, got: {rejected_access_data['detail']}"
+
+    # Step 7: Verify refresh token is REJECTED after logout
+    rejected_refresh_response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert rejected_refresh_response.status_code == 401, "Blacklisted refresh token must be rejected with 401"
+    rejected_refresh_data = rejected_refresh_response.json()
+    assert "detail" in rejected_refresh_data
+    assert "revoked" in rejected_refresh_data["detail"].lower(), \
+        f"Error should mention token revocation, got: {rejected_refresh_data['detail']}"

@@ -91,6 +91,54 @@ TestAsyncSessionLocal = sessionmaker(
 pytest_plugins = ("pytest_asyncio",)
 
 
+# SQLite-compatible auth tables (converted from PostgreSQL)
+SQLITE_CREATE_AUTH_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS ix_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS ix_users_is_active ON users(is_active);
+
+CREATE TABLE IF NOT EXISTS token_blacklist (
+    id TEXT PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    blacklisted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_token_blacklist_token ON token_blacklist(token);
+CREATE INDEX IF NOT EXISTS ix_token_blacklist_user_id ON token_blacklist(user_id);
+CREATE INDEX IF NOT EXISTS ix_token_blacklist_expires_at ON token_blacklist(expires_at);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id TEXT PRIMARY KEY,
+    token TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    is_used INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_email ON password_reset_tokens(email);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_is_used ON password_reset_tokens(is_used);
+CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
+"""
+
+
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -359,6 +407,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     Yields:
         AsyncSession: Async database session for testing.
     """
+    # Create auth tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_AUTH_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     # Create coaching tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
         for statement in SQLITE_CREATE_COACHING_TABLES_SQL.strip().split(';'):
