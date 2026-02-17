@@ -3,7 +3,7 @@
   "spec": "201-critical-auth-security-fixes",
   "state": "building",
   "subtasks": {
-    "completed": 10,
+    "completed": 11,
     "total": 15,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 12,
+    "number": 13,
     "started_at": "2026-02-17T16:28:00.299620"
   },
-  "last_update": "2026-02-17T17:09:29.868948"
+  "last_update": "2026-02-17T17:12:25.924663"
 }
