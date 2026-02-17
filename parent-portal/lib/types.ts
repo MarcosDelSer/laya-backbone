@@ -410,3 +410,198 @@ export interface ApiErrorResponse {
   detail: string;
   statusCode?: number;
 }
+
+// ============================================================================
+// Medical Types
+// ============================================================================
+
+/**
+ * Type of allergen.
+ */
+export type AllergenType =
+  | 'food'
+  | 'medication'
+  | 'environmental'
+  | 'insect'
+  | 'contact'
+  | 'other';
+
+/**
+ * Allergy severity levels.
+ */
+export type AllergySeverity = 'mild' | 'moderate' | 'severe' | 'life_threatening';
+
+/**
+ * Type of medication.
+ */
+export type MedicationType =
+  | 'prescription'
+  | 'over_the_counter'
+  | 'supplement'
+  | 'other';
+
+/**
+ * Route of medication administration.
+ */
+export type MedicationRoute =
+  | 'oral'
+  | 'topical'
+  | 'injection'
+  | 'inhalation'
+  | 'drops'
+  | 'other';
+
+/**
+ * Who administers the medication.
+ */
+export type AdministeredBy = 'staff' | 'nurse' | 'self';
+
+/**
+ * Type of accommodation plan.
+ */
+export type AccommodationPlanType =
+  | 'health_plan'
+  | 'emergency_plan'
+  | 'dietary_plan'
+  | 'behavioral_plan'
+  | 'other';
+
+/**
+ * Status of an accommodation plan.
+ */
+export type AccommodationPlanStatus = 'draft' | 'pending_approval' | 'approved' | 'expired';
+
+/**
+ * Type of medical alert.
+ */
+export type AlertType =
+  | 'allergy'
+  | 'medication'
+  | 'condition'
+  | 'dietary'
+  | 'emergency'
+  | 'general';
+
+/**
+ * Severity level of medical alert.
+ */
+export type AlertLevel = 'info' | 'warning' | 'critical';
+
+/**
+ * Allergy information for a child.
+ */
+export interface AllergyInfo {
+  id: string;
+  childId: string;
+  allergenName: string;
+  allergenType: AllergenType;
+  severity: AllergySeverity;
+  reaction?: string;
+  treatment?: string;
+  epiPenRequired: boolean;
+  epiPenLocation?: string;
+  diagnosedDate?: string;
+  diagnosedBy?: string;
+  notes?: string;
+  isVerified: boolean;
+  verifiedById?: string;
+  verifiedDate?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Medication information for a child.
+ */
+export interface MedicationInfo {
+  id: string;
+  childId: string;
+  medicationName: string;
+  medicationType: MedicationType;
+  dosage: string;
+  frequency: string;
+  route: MedicationRoute;
+  prescribedBy?: string;
+  prescriptionDate?: string;
+  expirationDate?: string;
+  purpose?: string;
+  sideEffects?: string;
+  storageLocation?: string;
+  administeredBy: AdministeredBy;
+  notes?: string;
+  parentConsent: boolean;
+  parentConsentDate?: string;
+  isVerified: boolean;
+  verifiedById?: string;
+  verifiedDate?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Accommodation plan for a child with special needs.
+ */
+export interface AccommodationPlan {
+  id: string;
+  childId: string;
+  schoolYearId?: string;
+  planType: AccommodationPlanType;
+  planName: string;
+  description: string;
+  accommodations: string;
+  emergencyProcedures?: string;
+  triggersSigns?: string;
+  staffNotifications?: string;
+  documentPath?: string;
+  effectiveDate: string;
+  expirationDate?: string;
+  reviewDate?: string;
+  notes?: string;
+  approvedById?: string;
+  approvedDate?: string;
+  status: AccommodationPlanStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Medical alert for staff awareness.
+ */
+export interface MedicalAlert {
+  id: string;
+  childId: string;
+  alertType: AlertType;
+  alertLevel: AlertLevel;
+  title: string;
+  description: string;
+  actionRequired?: string;
+  displayOnDashboard: boolean;
+  displayOnAttendance: boolean;
+  displayOnReports: boolean;
+  notifyOnCheckIn: boolean;
+  relatedAllergyId?: string;
+  relatedMedicationId?: string;
+  relatedPlanId?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Summary of a child's medical information.
+ */
+export interface ChildMedicalSummary {
+  childId: string;
+  allergies: AllergyInfo[];
+  medications: MedicationInfo[];
+  accommodationPlans: AccommodationPlan[];
+  activeAlerts: MedicalAlert[];
+  hasSevereAllergies: boolean;
+  hasEpiPen: boolean;
+  hasStaffAdministeredMedications: boolean;
+  generatedAt: string;
+}
