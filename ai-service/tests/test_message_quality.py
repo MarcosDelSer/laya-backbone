@@ -3184,3 +3184,90 @@ def test_ownership_validation(mock_db_session):
     assert hasattr(exc_info.value, 'status_code')
     assert exc_info.value.status_code == 403
     assert "permission" in str(exc_info.value.detail).lower()
+
+
+# =============================================================================
+# Audit Logging Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_audit_logging(
+    client: AsyncClient,
+    auth_headers: Dict[str, str],
+) -> None:
+    """Test that audit logs are captured for all access attempts.
+
+    Verifies that:
+    - Analyze endpoint logs access
+    - Rewrite endpoint logs access
+    - History endpoint logs access
+    - Templates endpoint logs access
+    - Training examples endpoint logs access
+    """
+    from unittest.mock import patch
+
+    with patch("app.routers.message_quality.audit_logger") as mock_logger:
+        # Test analyze endpoint
+        analyze_request = {
+            "message_text": "You never listen to me!",
+            "language": "en",
+        }
+        response = await client.post(
+            "/api/v1/message-quality/analyze",
+            json=analyze_request,
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "analyze"
+
+        # Test rewrite endpoint
+        mock_logger.reset_mock()
+        rewrite_request = {
+            "message_text": "You never listen to me!",
+            "language": "en",
+        }
+        response = await client.post(
+            "/api/v1/message-quality/rewrite",
+            json=rewrite_request,
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "rewrite"
+
+        # Test history endpoint
+        mock_logger.reset_mock()
+        response = await client.get(
+            "/api/v1/message-quality/history",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "history"
+
+        # Test templates endpoint
+        mock_logger.reset_mock()
+        response = await client.get(
+            "/api/v1/message-quality/templates",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "get_templates"
+
+        # Test training examples endpoint
+        mock_logger.reset_mock()
+        response = await client.get(
+            "/api/v1/message-quality/training-examples",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "get_training_examples"

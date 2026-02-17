@@ -8,9 +8,15 @@ are available in English and French for Quebec bilingual compliance.
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.audit_logger import (
+    audit_logger,
+    get_client_ip,
+    get_endpoint,
+    get_user_agent,
+)
 from app.auth.dependencies import require_role
 from app.auth.models import UserRole
 from app.database import get_db
@@ -42,6 +48,7 @@ router = APIRouter()
 @router.post("/analyze", response_model=MessageAnalysisResponse)
 async def analyze_message(
     request: MessageAnalysisRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
 ) -> MessageAnalysisResponse:
@@ -67,6 +74,7 @@ async def analyze_message(
             - context: Context type for the message
             - child_id: Optional child ID for personalized analysis
             - include_rewrites: Whether to include rewrite suggestions
+        http_request: FastAPI Request for audit logging
         db: Async database session (injected)
         current_user: Authenticated user from JWT token (injected)
 
@@ -88,6 +96,15 @@ async def analyze_message(
         HTTPException 401: When JWT token is missing or invalid
         HTTPException 500: When an unexpected error occurs during analysis
     """
+    # Audit logging
+    audit_logger.log_message_quality_access(
+        action="analyze",
+        current_user=current_user,
+        ip_address=get_client_ip(http_request),
+        user_agent=get_user_agent(http_request),
+        endpoint=get_endpoint(http_request),
+    )
+
     service = MessageQualityService(db)
 
     try:
@@ -112,6 +129,7 @@ async def analyze_message(
 @router.post("/rewrite", response_model=MessageRewriteResponse)
 async def rewrite_message(
     request: MessageRewriteRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
 ) -> MessageRewriteResponse:
@@ -132,6 +150,7 @@ async def rewrite_message(
             - message_text: The message to rewrite
             - language: Language of the message (en or fr)
             - child_name: Optional child's name for personalization
+        http_request: FastAPI Request for audit logging
         db: Async database session (injected)
         current_user: Authenticated user from JWT token (injected)
 
@@ -151,6 +170,15 @@ async def rewrite_message(
         HTTPException 403: When user doesn't have required role (ADMIN or TEACHER)
         HTTPException 500: When an unexpected error occurs during rewriting
     """
+    # Audit logging
+    audit_logger.log_message_quality_access(
+        action="rewrite",
+        current_user=current_user,
+        ip_address=get_client_ip(http_request),
+        user_agent=get_user_agent(http_request),
+        endpoint=get_endpoint(http_request),
+    )
+
     service = MessageQualityService(db)
 
     try:
@@ -190,6 +218,7 @@ async def rewrite_message(
 
 @router.get("/templates", response_model=MessageTemplateListResponse)
 async def get_templates(
+    http_request: Request,
     language: Optional[Language] = Query(
         default=None,
         description="Filter templates by language (en or fr)",
@@ -223,6 +252,7 @@ async def get_templates(
     find the most relevant templates for their needs.
 
     Args:
+        http_request: FastAPI Request for audit logging
         language: Optional filter by language (en or fr)
         category: Optional filter by template category
         limit: Maximum number of templates to return (default: 20, max: 100)
@@ -242,6 +272,15 @@ async def get_templates(
         HTTPException 401: When JWT token is missing or invalid
         HTTPException 500: When an unexpected error occurs
     """
+    # Audit logging
+    audit_logger.log_message_quality_access(
+        action="get_templates",
+        current_user=current_user,
+        ip_address=get_client_ip(http_request),
+        user_agent=get_user_agent(http_request),
+        endpoint=get_endpoint(http_request),
+    )
+
     service = MessageQualityService(db)
 
     try:
@@ -261,6 +300,7 @@ async def get_templates(
 @router.post("/templates", response_model=MessageTemplateResponse, status_code=status.HTTP_201_CREATED)
 async def create_template(
     request: MessageTemplateRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
 ) -> MessageTemplateResponse:
@@ -281,6 +321,7 @@ async def create_template(
             - category: Category of the template
             - language: Language of the template (default: English)
             - description: Optional description of when to use this template
+        http_request: FastAPI Request for audit logging
         db: Async database session (injected)
         current_user: Authenticated user from JWT token (injected)
 
@@ -300,6 +341,15 @@ async def create_template(
         HTTPException 401: When JWT token is missing or invalid
         HTTPException 500: When an unexpected error occurs
     """
+    # Audit logging
+    audit_logger.log_message_quality_access(
+        action="create_template",
+        current_user=current_user,
+        ip_address=get_client_ip(http_request),
+        user_agent=get_user_agent(http_request),
+        endpoint=get_endpoint(http_request),
+    )
+
     service = MessageQualityService(db)
 
     try:
@@ -318,6 +368,7 @@ async def create_template(
 
 @router.get("/training-examples", response_model=TrainingExampleListResponse)
 async def get_training_examples(
+    http_request: Request,
     language: Optional[Language] = Query(
         default=None,
         description="Filter training examples by language (en or fr)",
@@ -355,6 +406,7 @@ async def get_training_examples(
     difficulty level to provide targeted learning experiences.
 
     Args:
+        http_request: FastAPI Request for audit logging
         language: Optional filter by language (en or fr)
         issue_type: Optional filter by quality issue type demonstrated
         difficulty_level: Optional filter by difficulty level
@@ -375,6 +427,15 @@ async def get_training_examples(
         HTTPException 401: When JWT token is missing or invalid
         HTTPException 500: When an unexpected error occurs
     """
+    # Audit logging
+    audit_logger.log_message_quality_access(
+        action="get_training_examples",
+        current_user=current_user,
+        ip_address=get_client_ip(http_request),
+        user_agent=get_user_agent(http_request),
+        endpoint=get_endpoint(http_request),
+    )
+
     service = MessageQualityService(db)
 
     try:
@@ -394,6 +455,7 @@ async def get_training_examples(
 
 @router.get("/history", response_model=MessageQualityHistoryResponse)
 async def get_message_quality_history(
+    http_request: Request,
     limit: int = Query(
         default=20,
         ge=1,
@@ -418,6 +480,7 @@ async def get_message_quality_history(
     educators track their progress and directors monitor overall quality trends.
 
     Args:
+        http_request: FastAPI Request for audit logging
         limit: Maximum number of history items to return (default: 20, max: 100)
         offset: Number of history items to skip for pagination (default: 0)
         db: Async database session (injected)
@@ -436,6 +499,15 @@ async def get_message_quality_history(
         HTTPException 403: When user doesn't have required role
         HTTPException 500: When an unexpected error occurs
     """
+    # Audit logging
+    audit_logger.log_message_quality_access(
+        action="history",
+        current_user=current_user,
+        ip_address=get_client_ip(http_request),
+        user_agent=get_user_agent(http_request),
+        endpoint=get_endpoint(http_request),
+    )
+
     service = MessageQualityService(db)
 
     try:
