@@ -4,7 +4,7 @@ Loads environment variables with sensible defaults for local development.
 All configuration values can be overridden via environment variables or .env file.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic_settings import BaseSettings
 
@@ -92,6 +92,15 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def redis_url(self) -> str:
+        """Construct the Redis connection URL.
+
+        Returns:
+            str: Redis connection URL
+        """
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     @property
     def is_production(self) -> bool:
