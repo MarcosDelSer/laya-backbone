@@ -70,7 +70,23 @@ $gibbonSetting[] = [
     'scope'       => 'RL-24 Submission',
     'name'        => 'providerAddress',
     'nameDisplay' => 'Provider Address',
-    'description' => 'Official address for RL-24 forms',
+    'description' => 'Official street address for RL-24 forms',
+    'value'       => '',
+];
+
+$gibbonSetting[] = [
+    'scope'       => 'RL-24 Submission',
+    'name'        => 'providerCity',
+    'nameDisplay' => 'Provider City',
+    'description' => 'City where the provider is located',
+    'value'       => '',
+];
+
+$gibbonSetting[] = [
+    'scope'       => 'RL-24 Submission',
+    'name'        => 'providerPostalCode',
+    'nameDisplay' => 'Provider Postal Code',
+    'description' => 'Postal code in Canadian format (e.g., H2X 1Y4)',
     'value'       => '',
 ];
 
