@@ -38,7 +38,8 @@
     },
     "entry": "{count, plural, one {# entrée} other {# entrées}}",
     "photo": "Photo",
-    "photos": "Photos"
+    "photos": "Photos",
+    "viewPhotoNumber": "Voir la photo {number}"
   },
   "navigation": {
     "dashboard": "Tableau de bord",

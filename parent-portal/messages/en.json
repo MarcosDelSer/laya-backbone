@@ -38,7 +38,8 @@
     },
     "entry": "{count, plural, one {# entry} other {# entries}}",
     "photo": "Photo",
-    "photos": "Photos"
+    "photos": "Photos",
+    "viewPhotoNumber": "View photo {number}"
   },
   "navigation": {
     "dashboard": "Dashboard",

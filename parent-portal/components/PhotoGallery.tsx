@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import { useTranslations } from 'next-intl';
 
 interface Photo {
   id: string;
@@ -16,6 +17,7 @@ interface PhotoGalleryProps {
 }
 
 export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
+  const t = useTranslations();
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
 
   if (photos.length === 0) {
@@ -35,7 +37,7 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
               d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
             />
           </svg>
-          <p className="mt-2 text-sm text-gray-500">No photos for this day</p>
+          <p className="mt-2 text-sm text-gray-500">{t('dailyReports.emptyStates.noPhotosForThisDay')}</p>
         </div>
       </div>
     );
@@ -174,7 +176,7 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
                     ? 'bg-white'
                     : 'bg-white/50 hover:bg-white/75'
                 }`}
-                aria-label={`View photo ${index + 1}`}
+                aria-label={t('common.viewPhotoNumber', { number: index + 1 })}
               />
             ))}
           </div>

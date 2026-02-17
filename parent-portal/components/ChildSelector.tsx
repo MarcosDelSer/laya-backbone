@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 interface Child {
   id: string;
@@ -24,6 +25,7 @@ const mockChildren: Child[] = [
 ];
 
 export function ChildSelector() {
+  const t = useTranslations();
   const [selectedChild, setSelectedChild] = useState<Child>(mockChildren[0]);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -69,7 +71,7 @@ export function ChildSelector() {
         <div className="absolute right-0 z-10 mt-2 w-64 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
           <div className="p-2">
             <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Select Child
+              {t('common.selectChild')}
             </p>
             {mockChildren.map((child) => (
               <button
