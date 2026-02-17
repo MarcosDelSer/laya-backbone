@@ -99,6 +99,18 @@ class S3StorageError(StorageServiceError):
     pass
 
 
+class SignedUrlExpiredError(StorageServiceError):
+    """Raised when a signed URL has expired."""
+
+    pass
+
+
+class SignedUrlInvalidError(StorageServiceError):
+    """Raised when a signed URL signature is invalid."""
+
+    pass
+
+
 # Thread pool for running sync S3 operations
 _s3_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="s3_")
 
@@ -295,6 +307,48 @@ class StorageService:
         if owner_id is not None and not file_record.is_public:
             if file_record.owner_id != owner_id:
                 raise FileNotFoundError(f"File with ID {file_id} not found")
+
+        # Retrieve file content based on backend
+        if file_record.storage_backend == StorageBackend.LOCAL:
+            file_content = await self._download_from_local(file_record.storage_path)
+        else:
+            file_content = await self._download_from_s3(file_record.storage_path)
+
+        return file_content, file_record
+
+    async def download_file_with_signed_url(
+        self,
+        file_id: UUID,
+        expires_timestamp: int,
+        signature: str,
+    ) -> tuple[bytes, File]:
+        """Download a file using a signed URL.
+
+        Validates the signed URL and retrieves the file content.
+        This method does not require authentication - the signed URL
+        serves as the authorization.
+
+        Args:
+            file_id: UUID of the file to download.
+            expires_timestamp: Unix timestamp from the signed URL.
+            signature: Base64-encoded signature from the signed URL.
+
+        Returns:
+            Tuple of (file_content, file_record).
+
+        Raises:
+            SignedUrlExpiredError: If the signed URL has expired.
+            SignedUrlInvalidError: If the signature is invalid.
+            FileNotFoundError: If the file does not exist.
+        """
+        # Verify the signed URL (this will raise on error)
+        self.verify_local_signed_url(file_id, expires_timestamp, signature)
+
+        # Get the file record
+        file_record = await self.get_file_by_id(file_id)
+
+        if file_record is None:
+            raise FileNotFoundError(f"File with ID {file_id} not found")
 
         # Retrieve file content based on backend
         if file_record.storage_backend == StorageBackend.LOCAL:
@@ -805,14 +859,15 @@ class StorageService:
             expires_in_seconds: URL expiration time in seconds (default 3600).
                 Must be between 60 and 86400 seconds (1 min to 24 hours).
             base_url: Base URL for local storage URLs (e.g., 'https://api.example.com').
-                Required for local backend.
+                Required for local backend - must be derived from request context.
 
         Returns:
             Tuple of (secure_url, expires_at_datetime).
 
         Raises:
             FileNotFoundError: If the file does not exist or is not accessible.
-            ValueError: If expires_in_seconds is out of valid range.
+            ValueError: If expires_in_seconds is out of valid range or base_url
+                is missing for local backend.
             StorageServiceError: If URL generation fails.
         """
         # Validate expiration time
@@ -845,9 +900,12 @@ class StorageService:
                 expires_in_seconds,
             )
         else:
+            # base_url is required for local backend - must be derived from request context
             if base_url is None:
-                # Use a default local URL pattern
-                base_url = "http://localhost:8000"
+                raise ValueError(
+                    "base_url is required for local storage backend secure URLs. "
+                    "It must be derived from the request context."
+                )
             url = self._generate_local_signed_url(
                 file_id,
                 file_record.storage_path,
@@ -942,8 +1000,8 @@ class StorageService:
         }
         query_string = urlencode(params)
 
-        # Construct full URL - endpoint will be /api/v1/storage/files/{file_id}/download
-        url = f"{base_url.rstrip('/')}/api/v1/storage/files/{file_id}/download?{query_string}"
+        # Construct full URL - endpoint is /api/v1/storage/files/{file_id}/signed-download
+        url = f"{base_url.rstrip('/')}/api/v1/storage/files/{file_id}/signed-download?{query_string}"
 
         return url
 
@@ -963,13 +1021,29 @@ class StorageService:
             signature: Base64-encoded signature from the URL.
 
         Returns:
-            True if the signature is valid and not expired, False otherwise.
+            True if the signature is valid and not expired.
+
+        Raises:
+            SignedUrlExpiredError: If the URL has expired.
+            SignedUrlInvalidError: If the signature is invalid or malformed.
         """
-        # Check expiration
+        # Validate signature is not empty or malformed before processing
+        if not signature or not isinstance(signature, str):
+            raise SignedUrlInvalidError("Missing or invalid signature parameter")
+
+        # Validate signature length (base64 SHA-256 is ~43 chars without padding)
+        if len(signature) < 20 or len(signature) > 100:
+            raise SignedUrlInvalidError("Invalid signature length")
+
+        # Check expiration first - fail fast on expired URLs
         now = datetime.now(timezone.utc)
-        expires_at = datetime.fromtimestamp(expires_timestamp, tz=timezone.utc)
+        try:
+            expires_at = datetime.fromtimestamp(expires_timestamp, tz=timezone.utc)
+        except (ValueError, OSError, OverflowError):
+            raise SignedUrlInvalidError("Invalid expiration timestamp")
+
         if now >= expires_at:
-            return False
+            raise SignedUrlExpiredError("Signed URL has expired")
 
         # Recreate the expected signature
         message = f"{file_id}:{expires_timestamp}"
@@ -985,11 +1059,20 @@ class StorageService:
             signature += "=" * padding
         try:
             provided_signature = base64.urlsafe_b64decode(signature)
-        except Exception:
-            return False
+        except (ValueError, TypeError) as e:
+            raise SignedUrlInvalidError(
+                "Invalid signature encoding: malformed base64"
+            ) from e
+
+        # Validate decoded signature length matches SHA-256 output (32 bytes)
+        if len(provided_signature) != 32:
+            raise SignedUrlInvalidError("Invalid signature: incorrect hash length")
 
         # Constant-time comparison to prevent timing attacks
-        return hmac.compare_digest(expected_signature, provided_signature)
+        if not hmac.compare_digest(expected_signature, provided_signature):
+            raise SignedUrlInvalidError("Invalid signature")
+
+        return True
 
     def _create_thumbnail_sync(
         self,

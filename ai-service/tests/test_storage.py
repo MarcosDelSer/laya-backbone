@@ -472,13 +472,13 @@ class TestStorageServiceSignedUrls:
         self,
         db_session: AsyncSession,
     ):
-        """Test verify_local_signed_url returns False for expired URL."""
+        """Test verify_local_signed_url raises SignedUrlExpiredError for expired URL."""
         import base64
         import hashlib
         import hmac
 
         from app.config import settings
-        from app.services.storage_service import StorageService
+        from app.services.storage_service import SignedUrlExpiredError, StorageService
 
         service = StorageService(db_session)
         file_id = uuid4()
@@ -495,17 +495,16 @@ class TestStorageServiceSignedUrls:
         ).digest()
         signature_b64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
 
-        result = service.verify_local_signed_url(file_id, expires_timestamp, signature_b64)
-
-        assert result is False
+        with pytest.raises(SignedUrlExpiredError):
+            service.verify_local_signed_url(file_id, expires_timestamp, signature_b64)
 
     @pytest.mark.asyncio
     async def test_verify_local_signed_url_invalid_signature(
         self,
         db_session: AsyncSession,
     ):
-        """Test verify_local_signed_url returns False for invalid signature."""
-        from app.services.storage_service import StorageService
+        """Test verify_local_signed_url raises SignedUrlInvalidError for invalid signature."""
+        from app.services.storage_service import SignedUrlInvalidError, StorageService
 
         service = StorageService(db_session)
         file_id = uuid4()
@@ -515,9 +514,8 @@ class TestStorageServiceSignedUrls:
         # Invalid signature
         invalid_signature = "invalid_signature_string"
 
-        result = service.verify_local_signed_url(file_id, expires_timestamp, invalid_signature)
-
-        assert result is False
+        with pytest.raises(SignedUrlInvalidError):
+            service.verify_local_signed_url(file_id, expires_timestamp, invalid_signature)
 
     @pytest.mark.asyncio
     async def test_generate_secure_url_invalid_expiration(
