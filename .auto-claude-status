@@ -3,7 +3,7 @@
   "spec": "094-fix-plan-snapshot-bug",
   "state": "building",
   "subtasks": {
-    "completed": 4,
+    "completed": 5,
     "total": 20,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 4,
+    "number": 5,
     "started_at": "2026-02-17T15:04:44.929311"
   },
-  "last_update": "2026-02-17T15:12:59.561415"
+  "last_update": "2026-02-17T15:15:30.009309"
 }

@@ -1009,6 +1009,7 @@ class InterventionPlanService:
             "goals": [
                 {
                     "id": str(g.id),
+                    "need_id": str(g.need_id) if g.need_id else None,
                     "title": g.title,
                     "description": g.description,
                     "measurement_criteria": g.measurement_criteria,
@@ -1026,6 +1027,7 @@ class InterventionPlanService:
             "strategies": [
                 {
                     "id": str(s.id),
+                    "goal_id": str(s.goal_id) if s.goal_id else None,
                     "title": s.title,
                     "description": s.description,
                     "responsible_party": s.responsible_party,
@@ -1039,6 +1041,7 @@ class InterventionPlanService:
             "monitoring": [
                 {
                     "id": str(m.id),
+                    "goal_id": str(m.goal_id) if m.goal_id else None,
                     "method": m.method,
                     "description": m.description,
                     "frequency": m.frequency,
