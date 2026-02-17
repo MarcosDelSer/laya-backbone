@@ -133,9 +133,11 @@ class TestCreateToken:
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
-        # Additional claims update AFTER standard claims, so they override
-        # This documents current behavior - may want to change
-        assert payload["sub"] == "hacker"  # Currently overrides
+        # Security fix: Standard claims are now protected from override
+        # Additional claims attempting to override sub, iat, exp are filtered out
+        assert payload["sub"] == "user123"  # Protected - cannot be overridden
+        assert payload["iat"] != 0  # Protected - real timestamp is used
+        assert payload["exp"] != 9999999999  # Protected - real expiration is used
 
     def test_create_token_empty_additional_claims(self):
         """Test create_token with empty additional claims dict."""
@@ -479,7 +481,7 @@ class TestJWTSecurityProperties:
             pass
 
     def test_expiration_is_required(self):
-        """Test that tokens without expiration are handled."""
+        """Test that tokens without expiration are rejected."""
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
@@ -490,10 +492,12 @@ class TestJWTSecurityProperties:
             settings.jwt_secret_key,
             algorithm=settings.jwt_algorithm,
         )
-        # PyJWT by default doesn't require exp, so this should work
-        # but you might want to add require=["exp"] to your decoder
-        decoded = decode_token(token)
-        assert decoded["sub"] == "user123"
+        # Security fix: exp claim is now required and validated
+        # Tokens without expiration should be rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
 
     def test_token_contains_all_standard_claims(self):
         """Test that created tokens have standard JWT claims."""

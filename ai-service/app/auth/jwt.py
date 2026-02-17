@@ -43,20 +43,33 @@ def create_token(
         ... )
         >>> isinstance(token, str)
         True
+
+    Note:
+        Standard claims (sub, iat, exp) cannot be overridden by additional_claims
+        for security reasons. Any attempts to override these will be ignored.
     """
     now = datetime.now(timezone.utc)
     expire = datetime.fromtimestamp(
         now.timestamp() + expires_delta_seconds, tz=timezone.utc
     )
 
-    payload = {
+    # Start with additional claims if provided, then set standard claims
+    # This ensures standard claims cannot be overridden by additional_claims
+    payload = {}
+    if additional_claims:
+        # Filter out reserved claims to prevent override attacks
+        filtered_claims = {
+            k: v for k, v in additional_claims.items()
+            if k not in ("sub", "iat", "exp")
+        }
+        payload.update(filtered_claims)
+
+    # Set standard claims last to ensure they cannot be overridden
+    payload.update({
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
-    }
-
-    if additional_claims:
-        payload.update(additional_claims)
+    })
 
     return jwt.encode(
         payload,
@@ -66,7 +79,7 @@ def create_token(
 
 
 def decode_token(token: str) -> dict[str, Any]:
-    """Decode and validate a JWT token.
+    """Decode and validate a JWT token with comprehensive claim validation.
 
     Args:
         token: JWT token to decode and validate
@@ -75,19 +88,34 @@ def decode_token(token: str) -> dict[str, Any]:
         dict: Token payload containing claims
 
     Raises:
-        HTTPException: 401 Unauthorized if token is invalid or expired
+        HTTPException: 401 Unauthorized if token is invalid, expired, or missing required claims
 
     Example:
         >>> token = create_token("user123", 3600)
         >>> payload = decode_token(token)
         >>> payload["sub"]
         'user123'
+
+    Security:
+        - Validates signature using configured secret key
+        - Enforces algorithm (prevents algorithm substitution attacks)
+        - Requires standard JWT claims: sub, exp, iat
+        - Validates expiration time (exp)
+        - Validates issued-at time (iat)
     """
     try:
+        # Decode with strict validation and required claims
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            # Strict validation options
+            options={
+                "verify_signature": True,  # Verify signature (default: True)
+                "verify_exp": True,  # Verify expiration (default: True)
+                "verify_iat": True,  # Verify issued-at time (default: True)
+                "require": ["sub", "exp", "iat"],  # Require standard claims
+            },
         )
         return payload
     except InvalidTokenError as e:

@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     postgres_db: str = "laya_ai"
     postgres_user: str = "laya"
     postgres_password: str = "laya_password"
+    db_echo: bool = False  # SQL logging (set to True for debugging)
+    db_pool_pre_ping: bool = True  # Enable connection health checks
+    db_pool_size: int = 5  # Number of permanent connections in the pool
+    db_max_overflow: int = 10  # Maximum overflow connections beyond pool_size
+    db_pool_timeout: int = 30  # Timeout for getting a connection from the pool (seconds)
+    db_pool_recycle: int = 3600  # Recycle connections after 1 hour
 
     # JWT configuration
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
