@@ -159,6 +159,16 @@ class RL24SlipGateway extends QueryableGateway
                     ->where('gibbonRL24Slip.gibbonRL24TransmissionID=:gibbonRL24TransmissionID')
                     ->bindValue('gibbonRL24TransmissionID', $gibbonRL24TransmissionID);
             },
+            'caseACode' => function ($query, $caseACode) {
+                return $query
+                    ->where('gibbonRL24Slip.caseACode=:caseACode')
+                    ->bindValue('caseACode', $caseACode);
+            },
+            'search' => function ($query, $search) {
+                return $query
+                    ->where('(gibbonRL24Slip.parentFirstName LIKE :search OR gibbonRL24Slip.parentLastName LIKE :search OR gibbonRL24Slip.childFirstName LIKE :search OR gibbonRL24Slip.childLastName LIKE :search)')
+                    ->bindValue('search', '%' . $search . '%');
+            },
         ]);
 
         return $this->runQuery($query, $criteria);
@@ -610,5 +620,58 @@ class RL24SlipGateway extends QueryableGateway
         }
 
         return $this->delete($gibbonRL24SlipID);
+    }
+
+    /**
+     * Get slip summary totals for a tax year.
+     *
+     * @param int $taxYear
+     * @return array
+     */
+    public function getSlipSummaryByTaxYear($taxYear)
+    {
+        $data = ['taxYear' => $taxYear];
+        $sql = "SELECT
+                    COUNT(*) as totalSlips,
+                    SUM(CASE WHEN status='Draft' THEN 1 ELSE 0 END) as draftCount,
+                    SUM(CASE WHEN status='Included' THEN 1 ELSE 0 END) as includedCount,
+                    SUM(CASE WHEN status='Amended' THEN 1 ELSE 0 END) as amendedCount,
+                    SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END) as cancelledCount,
+                    SUM(CASE WHEN caseACode='O' THEN 1 ELSE 0 END) as originalCount,
+                    SUM(CASE WHEN caseACode='A' THEN 1 ELSE 0 END) as amendedCodeCount,
+                    SUM(CASE WHEN caseACode='D' THEN 1 ELSE 0 END) as cancelledCodeCount,
+                    SUM(totalDays) as totalDays,
+                    SUM(case11Amount) as totalCase11,
+                    SUM(case12Amount) as totalCase12,
+                    SUM(case13Amount) as totalCase13,
+                    SUM(case14Amount) as totalCase14
+                FROM gibbonRL24Slip
+                WHERE taxYear=:taxYear";
+
+        return $this->db()->selectOne($sql, $data) ?: [
+            'totalSlips' => 0,
+            'draftCount' => 0,
+            'includedCount' => 0,
+            'amendedCount' => 0,
+            'cancelledCount' => 0,
+            'originalCount' => 0,
+            'amendedCodeCount' => 0,
+            'cancelledCodeCount' => 0,
+            'totalDays' => 0,
+            'totalCase11' => 0,
+            'totalCase12' => 0,
+            'totalCase13' => 0,
+            'totalCase14' => 0,
+        ];
+    }
+
+    /**
+     * Get searchable columns.
+     *
+     * @return array
+     */
+    public function getSearchableColumns()
+    {
+        return self::$searchableColumns;
     }
 }

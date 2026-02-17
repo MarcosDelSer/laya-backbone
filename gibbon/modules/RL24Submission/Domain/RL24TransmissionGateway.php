@@ -454,4 +454,29 @@ class RL24TransmissionGateway extends QueryableGateway
 
         return $this->update($gibbonRL24TransmissionID, $data);
     }
+
+    /**
+     * Select transmissions by tax year.
+     *
+     * @param int $taxYear
+     * @return \Gibbon\Database\Result
+     */
+    public function selectTransmissionsByTaxYear($taxYear)
+    {
+        $query = $this
+            ->newSelect()
+            ->from($this->getTableName())
+            ->cols([
+                'gibbonRL24TransmissionID',
+                'fileName',
+                'status',
+                'sequenceNumber',
+                'totalSlips',
+            ])
+            ->where('taxYear=:taxYear')
+            ->bindValue('taxYear', $taxYear)
+            ->orderBy(['sequenceNumber DESC']);
+
+        return $this->runSelect($query);
+    }
 }
