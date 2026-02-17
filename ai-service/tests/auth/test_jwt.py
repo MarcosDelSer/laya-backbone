@@ -479,10 +479,12 @@ class TestJWTSecurityProperties:
             pass
 
     def test_expiration_is_required(self):
-        """Test that tokens without expiration are handled."""
+        """Test that tokens without expiration are rejected."""
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
             # No 'exp' claim
         }
         token = jwt.encode(
@@ -490,10 +492,51 @@ class TestJWTSecurityProperties:
             settings.jwt_secret_key,
             algorithm=settings.jwt_algorithm,
         )
-        # PyJWT by default doesn't require exp, so this should work
-        # but you might want to add require=["exp"] to your decoder
-        decoded = decode_token(token)
-        assert decoded["sub"] == "user123"
+        # decode_token now requires exp claim - should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "exp" in exc_info.value.detail.lower() or "required" in exc_info.value.detail.lower()
+
+    def test_subject_is_required(self):
+        """Test that tokens without subject are rejected."""
+        payload = {
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
+            # No 'sub' claim
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token now requires sub claim - should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "sub" in exc_info.value.detail.lower() or "required" in exc_info.value.detail.lower()
+
+    def test_issued_at_is_required(self):
+        """Test that tokens without issued-at timestamp are rejected."""
+        payload = {
+            "sub": "user123",
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
+            # No 'iat' claim
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token now requires iat claim - should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "iat" in exc_info.value.detail.lower() or "required" in exc_info.value.detail.lower()
 
     def test_token_contains_all_standard_claims(self):
         """Test that created tokens have standard JWT claims."""
