@@ -9,8 +9,15 @@ from typing import Any, Optional
 import jwt
 from jwt.exceptions import InvalidTokenError
 from fastapi import HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+
+
+# HTTPBearer security scheme for token extraction
+security = HTTPBearer()
 
 
 def create_token(
@@ -89,3 +96,53 @@ def decode_token(token: str) -> dict[str, Any]:
             detail=f"Invalid token: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+async def verify_token(
+    credentials: HTTPAuthorizationCredentials,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    """Verify and decode a JWT token, checking against the blacklist.
+
+    This function extracts the token from HTTP credentials, decodes it,
+    and verifies it has not been revoked (blacklisted). Use this for
+    authenticated endpoints to ensure tokens are valid and not revoked.
+
+    Args:
+        credentials: HTTP Authorization credentials containing the Bearer token
+        db: Async database session for blacklist lookup
+
+    Returns:
+        dict[str, Any]: Decoded token payload containing claims
+
+    Raises:
+        HTTPException: 401 Unauthorized if token is invalid, expired, or revoked
+
+    Example:
+        @app.get("/protected")
+        async def protected_route(
+            credentials: HTTPAuthorizationCredentials = Depends(security),
+            db: AsyncSession = Depends(get_db),
+        ):
+            payload = await verify_token(credentials, db)
+            return {"user_id": payload["sub"]}
+    """
+    # Import here to avoid circular dependency
+    from app.auth.models import TokenBlacklist
+
+    token = credentials.credentials
+
+    # Decode and validate the token (handles expiration, signature, etc.)
+    payload = decode_token(token)
+
+    # Check if token is blacklisted
+    stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
+    result = await db.execute(stmt)
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return payload

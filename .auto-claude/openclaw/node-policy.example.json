@@ -1,0 +1,58 @@
+{
+  "naming": {
+    "pattern": "<platform>-<role>-<index>",
+    "examples": [
+      "linux-e2e-01",
+      "android-e2e-01",
+      "mac-build-01",
+      "win-wsl-01"
+    ]
+  },
+  "default": {
+    "exec_host": "node",
+    "security": "allowlist",
+    "deny_shell_globs": true,
+    "max_parallel_jobs": 2
+  },
+  "allowlist": {
+    "linux-e2e-01": [
+      "/usr/bin/bash",
+      "/usr/bin/env",
+      "/usr/bin/git",
+      "/usr/bin/node",
+      "/usr/bin/npm",
+      "/usr/bin/pnpm",
+      "/usr/bin/npx"
+    ],
+    "android-e2e-01": [
+      "/usr/bin/bash",
+      "/usr/bin/env",
+      "/usr/bin/node",
+      "/usr/bin/npm",
+      "/usr/bin/npx",
+      "/usr/local/bin/appium",
+      "/usr/bin/adb"
+    ],
+    "mac-build-01": [
+      "/bin/bash",
+      "/usr/bin/env",
+      "/usr/bin/xcodebuild",
+      "/usr/bin/xcrun",
+      "/usr/local/bin/node",
+      "/usr/local/bin/npm",
+      "/usr/local/bin/npx"
+    ],
+    "win-wsl-01": [
+      "/usr/bin/bash",
+      "/usr/bin/env",
+      "/usr/bin/git",
+      "/usr/bin/node",
+      "/usr/bin/npm",
+      "/usr/bin/npx"
+    ]
+  },
+  "approval_examples": [
+    "openclaw approvals allowlist add --node linux-e2e-01 /usr/bin/bash",
+    "openclaw approvals allowlist add --node linux-e2e-01 /usr/bin/pnpm"
+  ]
+}

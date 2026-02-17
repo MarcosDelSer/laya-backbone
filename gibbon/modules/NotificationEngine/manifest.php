@@ -35,6 +35,7 @@ $moduleTables = [
     'gibbonNotificationTemplate',
     'gibbonNotificationPreference',
     'gibbonFCMToken',
+    'gibbonNotificationDeliveryLog',
 ];
 
 // Module actions (menu items)
@@ -94,6 +95,46 @@ $actionRows[2] = [
     'defaultPermissionStudent'  => 'N',
     'defaultPermissionParent'   => 'N',
     'defaultPermissionSupport'  => 'N',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[3] = [
+    'name'                      => 'Retry Management',
+    'precedence'                => '0',
+    'category'                  => 'Notifications',
+    'description'               => 'Monitor and manage notification retry mechanism and failed deliveries',
+    'URLList'                   => 'notifications_retry_management.php',
+    'entryURL'                  => 'notifications_retry_management.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'Y',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'N',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[4] = [
+    'name'                      => 'Delivery Logs',
+    'precedence'                => '0',
+    'category'                  => 'Notifications',
+    'description'               => 'View detailed notification delivery logs and analytics',
+    'URLList'                   => 'delivery_logs.php',
+    'entryURL'                  => 'delivery_logs.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'Y',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'N',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
     'categoryPermissionStaff'   => 'Y',
     'categoryPermissionStudent' => 'N',
     'categoryPermissionParent'  => 'N',

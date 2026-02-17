@@ -1,7 +1,10 @@
 """Security utilities for LAYA AI Service.
 
-Provides password hashing and verification using bcrypt.
+Provides password hashing and verification using bcrypt,
+and token hashing using SHA-256.
 """
+
+import hashlib
 
 from passlib.context import CryptContext
 
@@ -44,3 +47,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         False
     """
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def hash_token(token: str) -> str:
+    """Hash a token using SHA-256 for secure storage.
+
+    Unlike passwords, tokens use deterministic hashing (SHA-256) to allow
+    direct database lookups by the hashed value.
+
+    Args:
+        token: Plain text token to hash
+
+    Returns:
+        str: SHA-256 hash of the token (hex encoded)
+
+    Example:
+        >>> hashed = hash_token("my_reset_token")
+        >>> len(hashed) == 64  # SHA-256 produces 64 hex characters
+        True
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

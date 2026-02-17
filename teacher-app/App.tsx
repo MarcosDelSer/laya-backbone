@@ -6,7 +6,8 @@
  * naps, diapers, and photo capture.
  *
  * Supports both iOS and Android with platform-specific adaptations.
- * Features bottom tab navigation for quick access to all screens.
+ * Features authentication-aware navigation with login screen and
+ * bottom tab navigation for authenticated users.
  */
 
 import React, {useEffect, useCallback} from 'react';
@@ -14,7 +15,7 @@ import {StatusBar, BackHandler, Platform} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
-import TabNavigator from './src/navigation/TabNavigator';
+import AppNavigator from './src/navigation/AppNavigator';
 
 // Import platform-specific styling utilities
 import {
@@ -139,7 +140,7 @@ function App(): React.JSX.Element {
         translucent={isAndroid}
       />
       <NavigationContainer>
-        <TabNavigator />
+        <AppNavigator />
       </NavigationContainer>
     </SafeAreaProvider>
   );

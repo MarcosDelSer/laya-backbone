@@ -20,7 +20,9 @@ export const API_CONFIG = {
     auth: {
       login: '/modules/ParentPortal/api/auth/login',
       logout: '/modules/ParentPortal/api/auth/logout',
+      refresh: '/modules/ParentPortal/api/auth/refresh',
       refreshToken: '/modules/ParentPortal/api/auth/refresh',
+      me: '/modules/ParentPortal/api/auth/me',
     },
     // Daily feed endpoints
     feed: {

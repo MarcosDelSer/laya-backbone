@@ -3,6 +3,8 @@
 Defines Pydantic schemas for authentication requests and responses.
 """
 
+from typing import Optional
+
 from pydantic import EmailStr, Field
 
 from app.schemas.base import BaseSchema
@@ -92,7 +94,7 @@ class LogoutRequest(BaseSchema):
         min_length=1,
         description="JWT access token to invalidate",
     )
-    refresh_token: str | None = Field(
+    refresh_token: Optional[str] = Field(
         default=None,
         description="Optional JWT refresh token to invalidate",
     )
