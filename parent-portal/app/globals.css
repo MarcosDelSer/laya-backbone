@@ -9,7 +9,19 @@
     --muted: 107 114 128;
   }
 
+  /**
+   * Responsive Text Scaling - WCAG 2.1 AA Compliance
+   * Success Criterion 1.4.4: Resize Text (Level AA)
+   *
+   * Setting font-size: 100% on html element enables proper text scaling
+   * when users adjust their browser's font size settings or zoom level.
+   * This allows text to scale up to 200% without loss of content or functionality.
+   *
+   * All text sizing throughout the application uses rem/em units (not px)
+   * to ensure proportional scaling relative to this root font size.
+   */
   html {
+    font-size: 100%; /* 16px default, but respects user browser settings */
     scroll-behavior: smooth;
   }
 
