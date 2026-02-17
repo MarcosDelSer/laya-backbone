@@ -117,6 +117,8 @@ def create_test_token(
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
     }
 
     if additional_claims:
@@ -748,6 +750,8 @@ def token_wrong_signature() -> str:
         "sub": str(uuid4()),
         "iat": int(datetime.now(timezone.utc).timestamp()),
         "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
         "type": "access",
     }
     return jwt.encode(payload, "wrong_secret_key", algorithm="HS256")
