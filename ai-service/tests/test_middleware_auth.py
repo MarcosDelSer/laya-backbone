@@ -47,6 +47,8 @@ def create_ai_service_token(
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
+        "aud": settings.jwt_audience,
+        "iss": settings.jwt_issuer,
         "source": TokenSource.AI_SERVICE,
     }
 
@@ -89,6 +91,8 @@ def create_gibbon_token(
         "sub": person_id,
         "iat": now,
         "exp": now + expires_delta_seconds,
+        "aud": settings.jwt_audience,
+        "iss": settings.jwt_issuer,
         "username": username,
         "email": email,
         "role": role,
@@ -214,6 +218,8 @@ async def test_gibbon_token_without_username_raises_exception():
         "sub": "12345",
         "iat": now,
         "exp": now + 3600,
+        "aud": settings.jwt_audience,
+        "iss": settings.jwt_issuer,
         "source": TokenSource.GIBBON,
         "email": "test@example.com",
         # Missing 'username' claim for Gibbon token
@@ -329,6 +335,8 @@ async def test_verify_token_accepts_unknown_source():
         "iat": now,
         "exp": now + 3600,
         "source": "unknown_source",
+        "aud": settings.jwt_audience,
+        "iss": settings.jwt_issuer,
     }
 
     token = jwt.encode(
@@ -343,3 +351,217 @@ async def test_verify_token_accepts_unknown_source():
     # Should not raise exception
     assert result["sub"] == "user123"
     assert result["source"] == "unknown_source"
+
+
+class TestMiddlewareSecurityValidation:
+    """Security tests for JWT validation in middleware."""
+
+    @pytest.mark.asyncio
+    async def test_security_token_without_exp_claim_rejected(self):
+        """Test that tokens without exp claim are rejected by middleware."""
+        now = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "user123",
+            "iat": now,
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
+            # Missing 'exp' claim
+        }
+
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_from_any_source(credentials)
+
+        assert exc_info.value.status_code == 401
+        assert "exp" in exc_info.value.detail.lower() or "required" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_security_token_without_iat_claim_rejected(self):
+        """Test that tokens without iat claim are rejected by middleware."""
+        now = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "user123",
+            "exp": now + 3600,
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
+            # Missing 'iat' claim
+        }
+
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_from_any_source(credentials)
+
+        assert exc_info.value.status_code == 401
+        assert "iat" in exc_info.value.detail.lower() or "required" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_security_token_with_invalid_audience_rejected(self):
+        """Test that tokens with wrong audience are rejected by middleware."""
+        now = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "user123",
+            "iat": now,
+            "exp": now + 3600,
+            "aud": "wrong-audience",
+            "iss": settings.jwt_issuer,
+        }
+
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_from_any_source(credentials)
+
+        assert exc_info.value.status_code == 401
+        assert "aud" in exc_info.value.detail.lower() or "audience" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_security_token_without_audience_rejected(self):
+        """Test that tokens without audience claim are rejected by middleware."""
+        now = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "user123",
+            "iat": now,
+            "exp": now + 3600,
+            "iss": settings.jwt_issuer,
+            # Missing 'aud' claim
+        }
+
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_from_any_source(credentials)
+
+        assert exc_info.value.status_code == 401
+        assert "aud" in exc_info.value.detail.lower() or "audience" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_security_token_with_invalid_issuer_rejected(self):
+        """Test that tokens with wrong issuer are rejected by middleware."""
+        now = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "user123",
+            "iat": now,
+            "exp": now + 3600,
+            "aud": settings.jwt_audience,
+            "iss": "wrong-issuer",
+        }
+
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_from_any_source(credentials)
+
+        assert exc_info.value.status_code == 401
+        assert "iss" in exc_info.value.detail.lower() or "issuer" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_security_token_without_issuer_rejected(self):
+        """Test that tokens without issuer claim are rejected by middleware."""
+        now = int(datetime.now(timezone.utc).timestamp())
+        payload = {
+            "sub": "user123",
+            "iat": now,
+            "exp": now + 3600,
+            "aud": settings.jwt_audience,
+            # Missing 'iss' claim
+        }
+
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_from_any_source(credentials)
+
+        assert exc_info.value.status_code == 401
+        assert "iss" in exc_info.value.detail.lower() or "issuer" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_security_token_with_none_algorithm_rejected(self):
+        """Test that tokens with 'none' algorithm are explicitly rejected by middleware."""
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int(datetime.now(timezone.utc).timestamp()) + 3600,
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
+        }
+
+        try:
+            # Try to create a token with 'none' algorithm
+            token = jwt.encode(payload, "", algorithm="none")
+
+            credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_token_from_any_source(credentials)
+
+            assert exc_info.value.status_code == 401
+            assert "none" in exc_info.value.detail.lower() or "algorithm" in exc_info.value.detail.lower()
+        except jwt.exceptions.InvalidAlgorithmError:
+            # PyJWT library doesn't support 'none' algorithm encoding
+            # This is actually good - the library prevents it at creation time
+            # But our middleware has defense-in-depth to reject it
+            pass
+
+    @pytest.mark.asyncio
+    async def test_security_token_with_wrong_algorithm_rejected(self):
+        """Test that tokens with wrong algorithm are rejected by middleware."""
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int(datetime.now(timezone.utc).timestamp()) + 3600,
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
+        }
+
+        # Create token with HS512 instead of HS256
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm="HS512",
+        )
+
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token_from_any_source(credentials)
+
+        assert exc_info.value.status_code == 401
+        assert "algorithm" in exc_info.value.detail.lower()
