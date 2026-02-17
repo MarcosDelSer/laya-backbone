@@ -783,3 +783,228 @@ class TestJWTSecurityProperties:
         token3 = create_token(subject="user123")
         payload = decode_token(token3)
         assert payload["sub"] == "user123"
+
+
+class TestSignatureVerificationSecurity:
+    """Tests ensuring signature verification cannot be bypassed."""
+
+    def test_token_signed_with_wrong_secret_rejected(self):
+        """Test that tokens signed with incorrect secret key are rejected."""
+        # Create token with wrong secret
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        wrong_secret_token = jwt.encode(
+            payload,
+            "completely_wrong_secret_key_12345",
+            algorithm=settings.jwt_algorithm,
+        )
+        # Should be rejected due to signature mismatch
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(wrong_secret_token)
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
+
+    def test_token_with_modified_signature_rejected(self):
+        """Test that tokens with modified signatures are rejected."""
+        # Create valid token
+        token = create_token(subject="user123")
+        parts = token.split(".")
+
+        # Modify the signature part
+        modified_signature = parts[2][:-5] + "XXXXX"
+        tampered_token = f"{parts[0]}.{parts[1]}.{modified_signature}"
+
+        # Should be rejected due to invalid signature
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(tampered_token)
+        assert exc_info.value.status_code == 401
+
+    def test_token_with_signature_from_different_token_rejected(self):
+        """Test that mixing payload from one token with signature from another is rejected."""
+        # Create two different tokens
+        token1 = create_token(subject="user1")
+        token2 = create_token(subject="user2")
+
+        # Split both tokens
+        parts1 = token1.split(".")
+        parts2 = token2.split(".")
+
+        # Create hybrid token: payload from token1, signature from token2
+        hybrid_token = f"{parts1[0]}.{parts1[1]}.{parts2[2]}"
+
+        # Should be rejected due to signature mismatch
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(hybrid_token)
+        assert exc_info.value.status_code == 401
+
+    def test_unsigned_token_with_none_algorithm_rejected(self):
+        """Test that unsigned tokens using 'none' algorithm are rejected."""
+        # Create payload without signature
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+
+        try:
+            # Try to create token with 'none' algorithm (no signature)
+            unsigned_token = jwt.encode(payload, "", algorithm="none")
+
+            # Should be rejected
+            with pytest.raises(HTTPException) as exc_info:
+                decode_token(unsigned_token)
+            assert exc_info.value.status_code == 401
+        except jwt.exceptions.InvalidAlgorithmError:
+            # Some JWT libraries don't allow 'none' algorithm - that's good!
+            pass
+
+    def test_token_with_modified_payload_rejected(self):
+        """Test that tokens with modified payload but valid structure are rejected."""
+        # Create valid token
+        token = create_token(subject="regular_user", additional_claims={"role": "user"})
+        parts = token.split(".")
+
+        # Decode payload to modify it
+        import base64
+        import json
+
+        # Decode the payload
+        padded_payload = parts[1] + "=" * (4 - len(parts[1]) % 4)
+        payload_bytes = base64.urlsafe_b64decode(padded_payload)
+        payload = json.loads(payload_bytes)
+
+        # Modify the payload (try to escalate privileges)
+        payload["role"] = "admin"
+        payload["sub"] = "admin_user"
+
+        # Re-encode modified payload
+        modified_payload = base64.urlsafe_b64encode(
+            json.dumps(payload).encode()
+        ).decode().rstrip("=")
+
+        # Create token with modified payload but original signature
+        tampered_token = f"{parts[0]}.{modified_payload}.{parts[2]}"
+
+        # Should be rejected due to signature mismatch
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(tampered_token)
+        assert exc_info.value.status_code == 401
+
+    def test_token_signature_verification_not_optional(self):
+        """Test that signature verification cannot be bypassed by any means."""
+        # Create a valid token
+        valid_token = create_token(subject="user123")
+
+        # Verify it works first
+        payload = decode_token(valid_token)
+        assert payload["sub"] == "user123"
+
+        # Now try various bypass attempts
+        parts = valid_token.split(".")
+
+        # Attempt 1: Empty signature
+        no_sig_token = f"{parts[0]}.{parts[1]}."
+        with pytest.raises(HTTPException):
+            decode_token(no_sig_token)
+
+        # Attempt 2: Garbage signature
+        garbage_sig_token = f"{parts[0]}.{parts[1]}.invalidgarbage"
+        with pytest.raises(HTTPException):
+            decode_token(garbage_sig_token)
+
+    def test_signature_verified_before_claims_processed(self):
+        """Test that signature is verified before processing any claims."""
+        # Create token with wrong signature but valid-looking payload
+        payload = {
+            "sub": "admin",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+            "role": "superadmin",
+        }
+        wrong_sig_token = jwt.encode(
+            payload,
+            "wrong_secret",
+            algorithm=settings.jwt_algorithm,
+        )
+
+        # Even though payload looks valid, should fail due to signature
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(wrong_sig_token)
+        assert exc_info.value.status_code == 401
+
+    def test_algorithm_switching_attack_prevented(self):
+        """Test that algorithm switching attacks are prevented."""
+        # This tests against attacks where an attacker tries to change
+        # the algorithm (e.g., from RS256 to HS256) to bypass signature verification
+
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+
+        # Try to create token with different algorithm
+        # If we're using HS256, try HS512; if RS256, try HS256, etc.
+        alternative_algorithms = ["HS512", "HS384", "RS256"]
+
+        for alt_alg in alternative_algorithms:
+            if alt_alg != settings.jwt_algorithm:
+                try:
+                    # Create token with alternative algorithm
+                    alt_token = jwt.encode(
+                        payload,
+                        settings.jwt_secret_key,
+                        algorithm=alt_alg,
+                    )
+
+                    # Should be rejected due to algorithm mismatch
+                    with pytest.raises(HTTPException) as exc_info:
+                        decode_token(alt_token)
+                    assert exc_info.value.status_code == 401
+                except (jwt.exceptions.InvalidAlgorithmError, ValueError, NotImplementedError):
+                    # Some algorithms may not be supported - that's fine
+                    pass
+
+    @pytest.mark.asyncio
+    async def test_verify_token_checks_signature_before_blacklist(self, mock_db_session):
+        """Test that signature verification happens before blacklist check."""
+        # Create token with wrong signature
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        invalid_sig_token = jwt.encode(
+            payload,
+            "wrong_secret",
+            algorithm=settings.jwt_algorithm,
+        )
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials=invalid_sig_token
+        )
+
+        # Should fail before reaching blacklist check
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token(credentials, mock_db_session)
+
+        assert exc_info.value.status_code == 401
+        # Database should not be queried since signature check fails first
+        mock_db_session.execute.assert_not_called()
+
+    @pytest.fixture
+    def mock_db_session(self):
+        """Create a mock database session."""
+        return AsyncMock()
