@@ -776,4 +776,165 @@ class AdministrationGateway extends QueryableGateway
         $count = $this->getAdministrationCountLast24Hours($gibbonPersonID, $gibbonMedicalProtocolID);
         return $count >= $maxDailyDoses;
     }
+
+    /**
+     * Validate a proposed dose using Quebec FO-0647 DoseValidator.
+     *
+     * Validates dose against weight-based requirements, concentration matching,
+     * age appropriateness, and overdose risk per Quebec protocol.
+     *
+     * @param float $weightKg Child's weight in kilograms
+     * @param float $doseMg Proposed dose in milligrams
+     * @param string $concentration Medication concentration
+     * @param int|null $ageMonths Optional age in months for age-based restrictions
+     * @return array Validation result with 'valid' boolean, 'errors' array, 'warnings' array, 'recommendedRange'
+     */
+    public function validateDose($weightKg, $doseMg, $concentration, $ageMonths = null)
+    {
+        return DoseValidator::validateDose($weightKg, $doseMg, $concentration, $ageMonths);
+    }
+
+    /**
+     * Get recommended dose from Quebec FO-0647 dosing table.
+     *
+     * @param float $weightKg Child's weight in kilograms
+     * @param string $concentration Medication concentration
+     * @return array|null Dose information or null if not found
+     */
+    public function getRecommendedDose($weightKg, $concentration)
+    {
+        return DoseValidator::getRecommendedDose($weightKg, $concentration);
+    }
+
+    /**
+     * Get all available dose options for a given weight.
+     *
+     * @param float $weightKg Child's weight in kilograms
+     * @return array Array of dose options for each available concentration
+     */
+    public function getAvailableDoses($weightKg)
+    {
+        return DoseValidator::getAvailableDoses($weightKg);
+    }
+
+    /**
+     * Check if a proposed dose poses an overdose risk.
+     *
+     * @param float $weightKg Child's weight in kilograms
+     * @param float $doseMg Proposed dose in milligrams
+     * @return bool True if overdose risk detected
+     */
+    public function isOverdoseRisk($weightKg, $doseMg)
+    {
+        return DoseValidator::isOverdoseRisk($weightKg, $doseMg);
+    }
+
+    /**
+     * Calculate mg/kg for a given dose and weight.
+     *
+     * @param float $weightKg Child's weight in kilograms
+     * @param float $doseMg Dose in milligrams
+     * @return float Dose in mg/kg
+     */
+    public function calculateMgPerKg($weightKg, $doseMg)
+    {
+        return DoseValidator::calculateMgPerKg($weightKg, $doseMg);
+    }
+
+    /**
+     * Validate that a concentration is supported by Quebec FO-0647 protocol.
+     *
+     * @param string $concentration Concentration to validate
+     * @return bool True if valid
+     */
+    public function isValidConcentration($concentration)
+    {
+        return DoseValidator::isValidConcentration($concentration);
+    }
+
+    /**
+     * Get list of valid concentrations per Quebec FO-0647 protocol.
+     *
+     * @return array Array of valid concentration strings
+     */
+    public function getValidConcentrations()
+    {
+        return DoseValidator::getValidConcentrations();
+    }
+
+    /**
+     * Get the complete Quebec FO-0647 dosing table.
+     *
+     * @return array Complete dosing table with all weight ranges and concentrations
+     */
+    public function getDosingTable()
+    {
+        return DoseValidator::getDosingTable();
+    }
+
+    /**
+     * Comprehensive pre-administration validation.
+     *
+     * Validates all Quebec FO-0647 requirements before allowing medication administration:
+     * - Weight-based dose validation (10-15 mg/kg)
+     * - Concentration appropriateness for weight range
+     * - Age-based safety restrictions
+     * - Overdose risk detection
+     * - Minimum interval between doses
+     * - Maximum daily dose limit (5 doses per 24 hours)
+     *
+     * @param int $gibbonPersonID Child receiving medication
+     * @param int $gibbonMedicalProtocolID Protocol ID (for acetaminophen FO-0647)
+     * @param float $weightKg Child's current weight in kilograms
+     * @param float $doseMg Proposed dose in milligrams
+     * @param string $concentration Medication concentration
+     * @param int|null $ageMonths Child's age in months (optional)
+     * @param int|null $maxDailyDoses Maximum doses per 24 hours (default: 5 per FO-0647)
+     * @return array Validation result with 'canAdminister', 'errors', 'warnings', and additional info
+     */
+    public function validateAdministration($gibbonPersonID, $gibbonMedicalProtocolID, $weightKg, $doseMg, $concentration, $ageMonths = null, $maxDailyDoses = 5)
+    {
+        $errors = [];
+        $warnings = [];
+
+        // 1. Validate dose using DoseValidator
+        $doseValidation = $this->validateDose($weightKg, $doseMg, $concentration, $ageMonths);
+        if (!$doseValidation['valid']) {
+            $errors = array_merge($errors, $doseValidation['errors']);
+        }
+        if (!empty($doseValidation['warnings'])) {
+            $warnings = array_merge($warnings, $doseValidation['warnings']);
+        }
+
+        // 2. Check minimum interval between doses
+        $intervalCheck = $this->canAdminister($gibbonPersonID, $gibbonMedicalProtocolID);
+        if (is_array($intervalCheck) && !$intervalCheck['canAdminister']) {
+            $errors[] = sprintf(
+                'Minimum interval not met. Next dose allowed at %s (%d minutes remaining)',
+                $intervalCheck['nextAllowedTime'],
+                $intervalCheck['remainingMinutes']
+            );
+        }
+
+        // 3. Check daily dose limit
+        if ($this->isDailyLimitReached($gibbonPersonID, $gibbonMedicalProtocolID, $maxDailyDoses)) {
+            $count = $this->getAdministrationCountLast24Hours($gibbonPersonID, $gibbonMedicalProtocolID);
+            $errors[] = sprintf(
+                'Daily dose limit reached: %d doses in last 24 hours (maximum: %d per Quebec FO-0647)',
+                $count,
+                $maxDailyDoses
+            );
+        }
+
+        return [
+            'canAdminister' => empty($errors),
+            'valid' => empty($errors),
+            'errors' => $errors,
+            'warnings' => $warnings,
+            'doseValidation' => $doseValidation,
+            'intervalCheck' => $intervalCheck,
+            'dailyDoseCount' => $this->getAdministrationCountLast24Hours($gibbonPersonID, $gibbonMedicalProtocolID),
+            'maxDailyDoses' => $maxDailyDoses,
+        ];
+    }
 }
