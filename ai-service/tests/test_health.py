@@ -308,16 +308,17 @@ async def test_check_redis_health_success() -> None:
     from app.routers.health import check_redis_health
 
     # Mock Redis client
-    with patch("app.routers.health.redis.Redis") as mock_redis_class:
-        mock_client = AsyncMock()
-        mock_client.ping = AsyncMock()
-        mock_client.info = AsyncMock(
-            return_value={
-                "redis_version": "7.0.0",
-                "uptime_in_seconds": 1000,
-            }
-        )
-        mock_client.close = AsyncMock()
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock()
+    mock_client.info = AsyncMock(
+        return_value={
+            "redis_version": "7.0.0",
+            "uptime_in_seconds": 1000,
+        }
+    )
+    mock_client.close = AsyncMock()
+
+    with patch("redis.asyncio.Redis") as mock_redis_class:
         mock_redis_class.return_value = mock_client
 
         result = await check_redis_health()
@@ -334,9 +335,10 @@ async def test_check_redis_health_failure() -> None:
     from app.routers.health import check_redis_health
 
     # Mock Redis client to raise exception
-    with patch("app.routers.health.redis.Redis") as mock_redis_class:
-        mock_client = AsyncMock()
-        mock_client.ping.side_effect = Exception("Connection refused")
+    mock_client = AsyncMock()
+    mock_client.ping.side_effect = Exception("Connection refused")
+
+    with patch("redis.asyncio.Redis") as mock_redis_class:
         mock_redis_class.return_value = mock_client
 
         result = await check_redis_health()
@@ -363,15 +365,327 @@ async def test_health_check_timestamp_format(
             "connected": True,
         }
 
-        response = await client.get("/api/v1/health")
+        with patch("app.routers.health.check_redis_pool") as mock_redis_pool:
+            mock_redis_pool.return_value = {
+                "status": "healthy",
+                "max_connections": 10,
+            }
 
-        assert response.status_code == 200
-        data = response.json()
+            response = await client.get("/api/v1/health")
 
-        # Verify timestamp is in ISO format with Z suffix
-        assert data["timestamp"].endswith("Z")
+            assert response.status_code == 200
+            data = response.json()
 
-        # Verify timestamp can be parsed
-        from datetime import datetime
+            # Verify timestamp is in ISO format with Z suffix
+            assert data["timestamp"].endswith("Z")
 
-        datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+            # Verify timestamp can be parsed
+            from datetime import datetime
+
+            datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+
+
+@pytest.mark.asyncio
+async def test_check_database_pool_healthy() -> None:
+    """Test database pool check with healthy pool."""
+    from app.routers.health import check_database_pool
+
+    # Mock the engine pool
+    with patch("app.database.engine") as mock_engine:
+        mock_pool = MagicMock()
+        mock_pool.size.return_value = 5
+        mock_pool.checkedout.return_value = 2
+        mock_pool.checkedin.return_value = 3
+        mock_pool.overflow.return_value = 0
+        mock_engine.pool = mock_pool
+
+        result = check_database_pool()
+
+        assert result["status"] == "healthy"
+        assert result["pool_size"] == 5
+        assert result["checked_out"] == 2
+        assert result["checked_in"] == 3
+        assert result["overflow"] == 0
+        assert result["total_capacity"] == 5
+        assert result["utilization_percent"] == 40.0
+
+
+@pytest.mark.asyncio
+async def test_check_database_pool_degraded() -> None:
+    """Test database pool check with degraded pool (>80% utilization)."""
+    from app.routers.health import check_database_pool
+
+    # Mock the engine pool with high utilization
+    with patch("app.database.engine") as mock_engine:
+        mock_pool = MagicMock()
+        mock_pool.size.return_value = 5
+        mock_pool.checkedout.return_value = 5
+        mock_pool.checkedin.return_value = 0
+        mock_pool.overflow.return_value = 1
+        mock_engine.pool = mock_pool
+
+        result = check_database_pool()
+
+        assert result["status"] == "degraded"
+        assert result["pool_size"] == 5
+        assert result["checked_out"] == 5
+        assert result["overflow"] == 1
+        assert result["utilization_percent"] > 80
+
+
+@pytest.mark.asyncio
+async def test_check_database_pool_critical() -> None:
+    """Test database pool check with critical pool (>95% utilization)."""
+    from app.routers.health import check_database_pool
+
+    # Mock the engine pool with critical utilization
+    # 10 checked out / 10 total = 100% utilization
+    with patch("app.database.engine") as mock_engine:
+        mock_pool = MagicMock()
+        mock_pool.size.return_value = 5
+        mock_pool.checkedout.return_value = 10
+        mock_pool.checkedin.return_value = 0
+        mock_pool.overflow.return_value = 5
+        mock_engine.pool = mock_pool
+
+        result = check_database_pool()
+
+        assert result["status"] == "critical"
+        assert result["utilization_percent"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_check_database_pool_error() -> None:
+    """Test database pool check with error."""
+    from app.routers.health import check_database_pool
+
+    # Mock the engine to raise an exception
+    with patch("app.database.engine") as mock_engine:
+        mock_engine.pool.size.side_effect = Exception("Pool error")
+
+        result = check_database_pool()
+
+        assert result["status"] == "error"
+        assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_check_redis_pool_success() -> None:
+    """Test Redis pool check with successful connection."""
+    from app.routers.health import check_redis_pool
+
+    # Mock Redis connection pool
+    mock_pool = AsyncMock()
+    mock_pool.max_connections = 10
+    mock_pool.disconnect = AsyncMock()
+
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock()
+    mock_client.info = AsyncMock(
+        return_value={
+            "total_connections_received": 100,
+            "connected_clients": 5,
+        }
+    )
+    mock_client.close = AsyncMock()
+
+    with patch("redis.asyncio.ConnectionPool") as mock_pool_class:
+        with patch("redis.asyncio.Redis") as mock_redis_class:
+            mock_pool_class.return_value = mock_pool
+            mock_redis_class.return_value = mock_client
+
+            result = await check_redis_pool()
+
+            assert result["status"] == "healthy"
+            assert result["max_connections"] == 10
+            assert result["total_connections_received"] == 100
+            assert result["connected_clients"] == 5
+
+
+@pytest.mark.asyncio
+async def test_check_redis_pool_failure() -> None:
+    """Test Redis pool check with failed connection."""
+    from app.routers.health import check_redis_pool
+
+    # Mock Redis connection pool to raise exception
+    mock_client = AsyncMock()
+    mock_client.ping.side_effect = Exception("Connection refused")
+
+    with patch("redis.asyncio.ConnectionPool") as mock_pool_class:
+        with patch("redis.asyncio.Redis") as mock_redis_class:
+            mock_redis_class.return_value = mock_client
+
+            result = await check_redis_pool()
+
+            assert result["status"] == "unhealthy"
+            assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_connection_pools_endpoint(client: AsyncClient) -> None:
+    """Test connection pools monitoring endpoint.
+
+    Args:
+        client: Async HTTP client fixture
+    """
+    # Mock pool checks
+    with patch("app.routers.health.check_database_pool") as mock_db_pool:
+        with patch("app.routers.health.check_redis_pool") as mock_redis_pool:
+            mock_db_pool.return_value = {
+                "status": "healthy",
+                "pool_size": 5,
+                "checked_out": 2,
+                "checked_in": 3,
+                "overflow": 0,
+                "utilization_percent": 40.0,
+            }
+
+            mock_redis_pool.return_value = {
+                "status": "healthy",
+                "max_connections": 10,
+                "connected_clients": 5,
+            }
+
+            response = await client.get("/api/v1/health/pools")
+
+            assert response.status_code == 200
+            data = response.json()
+
+            # Verify response structure
+            assert "timestamp" in data
+            assert "pools" in data
+
+            # Verify timestamp format
+            assert data["timestamp"].endswith("Z")
+
+            # Verify pool data
+            pools = data["pools"]
+            assert "database" in pools
+            assert "redis" in pools
+
+            # Verify database pool data
+            db_pool = pools["database"]
+            assert db_pool["status"] == "healthy"
+            assert db_pool["pool_size"] == 5
+            assert db_pool["utilization_percent"] == 40.0
+
+            # Verify redis pool data
+            redis_pool = pools["redis"]
+            assert redis_pool["status"] == "healthy"
+            assert redis_pool["max_connections"] == 10
+
+
+@pytest.mark.asyncio
+async def test_health_check_includes_pools(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test that comprehensive health check includes pool metrics.
+
+    Args:
+        client: Async HTTP client fixture
+        db_session: Database session fixture
+    """
+    with patch("app.routers.health.check_redis_health") as mock_redis:
+        with patch("app.routers.health.check_redis_pool") as mock_redis_pool:
+            mock_redis.return_value = {
+                "status": "healthy",
+                "connected": True,
+            }
+
+            mock_redis_pool.return_value = {
+                "status": "healthy",
+                "max_connections": 10,
+            }
+
+            response = await client.get("/api/v1/health")
+
+            assert response.status_code == 200
+            data = response.json()
+
+            # Verify pool checks are included
+            checks = data["checks"]
+            assert "database_pool" in checks
+            assert "redis_pool" in checks
+
+            # Verify pool data structure
+            assert "status" in checks["database_pool"]
+            assert "status" in checks["redis_pool"]
+
+
+@pytest.mark.asyncio
+async def test_health_check_degraded_pool(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test health check with degraded database pool.
+
+    Args:
+        client: Async HTTP client fixture
+        db_session: Database session fixture
+    """
+    with patch("app.routers.health.check_database_pool") as mock_db_pool:
+        with patch("app.routers.health.check_redis_health") as mock_redis:
+            with patch("app.routers.health.check_redis_pool") as mock_redis_pool:
+                mock_db_pool.return_value = {
+                    "status": "degraded",
+                    "utilization_percent": 85.0,
+                }
+
+                mock_redis.return_value = {
+                    "status": "healthy",
+                    "connected": True,
+                }
+
+                mock_redis_pool.return_value = {
+                    "status": "healthy",
+                    "max_connections": 10,
+                }
+
+                response = await client.get("/api/v1/health")
+
+                assert response.status_code == 200
+                data = response.json()
+
+                # Overall status should be degraded due to pool
+                assert data["status"] == "degraded"
+                assert data["checks"]["database_pool"]["status"] == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_health_check_critical_pool(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test health check with critical database pool.
+
+    Args:
+        client: Async HTTP client fixture
+        db_session: Database session fixture
+    """
+    with patch("app.routers.health.check_database_pool") as mock_db_pool:
+        with patch("app.routers.health.check_redis_health") as mock_redis:
+            with patch("app.routers.health.check_redis_pool") as mock_redis_pool:
+                mock_db_pool.return_value = {
+                    "status": "critical",
+                    "utilization_percent": 98.0,
+                }
+
+                mock_redis.return_value = {
+                    "status": "healthy",
+                    "connected": True,
+                }
+
+                mock_redis_pool.return_value = {
+                    "status": "healthy",
+                    "max_connections": 10,
+                }
+
+                response = await client.get("/api/v1/health")
+
+                assert response.status_code == 200
+                data = response.json()
+
+                # Overall status should be unhealthy due to critical pool
+                assert data["status"] == "unhealthy"
+                assert data["checks"]["database_pool"]["status"] == "critical"

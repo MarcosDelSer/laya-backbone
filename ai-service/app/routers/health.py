@@ -162,6 +162,120 @@ async def check_redis_health() -> Dict[str, Any]:
         }
 
 
+def check_database_pool() -> Dict[str, Any]:
+    """Check SQLAlchemy database connection pool status.
+
+    Returns:
+        Dict containing connection pool statistics
+    """
+    try:
+        from app.database import engine
+
+        pool = engine.pool
+
+        # Get pool statistics
+        pool_size = pool.size()
+        checked_out = pool.checkedout()
+        overflow = pool.overflow()
+        checked_in = pool.checkedin()
+
+        # Calculate pool utilization percentage
+        total_capacity = pool_size + overflow
+        utilization = (checked_out / total_capacity * 100) if total_capacity > 0 else 0
+
+        # Determine pool health status
+        # Warn if pool is >80% utilized, critical if >95%
+        if utilization > 95:
+            pool_status = "critical"
+        elif utilization > 80:
+            pool_status = "degraded"
+        else:
+            pool_status = "healthy"
+
+        return {
+            "status": pool_status,
+            "pool_size": pool_size,
+            "checked_out": checked_out,
+            "checked_in": checked_in,
+            "overflow": overflow,
+            "total_capacity": total_capacity,
+            "utilization_percent": round(utilization, 2),
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+        }
+
+
+async def check_redis_pool() -> Dict[str, Any]:
+    """Check Redis connection pool status.
+
+    Returns:
+        Dict containing Redis pool statistics
+    """
+    try:
+        # Try to import and use redis
+        import redis.asyncio as redis
+        from app.config import settings
+
+        # Get Redis connection details from settings
+        redis_host = getattr(settings, 'redis_host', 'localhost')
+        redis_port = getattr(settings, 'redis_port', 6379)
+        redis_db = getattr(settings, 'redis_db', 0)
+
+        # Create Redis connection pool with size limits
+        pool = redis.ConnectionPool(
+            host=redis_host,
+            port=redis_port,
+            db=redis_db,
+            max_connections=10,  # Default max connections
+            decode_responses=True,
+        )
+
+        # Create client from pool
+        client = redis.Redis(connection_pool=pool)
+
+        # Ping to ensure connection
+        await client.ping()
+
+        # Get pool info
+        # Note: Redis-py doesn't expose detailed pool metrics directly
+        # but we can get some info from the connection pool
+        pool_info = {
+            "status": "healthy",
+            "max_connections": pool.max_connections,
+            "connection_kwargs": {
+                "host": redis_host,
+                "port": redis_port,
+                "db": redis_db,
+            },
+        }
+
+        # Try to get additional info from Redis server
+        info = await client.info("stats")
+        if info:
+            pool_info["total_connections_received"] = info.get(
+                "total_connections_received", 0
+            )
+            pool_info["connected_clients"] = info.get("connected_clients", 0)
+
+        await client.close()
+        await pool.disconnect()
+
+        return pool_info
+    except ImportError:
+        return {
+            "status": "unknown",
+            "message": "Redis client not installed",
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+        }
+
+
 @router.get(
     "",
     summary="Comprehensive health check",
@@ -176,6 +290,8 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     - Redis cache connectivity
     - Disk space usage
     - Memory usage
+    - Database connection pool status
+    - Redis connection pool status
 
     Args:
         db: Async database session (injected)
@@ -196,7 +312,9 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
                 "database": {"status": "healthy", "connected": true},
                 "redis": {"status": "healthy", "connected": true},
                 "disk": {"status": "healthy", "percent_used": 45.2},
-                "memory": {"status": "healthy", "rss_mb": 256.5}
+                "memory": {"status": "healthy", "rss_mb": 256.5},
+                "database_pool": {"status": "healthy", "utilization_percent": 40.0},
+                "redis_pool": {"status": "healthy", "max_connections": 10}
             }
         }
     """
@@ -205,6 +323,8 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     redis_health = await check_redis_health()
     disk_health = get_disk_usage()
     memory_health = get_memory_usage()
+    db_pool_health = check_database_pool()
+    redis_pool_health = await check_redis_pool()
 
     # Determine overall health status
     checks = {
@@ -212,24 +332,33 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
         "redis": redis_health,
         "disk": disk_health,
         "memory": memory_health,
+        "database_pool": db_pool_health,
+        "redis_pool": redis_pool_health,
     }
 
     # Overall status is healthy only if all critical checks pass
     # Redis is optional, so we only consider it if it's configured
-    critical_checks = [database_health, disk_health]
+    # Pool status is important - degraded pools should make overall status degraded
+    critical_checks = [database_health, disk_health, db_pool_health]
 
-    is_healthy = all(
-        check.get("status") in ["healthy", "unknown"]
+    # Check for any critical failures
+    has_critical = any(
+        check.get("status") in ["unhealthy", "critical", "error"]
         for check in critical_checks
     )
 
-    overall_status = "healthy" if is_healthy else "unhealthy"
-
-    # Return 503 if unhealthy, 200 if healthy
-    http_status = (
-        status.HTTP_200_OK if is_healthy
-        else status.HTTP_503_SERVICE_UNAVAILABLE
+    # Check for any degraded states
+    has_degraded = any(
+        check.get("status") == "degraded"
+        for check in critical_checks
     )
+
+    if has_critical:
+        overall_status = "unhealthy"
+    elif has_degraded:
+        overall_status = "degraded"
+    else:
+        overall_status = "healthy"
 
     return {
         "status": overall_status,
@@ -292,3 +421,54 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
             "status": "not_ready",
             "database": database_health,
         }
+
+
+@router.get(
+    "/pools",
+    summary="Connection pool monitoring",
+    description="Monitor database and Redis connection pool status",
+    response_model=None,
+)
+async def connection_pools() -> Dict[str, Any]:
+    """Connection pool monitoring endpoint.
+
+    Provides detailed metrics about database and Redis connection pools,
+    including pool size, utilization, and capacity.
+
+    Returns:
+        Dict containing pool statistics for all services
+
+    Example:
+        GET /health/pools
+
+        Response:
+        {
+            "timestamp": "2024-02-15T10:30:00Z",
+            "pools": {
+                "database": {
+                    "status": "healthy",
+                    "pool_size": 5,
+                    "checked_out": 2,
+                    "checked_in": 3,
+                    "overflow": 0,
+                    "utilization_percent": 40.0
+                },
+                "redis": {
+                    "status": "healthy",
+                    "max_connections": 10,
+                    "connected_clients": 3
+                }
+            }
+        }
+    """
+    # Get pool statistics
+    db_pool = check_database_pool()
+    redis_pool = await check_redis_pool()
+
+    return {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "pools": {
+            "database": db_pool,
+            "redis": redis_pool,
+        },
+    }
