@@ -647,9 +647,10 @@ class TestLogout:
     async def test_logout_success_access_token_only(self, mock_user):
         """Test logout blacklists access token."""
         mock_db = AsyncMock()
-        mock_db.commit = AsyncMock()
+        mock_blacklist = AsyncMock()
+        mock_blacklist.add_to_blacklist = AsyncMock()
 
-        service = AuthService(mock_db)
+        service = AuthService(mock_db, blacklist_service=mock_blacklist)
         access_token = create_access_token(
             user_id=str(mock_user.id),
             email=mock_user.email,
@@ -665,16 +666,16 @@ class TestLogout:
 
         assert response.message == "Successfully logged out"
         assert response.tokens_invalidated == 1
-        mock_db.add.assert_called_once()
-        mock_db.commit.assert_called_once()
+        mock_blacklist.add_to_blacklist.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_logout_success_both_tokens(self, mock_user):
         """Test logout blacklists both access and refresh tokens."""
         mock_db = AsyncMock()
-        mock_db.commit = AsyncMock()
+        mock_blacklist = AsyncMock()
+        mock_blacklist.add_to_blacklist = AsyncMock()
 
-        service = AuthService(mock_db)
+        service = AuthService(mock_db, blacklist_service=mock_blacklist)
         access_token = create_access_token(
             user_id=str(mock_user.id),
             email=mock_user.email,
@@ -691,7 +692,7 @@ class TestLogout:
 
         assert response.message == "Successfully logged out"
         assert response.tokens_invalidated == 2
-        assert mock_db.add.call_count == 2
+        assert mock_blacklist.add_to_blacklist.call_count == 2
 
     @pytest.mark.asyncio
     async def test_logout_invalid_access_token_raises_401(self):
@@ -733,9 +734,10 @@ class TestLogout:
     async def test_logout_ignores_invalid_refresh_token(self, mock_user):
         """Test logout succeeds even if refresh token is invalid."""
         mock_db = AsyncMock()
-        mock_db.commit = AsyncMock()
+        mock_blacklist = AsyncMock()
+        mock_blacklist.add_to_blacklist = AsyncMock()
 
-        service = AuthService(mock_db)
+        service = AuthService(mock_db, blacklist_service=mock_blacklist)
         access_token = create_access_token(
             user_id=str(mock_user.id),
             email=mock_user.email,
@@ -1096,7 +1098,10 @@ class TestAuthServiceIntegration:
         mock_db.execute.return_value = mock_result
         mock_db.commit = AsyncMock()
 
-        service = AuthService(mock_db)
+        mock_blacklist = AsyncMock()
+        mock_blacklist.add_to_blacklist = AsyncMock()
+
+        service = AuthService(mock_db, blacklist_service=mock_blacklist)
 
         # Login
         login_request = LoginRequest(
@@ -1116,7 +1121,7 @@ class TestAuthServiceIntegration:
         logout_response = await service.logout(logout_request)
 
         assert logout_response.tokens_invalidated == 2
-        assert mock_db.add.call_count == 2
+        assert mock_blacklist.add_to_blacklist.call_count == 2
 
     @pytest.mark.asyncio
     async def test_login_refresh_flow(self, mock_user):
