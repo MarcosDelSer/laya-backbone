@@ -67,31 +67,6 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_gal
         ];
     }
 
-    // For staff/admin, we still need to get all students (service doesn't implement this yet)
-    if ($roleCategory !== 'Parent') {
-        // Staff/Admin: Get all enrolled students
-        $studentQuery = "SELECT gibbonPerson.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname, gibbonPerson.image_240
-                         FROM gibbonPerson
-                         INNER JOIN gibbonStudentEnrolment ON gibbonStudentEnrolment.gibbonPersonID = gibbonPerson.gibbonPersonID
-                         WHERE gibbonStudentEnrolment.gibbonSchoolYearID = :gibbonSchoolYearID
-                         AND gibbonPerson.status = 'Full'
-                         ORDER BY gibbonPerson.surname, gibbonPerson.preferredName";
-
-        $result = $connection2->prepare($studentQuery);
-        $result->execute(['gibbonSchoolYearID' => $gibbonSchoolYearID]);
-        $students = $result->fetchAll(\PDO::FETCH_ASSOC);
-
-        $childrenIDs = [];
-        $childrenInfo = [];
-        foreach ($students as $student) {
-            $childrenIDs[] = $student['gibbonPersonID'];
-            $childrenInfo[$student['gibbonPersonID']] = [
-                'name' => Format::name('', $student['preferredName'], $student['surname'], 'Student'),
-                'image' => $student['image_240'],
-            ];
-        }
-    }
-
     // Check if parent has no children
     if ($roleCategory === 'Parent' && empty($childrenIDs)) {
         echo '<div class="message">';

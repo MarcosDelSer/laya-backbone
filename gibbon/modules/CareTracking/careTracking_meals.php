@@ -63,22 +63,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         $aiSyncService = null;
     }
 
-    // Meal types and quantity options
-    $mealTypes = [
-        'Breakfast'        => __('Breakfast'),
-        'Morning Snack'    => __('Morning Snack'),
-        'Lunch'            => __('Lunch'),
-        'Afternoon Snack'  => __('Afternoon Snack'),
-        'Dinner'           => __('Dinner'),
-    ];
-
-    $quantityOptions = [
-        'None'   => __('None'),
-        'Little' => __('Little'),
-        'Some'   => __('Some'),
-        'Most'   => __('Most'),
-        'All'    => __('All'),
-    ];
+    // Get meal types and quantity options from service
+    $mealTypes = $mealService->getMealTypes();
+    $quantityOptions = $mealService->getQuantityOptions();
 
     // Handle meal logging action
     $action = $_POST['action'] ?? '';

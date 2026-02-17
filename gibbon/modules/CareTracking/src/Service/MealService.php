@@ -170,6 +170,38 @@ class MealService
     }
 
     /**
+     * Get available meal types.
+     *
+     * @return array Meal types
+     */
+    public function getMealTypes()
+    {
+        return [
+            'Breakfast'        => __('Breakfast'),
+            'Morning Snack'    => __('Morning Snack'),
+            'Lunch'            => __('Lunch'),
+            'Afternoon Snack'  => __('Afternoon Snack'),
+            'Dinner'           => __('Dinner'),
+        ];
+    }
+
+    /**
+     * Get available quantity options.
+     *
+     * @return array Quantity options
+     */
+    public function getQuantityOptions()
+    {
+        return [
+            'None'   => __('None'),
+            'Little' => __('Little'),
+            'Some'   => __('Some'),
+            'Most'   => __('Most'),
+            'All'    => __('All'),
+        ];
+    }
+
+    /**
      * Validate meal data before logging.
      *
      * @param array $data Meal data
