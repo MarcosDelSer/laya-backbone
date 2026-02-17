@@ -84,6 +84,29 @@ def decode_token(token: str) -> dict[str, Any]:
         'user123'
     """
     try:
+        # First, decode the header without verification to check the algorithm
+        # This provides explicit defense-in-depth against 'none' algorithm attacks
+        unverified_header = jwt.get_unverified_header(token)
+        token_algorithm = unverified_header.get("alg", "").lower()
+
+        # Explicitly reject 'none' algorithm (critical security check)
+        if token_algorithm == "none":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: 'none' algorithm is not allowed",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Verify algorithm matches expected algorithm
+        if token_algorithm != settings.jwt_algorithm.lower():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid token: algorithm mismatch (expected {settings.jwt_algorithm})",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Now decode and validate with full verification
+        # The algorithms parameter provides an additional layer of security
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
