@@ -340,6 +340,99 @@ CREATE INDEX IF NOT EXISTS idx_file_thumbnails_file ON file_thumbnails(file_id);
 CREATE INDEX IF NOT EXISTS idx_storage_quotas_owner ON storage_quotas(owner_id);
 """
 
+SQLITE_CREATE_DOCUMENT_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS documents (
+    id TEXT PRIMARY KEY,
+    type VARCHAR(20) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content_url TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS document_templates (
+    id TEXT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(20) NOT NULL,
+    description TEXT,
+    template_content TEXT NOT NULL,
+    required_fields TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS signatures (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    signer_id TEXT NOT NULL,
+    signature_image_url TEXT NOT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    device_info TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS signature_requests (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    requester_id TEXT NOT NULL,
+    signer_id TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'sent',
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    viewed_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    expires_at TIMESTAMP,
+    notification_sent INTEGER NOT NULL DEFAULT 0,
+    notification_method VARCHAR(50),
+    message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS document_audit_logs (
+    id TEXT PRIMARY KEY,
+    event_type VARCHAR(50) NOT NULL,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+    signature_request_id TEXT REFERENCES signature_requests(id) ON DELETE SET NULL,
+    event_data TEXT,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+CREATE INDEX IF NOT EXISTS idx_documents_created_by ON documents(created_by);
+CREATE INDEX IF NOT EXISTS idx_document_templates_name ON document_templates(name);
+CREATE INDEX IF NOT EXISTS idx_document_templates_type ON document_templates(type);
+CREATE INDEX IF NOT EXISTS idx_document_templates_active ON document_templates(is_active);
+CREATE INDEX IF NOT EXISTS idx_document_templates_created_by ON document_templates(created_by);
+CREATE INDEX IF NOT EXISTS idx_signatures_document ON signatures(document_id);
+CREATE INDEX IF NOT EXISTS idx_signatures_signer ON signatures(signer_id);
+CREATE INDEX IF NOT EXISTS idx_signatures_timestamp ON signatures(timestamp);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_document ON signature_requests(document_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_requester ON signature_requests(requester_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_signer ON signature_requests(signer_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_status ON signature_requests(status);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_sent_at ON signature_requests(sent_at);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_expires_at ON signature_requests(expires_at);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_event_type ON document_audit_logs(event_type);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_document ON document_audit_logs(document_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_user ON document_audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_signature ON document_audit_logs(signature_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_signature_request ON document_audit_logs(signature_request_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_timestamp ON document_audit_logs(timestamp);
+"""
+
 
 @pytest.fixture(scope="session")
 def event_loop_policy():
@@ -394,6 +487,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
+    # Create document tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_DOCUMENT_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     async with TestAsyncSessionLocal() as session:
         try:
             yield session
@@ -421,6 +521,12 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS observations"))
         await conn.execute(text("DROP TABLE IF EXISTS skill_assessments"))
         await conn.execute(text("DROP TABLE IF EXISTS development_profiles"))
+        # Drop document tables (foreign keys first)
+        await conn.execute(text("DROP TABLE IF EXISTS document_audit_logs"))
+        await conn.execute(text("DROP TABLE IF EXISTS signature_requests"))
+        await conn.execute(text("DROP TABLE IF EXISTS signatures"))
+        await conn.execute(text("DROP TABLE IF EXISTS document_templates"))
+        await conn.execute(text("DROP TABLE IF EXISTS documents"))
 
 
 @pytest_asyncio.fixture

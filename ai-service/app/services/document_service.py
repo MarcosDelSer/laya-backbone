@@ -4,6 +4,8 @@ Provides business logic for document template management, document creation,
 and signature workflows. Implements CRUD operations and document lifecycle management.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timedelta, timezone
