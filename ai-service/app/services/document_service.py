@@ -42,6 +42,28 @@ from app.schemas.document import (
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# Exception Classes
+# =============================================================================
+
+
+class DocumentServiceError(Exception):
+    """Base exception for document service errors."""
+
+    pass
+
+
+class UnauthorizedAccessError(DocumentServiceError):
+    """Raised when the user does not have permission to access a resource."""
+
+    pass
+
+
+# =============================================================================
+# Document Service
+# =============================================================================
+
+
 class DocumentService:
     """Service class for document and template management logic.
 
