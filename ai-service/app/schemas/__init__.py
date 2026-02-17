@@ -12,6 +12,7 @@ Modules:
     pagination: Standardized pagination schemas
     search: Full-text search schemas
     filters: Filter schemas for list endpoints
+    sorting: Sort option schemas for list endpoints
 """
 
 from app.schemas.activity import (
@@ -93,6 +94,13 @@ from app.schemas.filters import (
     StatusFilter,
     TypeFilter,
 )
+from app.schemas.sorting import (
+    ActivitySortField,
+    CoachingSortField,
+    MultiSortOptions,
+    SearchSortField,
+    SortOptions,
+)
 
 __all__ = [
     # Base schemas
@@ -166,4 +174,10 @@ __all__ = [
     "TypeFilter",
     "ActivityFilters",
     "CoachingFilters",
+    # Sort schemas
+    "ActivitySortField",
+    "CoachingSortField",
+    "SearchSortField",
+    "SortOptions",
+    "MultiSortOptions",
 ]
