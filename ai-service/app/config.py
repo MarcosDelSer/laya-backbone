@@ -4,9 +4,9 @@ Loads environment variables with sensible defaults for local development.
 All configuration values can be overridden via environment variables or .env file.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -111,12 +111,11 @@ class Settings(BaseSettings):
         """
         return self.environment == "development"
 
-    class Config:
-        """Pydantic settings configuration."""
-
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
 
 # Global settings instance
