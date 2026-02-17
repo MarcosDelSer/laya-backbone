@@ -380,11 +380,7 @@ class ActivityService:
         Returns:
             Activity if found, None otherwise.
         """
-        # Use cast for SQLite compatibility (TEXT storage) while maintaining PostgreSQL compatibility
-        from sqlalchemy import cast, String
-        query = select(Activity).where(
-            cast(Activity.id, String) == str(activity_id)
-        )
+        query = select(Activity).where(Activity.id == activity_id)
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
@@ -542,9 +538,7 @@ class ActivityService:
         Returns:
             Activity if found with relationships loaded, None otherwise
         """
-        from sqlalchemy import cast, String
-
-        query = select(Activity).where(cast(Activity.id, String) == str(activity_id))
+        query = select(Activity).where(Activity.id == activity_id)
 
         # Apply eager loading to prevent N+1 queries
         query = eager_load_activity_relationships(query)
