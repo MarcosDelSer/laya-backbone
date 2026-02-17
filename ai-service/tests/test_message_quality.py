@@ -3195,6 +3195,7 @@ def test_ownership_validation(mock_db_session):
 async def test_audit_logging(
     client: AsyncClient,
     auth_headers: Dict[str, str],
+    mock_persist_analysis,
 ) -> None:
     """Test that audit logs are captured for all access attempts.
 

@@ -341,6 +341,50 @@ CREATE INDEX IF NOT EXISTS idx_storage_quotas_owner ON storage_quotas(owner_id);
 """
 
 
+# SQLite-compatible auth tables for RBAC testing
+SQLITE_CREATE_AUTH_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS token_blacklist (
+    id TEXT PRIMARY KEY,
+    token VARCHAR(500) NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    blacklisted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id TEXT PRIMARY KEY,
+    token VARCHAR(500) NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    is_used INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_token ON token_blacklist(token);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_user ON token_blacklist(user_id);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at);
+CREATE INDEX IF NOT EXISTS idx_password_reset_token ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_email ON password_reset_tokens(email);
+"""
+
+
 @pytest.fixture(scope="session")
 def event_loop_policy():
     """Use default event loop policy for tests."""
@@ -394,6 +438,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
+    # Create auth tables via raw SQL (SQLite compatibility) for RBAC
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_AUTH_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     async with TestAsyncSessionLocal() as session:
         try:
             yield session
@@ -421,6 +472,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS observations"))
         await conn.execute(text("DROP TABLE IF EXISTS skill_assessments"))
         await conn.execute(text("DROP TABLE IF EXISTS development_profiles"))
+        # Drop auth tables
+        await conn.execute(text("DROP TABLE IF EXISTS password_reset_tokens"))
+        await conn.execute(text("DROP TABLE IF EXISTS token_blacklist"))
+        await conn.execute(text("DROP TABLE IF EXISTS users"))
 
 
 @pytest_asyncio.fixture
@@ -476,7 +531,7 @@ def test_user_payload(test_user_id: UUID) -> dict[str, Any]:
     return {
         "sub": str(test_user_id),
         "email": "test@example.com",
-        "role": "educator",
+        "role": "teacher",  # Using "teacher" role for RBAC compatibility
     }
 
 
