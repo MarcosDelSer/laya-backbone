@@ -245,6 +245,47 @@ CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(chi
 """
 
 
+# SQLite-compatible MFA tables (PostgreSQL UUID not supported in SQLite)
+SQLITE_CREATE_MFA_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS mfa_settings (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE,
+    is_enabled INTEGER NOT NULL DEFAULT 0,
+    method VARCHAR(20) NOT NULL DEFAULT 'totp',
+    secret_key VARCHAR(255),
+    recovery_email VARCHAR(255),
+    last_verified_at TIMESTAMP,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS mfa_backup_codes (
+    id TEXT PRIMARY KEY,
+    mfa_settings_id TEXT NOT NULL REFERENCES mfa_settings(id) ON DELETE CASCADE,
+    code_hash VARCHAR(255) NOT NULL,
+    is_used INTEGER NOT NULL DEFAULT 0,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS mfa_ip_whitelist (
+    id TEXT PRIMARY KEY,
+    mfa_settings_id TEXT NOT NULL REFERENCES mfa_settings(id) ON DELETE CASCADE,
+    ip_address VARCHAR(45) NOT NULL,
+    description TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_mfa_settings_user_id ON mfa_settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_mfa_backup_codes_settings ON mfa_backup_codes(mfa_settings_id);
+CREATE INDEX IF NOT EXISTS idx_mfa_ip_whitelist_settings ON mfa_ip_whitelist(mfa_settings_id);
+"""
+
+
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -333,6 +374,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
+    # Create MFA tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_MFA_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     async with TestAsyncSessionLocal() as session:
         try:
             yield session
@@ -355,6 +403,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
+        # Drop MFA tables
+        await conn.execute(text("DROP TABLE IF EXISTS mfa_ip_whitelist"))
+        await conn.execute(text("DROP TABLE IF EXISTS mfa_backup_codes"))
+        await conn.execute(text("DROP TABLE IF EXISTS mfa_settings"))
 
 
 @pytest_asyncio.fixture
