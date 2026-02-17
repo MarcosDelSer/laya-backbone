@@ -745,6 +745,99 @@ class MealGateway extends QueryableGateway
     }
 
     /**
+     * Get all children with allergies to a specific menu item.
+     *
+     * This method is used for allergen auto-flagging during meal logging.
+     *
+     * @param int $gibbonCareMenuItemID The menu item to check
+     * @param int|null $gibbonSchoolYearID Optional school year filter
+     * @return array Array of children with their conflicting allergens
+     */
+    public function getChildrenWithAllergyToItem($gibbonCareMenuItemID, $gibbonSchoolYearID = null)
+    {
+        // Get menu item's allergens
+        $data = ['gibbonCareMenuItemID' => $gibbonCareMenuItemID];
+        $sql = "SELECT allergen, severity
+                FROM gibbonCareMenuItemAllergen
+                WHERE gibbonCareMenuItemID=:gibbonCareMenuItemID";
+
+        $menuAllergens = $this->db()->select($sql, $data)->fetchAll();
+
+        if (empty($menuAllergens)) {
+            return [];
+        }
+
+        // Build a list of allergen names and lookup
+        $allergenNames = array_column($menuAllergens, 'allergen');
+        $menuAllergenLookup = [];
+        foreach ($menuAllergens as $ma) {
+            $menuAllergenLookup[$ma['allergen']] = $ma['severity'];
+        }
+
+        // Find all children with matching allergies
+        $childrenData = ['status' => 'Full'];
+        $childSql = "SELECT
+                    cd.gibbonCareChildDietaryID,
+                    cd.gibbonPersonID,
+                    cd.allergies,
+                    p.preferredName,
+                    p.surname,
+                    p.image_240
+                FROM gibbonCareChildDietary cd
+                INNER JOIN gibbonPerson p ON cd.gibbonPersonID=p.gibbonPersonID
+                WHERE p.status=:status
+                AND cd.allergies IS NOT NULL
+                AND cd.allergies != ''";
+
+        if ($gibbonSchoolYearID !== null) {
+            $childrenData['gibbonSchoolYearID'] = $gibbonSchoolYearID;
+            $childSql .= " AND EXISTS (
+                SELECT 1 FROM gibbonStudentEnrolment se
+                WHERE se.gibbonPersonID=p.gibbonPersonID
+                AND se.gibbonSchoolYearID=:gibbonSchoolYearID
+            )";
+        }
+
+        $childSql .= " ORDER BY p.surname, p.preferredName";
+
+        $children = $this->db()->select($childSql, $childrenData)->fetchAll();
+
+        $result = [];
+        foreach ($children as $child) {
+            $childAllergies = json_decode($child['allergies'], true);
+            if (!is_array($childAllergies)) {
+                continue;
+            }
+
+            $conflicts = [];
+            foreach ($childAllergies as $childAllergen) {
+                $allergenName = is_array($childAllergen) && isset($childAllergen['allergen']) ? $childAllergen['allergen'] : (is_string($childAllergen) ? $childAllergen : '');
+                $childSeverity = is_array($childAllergen) && isset($childAllergen['severity']) ? $childAllergen['severity'] : 'Moderate';
+
+                if (in_array($allergenName, $allergenNames)) {
+                    $conflicts[] = [
+                        'allergen' => $allergenName,
+                        'menuItemSeverity' => $menuAllergenLookup[$allergenName] ?? 'Moderate',
+                        'childSeverity' => $childSeverity,
+                    ];
+                }
+            }
+
+            if (!empty($conflicts)) {
+                $result[$child['gibbonPersonID']] = [
+                    'gibbonPersonID' => $child['gibbonPersonID'],
+                    'preferredName' => $child['preferredName'],
+                    'surname' => $child['surname'],
+                    'image_240' => $child['image_240'],
+                    'conflicts' => $conflicts,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * Get meal consumption summary by menu item for reporting.
      *
      * @param int $gibbonSchoolYearID
