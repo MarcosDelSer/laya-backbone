@@ -1,7 +1,7 @@
 """Unit tests for error handler middleware.
 
 Tests for request ID generation/propagation, exception handling,
-and structured error responses.
+and structured error responses with standardization.
 """
 
 from __future__ import annotations
@@ -12,8 +12,16 @@ from uuid import UUID
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from httpx import ASGITransport, AsyncClient
+from pydantic import BaseModel, Field
 
+from app.core.errors import (
+    AuthenticationError,
+    NotFoundError,
+    StandardizedException,
+    ValidationError,
+)
 from app.middleware.correlation import CorrelationMiddleware
 from app.middleware.error_handler import ErrorHandlerMiddleware
 
@@ -219,3 +227,240 @@ async def test_multiple_requests_different_ids(test_app: FastAPI) -> None:
         request_id2 = response2.headers["X-Request-ID"]
 
         assert request_id1 != request_id2
+
+
+# ============================================================================
+# Error Response Standardization Tests
+# ============================================================================
+
+
+@pytest.fixture
+def standardized_test_app() -> FastAPI:
+    """Create a test FastAPI app with standardized error handling.
+
+    Returns:
+        FastAPI: Test application with middleware and test endpoints
+    """
+    from app.core.exception_handlers import register_exception_handlers
+
+    app = FastAPI()
+
+    # Register custom exception handlers
+    register_exception_handlers(app)
+
+    # Add middleware
+    app.add_middleware(CorrelationMiddleware)
+    app.add_middleware(ErrorHandlerMiddleware)
+
+    # Test model for validation
+    class TestModel(BaseModel):
+        email: str = Field(..., description="Email address")
+        age: int = Field(..., ge=0, le=150, description="Age")
+
+    # Endpoint that raises StandardizedException
+    @app.get("/test/custom-error")
+    async def test_custom_error() -> None:
+        """Test endpoint that raises custom exception."""
+        raise NotFoundError("Resource not found", details="ID: 123")
+
+    # Endpoint that raises ValidationError
+    @app.get("/test/validation-error")
+    async def test_validation_error() -> None:
+        """Test endpoint that raises validation error."""
+        raise ValidationError("Invalid data", details="Email is required")
+
+    # Endpoint that raises AuthenticationError
+    @app.get("/test/auth-error")
+    async def test_auth_error() -> None:
+        """Test endpoint that raises authentication error."""
+        raise AuthenticationError("Invalid token")
+
+    # Endpoint with Pydantic validation
+    @app.post("/test/validate")
+    async def test_validate(data: TestModel) -> dict[str, Any]:
+        """Test endpoint with Pydantic validation."""
+        return {"email": data.email, "age": data.age}
+
+    # Endpoint that raises HTTPException with different status codes
+    @app.get("/test/http-401")
+    async def test_http_401() -> None:
+        """Test endpoint that raises 401 HTTPException."""
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    @app.get("/test/http-403")
+    async def test_http_403() -> None:
+        """Test endpoint that raises 403 HTTPException."""
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    @app.get("/test/http-404")
+    async def test_http_404() -> None:
+        """Test endpoint that raises 404 HTTPException."""
+        raise HTTPException(status_code=404, detail="Not found")
+
+    @app.get("/test/http-429")
+    async def test_http_429() -> None:
+        """Test endpoint that raises 429 HTTPException."""
+        raise HTTPException(status_code=429, detail="Too many requests")
+
+    return app
+
+
+@pytest.mark.asyncio
+async def test_standardized_exception_handling(standardized_test_app: FastAPI) -> None:
+    """Test handling of StandardizedException with proper error type."""
+    async with AsyncClient(
+        transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+    ) as client:
+        response = await client.get("/test/custom-error")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    data = response.json()
+    assert "error" in data
+    assert data["error"]["type"] == "not_found_error"
+    assert data["error"]["message"] == "Resource not found"
+    assert "request_id" in data["error"]
+    assert "correlation_id" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_validation_exception_handling(standardized_test_app: FastAPI) -> None:
+    """Test handling of ValidationError exception."""
+    async with AsyncClient(
+        transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+    ) as client:
+        response = await client.get("/test/validation-error")
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    data = response.json()
+    assert data["error"]["type"] == "validation_error"
+    assert data["error"]["message"] == "Invalid data"
+
+
+@pytest.mark.asyncio
+async def test_authentication_exception_handling(standardized_test_app: FastAPI) -> None:
+    """Test handling of AuthenticationError exception."""
+    async with AsyncClient(
+        transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+    ) as client:
+        response = await client.get("/test/auth-error")
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    data = response.json()
+    assert data["error"]["type"] == "authentication_error"
+    assert data["error"]["message"] == "Invalid token"
+
+
+@pytest.mark.asyncio
+async def test_pydantic_validation_error_handling(standardized_test_app: FastAPI) -> None:
+    """Test handling of Pydantic RequestValidationError."""
+    async with AsyncClient(
+        transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+    ) as client:
+        # Send invalid data (missing required fields)
+        response = await client.post("/test/validate", json={})
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    data = response.json()
+    assert "error" in data
+    assert data["error"]["type"] == "validation_error"
+    assert "validation failed" in data["error"]["message"].lower()
+    # Check that it mentions field validation error
+    assert "field required" in data["error"]["message"].lower() or "data" in data["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_http_401_mapped_to_authentication_error(
+    standardized_test_app: FastAPI,
+) -> None:
+    """Test that 401 HTTPException is mapped to authentication_error type."""
+    async with AsyncClient(
+        transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+    ) as client:
+        response = await client.get("/test/http-401")
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    data = response.json()
+    assert data["error"]["type"] == "authentication_error"
+
+
+@pytest.mark.asyncio
+async def test_http_403_mapped_to_authorization_error(
+    standardized_test_app: FastAPI,
+) -> None:
+    """Test that 403 HTTPException is mapped to authorization_error type."""
+    async with AsyncClient(
+        transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+    ) as client:
+        response = await client.get("/test/http-403")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    data = response.json()
+    assert data["error"]["type"] == "authorization_error"
+
+
+@pytest.mark.asyncio
+async def test_http_404_mapped_to_not_found_error(
+    standardized_test_app: FastAPI,
+) -> None:
+    """Test that 404 HTTPException is mapped to not_found_error type."""
+    async with AsyncClient(
+        transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+    ) as client:
+        response = await client.get("/test/http-404")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    data = response.json()
+    assert data["error"]["type"] == "not_found_error"
+
+
+@pytest.mark.asyncio
+async def test_http_429_mapped_to_rate_limit_error(
+    standardized_test_app: FastAPI,
+) -> None:
+    """Test that 429 HTTPException is mapped to rate_limit_error type."""
+    async with AsyncClient(
+        transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+    ) as client:
+        response = await client.get("/test/http-429")
+
+    assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+    data = response.json()
+    assert data["error"]["type"] == "rate_limit_error"
+
+
+@pytest.mark.asyncio
+async def test_error_details_in_development_mode(standardized_test_app: FastAPI) -> None:
+    """Test that error details are included in development mode."""
+    with patch.dict("os.environ", {"ENVIRONMENT": "development"}):
+        async with AsyncClient(
+            transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+        ) as client:
+            response = await client.get("/test/custom-error")
+
+    data = response.json()
+    assert "details" in data["error"]
+    assert data["error"]["details"] == "ID: 123"
+
+
+@pytest.mark.asyncio
+async def test_error_details_excluded_in_production_mode(
+    standardized_test_app: FastAPI,
+) -> None:
+    """Test that error details are excluded in production mode."""
+    with patch.dict("os.environ", {"ENVIRONMENT": "production"}):
+        async with AsyncClient(
+            transport=ASGITransport(app=standardized_test_app), base_url="http://test"
+        ) as client:
+            response = await client.get("/test/custom-error")
+
+    data = response.json()
+    # Details should not be present in production
+    assert "details" not in data["error"] or data["error"].get("details") is None

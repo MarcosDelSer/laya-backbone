@@ -2,16 +2,27 @@
 
 This module provides middleware that catches all unhandled exceptions and returns
 structured JSON error responses with request IDs for traceability.
+
+The middleware handles:
+- RequestValidationError (FastAPI validation errors)
+- StandardizedException (custom domain exceptions)
+- HTTPException (FastAPI HTTP exceptions)
+- Generic exceptions (unexpected errors)
+
+All errors are returned in standardized format compatible with parent-portal error handler.
 """
 
 import uuid
 from typing import Callable
 
 from fastapi import Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.context import get_correlation_id, get_request_id
+from app.core.error_responses import format_validation_errors, get_validation_details
+from app.core.errors import ErrorType, StandardizedException
 from app.core.logging import bind_request_id, get_logger
 
 logger = get_logger(__name__)
@@ -97,14 +108,74 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
         Returns:
             JSONResponse: Structured error response with request ID and correlation ID
         """
-        # Determine status code based on exception type
+        import os
         from fastapi import HTTPException
         from starlette.exceptions import HTTPException as StarletteHTTPException
 
-        if isinstance(exc, (HTTPException, StarletteHTTPException)):
+        # Get correlation ID from context
+        correlation_id = get_correlation_id() or request_id
+
+        # Determine if we should include details (development mode only)
+        env = os.getenv("ENVIRONMENT", "development")
+        should_include_details = env == "development"
+
+        # Handle different exception types with standardized responses
+
+        # 1. RequestValidationError (FastAPI validation errors)
+        if isinstance(exc, RequestValidationError):
+            status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+            error_type = ErrorType.VALIDATION_ERROR.value
+            message = format_validation_errors(exc.errors())
+            details = get_validation_details(exc.errors()) if should_include_details else None
+
+            request_logger.info(
+                "Validation error",
+                status_code=status_code,
+                error_type=error_type,
+                message=message,
+                validation_errors_count=len(exc.errors()),
+            )
+
+        # 2. StandardizedException (custom domain exceptions)
+        elif isinstance(exc, StandardizedException):
             status_code = exc.status_code
-            error_type = "http_error"
+            error_type = exc.error_type.value
+            message = exc.message
+            details = exc.details if should_include_details else None
+
+            # Log at appropriate level based on status code
+            log_level = "error" if status_code >= 500 else "info"
+            log_func = request_logger.error if log_level == "error" else request_logger.info
+            log_func(
+                "Standardized exception",
+                status_code=status_code,
+                error_type=error_type,
+                message=message,
+            )
+
+        # 3. HTTPException (FastAPI HTTP exceptions)
+        elif isinstance(exc, (HTTPException, StarletteHTTPException)):
+            status_code = exc.status_code
             message = exc.detail
+
+            # Map HTTP status codes to error types
+            if status_code == 401:
+                error_type = ErrorType.AUTHENTICATION_ERROR.value
+            elif status_code == 403:
+                error_type = ErrorType.AUTHORIZATION_ERROR.value
+            elif status_code == 404:
+                error_type = ErrorType.NOT_FOUND_ERROR.value
+            elif status_code == 422:
+                error_type = ErrorType.VALIDATION_ERROR.value
+            elif status_code == 429:
+                error_type = ErrorType.RATE_LIMIT_ERROR.value
+            elif status_code >= 500:
+                error_type = ErrorType.SERVER_ERROR.value
+            else:
+                error_type = ErrorType.HTTP_ERROR.value
+
+            details = str(exc) if should_include_details and status_code >= 500 else None
+
             # Log HTTP exceptions at info level (expected errors)
             request_logger.info(
                 "HTTP exception",
@@ -112,11 +183,14 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 error_type=error_type,
                 message=message,
             )
+
+        # 4. Generic exceptions (unexpected errors)
         else:
-            # Default to 500 for unhandled exceptions
             status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-            error_type = "internal_error"
+            error_type = ErrorType.INTERNAL_ERROR.value
             message = "An unexpected error occurred"
+            details = f"{type(exc).__name__}: {str(exc)}" if should_include_details else None
+
             # Log unexpected exceptions at error level with full details
             request_logger.error(
                 "Unhandled exception",
@@ -127,10 +201,7 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 exc_info=True,
             )
 
-        # Get correlation ID from context
-        correlation_id = get_correlation_id() or request_id
-
-        # Build structured error response
+        # Build standardized error response
         error_response = {
             "error": {
                 "type": error_type,
@@ -140,13 +211,9 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
             }
         }
 
-        # Add exception details for debugging (only for 500 errors in development)
-        # In production, details are logged but not exposed to clients
-        import os
-        if status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            # Only expose details in development mode
-            if os.getenv("ENVIRONMENT", "development") == "development":
-                error_response["error"]["details"] = str(exc)
+        # Add details if available and in development mode
+        if details:
+            error_response["error"]["details"] = details
 
         return JSONResponse(
             status_code=status_code,
