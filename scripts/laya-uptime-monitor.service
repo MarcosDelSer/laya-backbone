@@ -1,0 +1,58 @@
+[Unit]
+Description=LAYA Uptime Monitoring Service
+Documentation=file:///opt/laya-backbone/scripts/README.md
+After=network.target docker.service
+Requires=network.target
+
+[Service]
+Type=simple
+User=laya
+Group=laya
+WorkingDirectory=/opt/laya-backbone
+
+# Environment variables - customize for your deployment
+Environment="AI_SERVICE_URL=http://localhost:8000"
+Environment="GIBBON_URL=http://localhost:80"
+Environment="PARENT_PORTAL_URL=http://localhost:3000"
+Environment="CHECK_INTERVAL=60"
+Environment="LOG_FILE=/var/log/laya/uptime-monitor.log"
+
+# Optional: Email alerts
+# Environment="ALERT_EMAIL=alerts@example.com"
+# Environment="SMTP_SERVER=smtp.gmail.com"
+# Environment="SMTP_PORT=587"
+# Environment="SMTP_USER=monitoring@example.com"
+# Environment="SMTP_PASSWORD=your-app-password"
+# Environment="ALERT_FROM_EMAIL=monitoring@laya.local"
+
+# Optional: Webhook alerts
+# Environment="ALERT_WEBHOOK=https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+# Execute the monitoring script
+ExecStart=/usr/bin/python3 /opt/laya-backbone/scripts/uptime_monitoring.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/laya
+
+# Resource limits
+LimitNOFILE=1024
+MemoryMax=256M
+CPUQuota=25%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=laya-uptime-monitor
+
+[Install]
+WantedBy=multi-user.target
