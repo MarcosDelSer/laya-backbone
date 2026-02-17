@@ -6,7 +6,7 @@ test data, and authentication mocking for coaching, activity, and communication 
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 from uuid import UUID, uuid4
 
@@ -1597,3 +1597,381 @@ async def sample_home_activities(
         activities.append(activity)
 
     return activities
+
+
+# ============================================================================
+# MFA fixtures
+# ============================================================================
+
+
+class MockMFASettings:
+    """Mock MFASettings object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        user_id,
+        is_enabled,
+        method,
+        secret_key,
+        recovery_email,
+        last_verified_at,
+        failed_attempts,
+        locked_until,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.user_id = user_id
+        self.is_enabled = is_enabled
+        self.method = method
+        self.secret_key = secret_key
+        self.recovery_email = recovery_email
+        self.last_verified_at = last_verified_at
+        self.failed_attempts = failed_attempts
+        self.locked_until = locked_until
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<MFASettings(id={self.id}, user_id={self.user_id}, enabled={self.is_enabled})>"
+
+
+class MockMFABackupCode:
+    """Mock MFABackupCode object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        mfa_settings_id,
+        code_hash,
+        is_used,
+        used_at,
+        created_at,
+    ):
+        self.id = id
+        self.mfa_settings_id = mfa_settings_id
+        self.code_hash = code_hash
+        self.is_used = is_used
+        self.used_at = used_at
+        self.created_at = created_at
+
+    def __repr__(self) -> str:
+        return f"<MFABackupCode(id={self.id}, used={self.is_used})>"
+
+
+class MockMFAIPWhitelist:
+    """Mock MFAIPWhitelist object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        mfa_settings_id,
+        ip_address,
+        description,
+        is_active,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.mfa_settings_id = mfa_settings_id
+        self.ip_address = ip_address
+        self.description = description
+        self.is_active = is_active
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return f"<MFAIPWhitelist(id={self.id}, ip={self.ip_address})>"
+
+
+async def create_mfa_settings_in_db(
+    session: AsyncSession,
+    user_id: UUID,
+    is_enabled: bool = False,
+    method: str = "TOTP",
+    secret_key: Optional[str] = None,
+    recovery_email: Optional[str] = None,
+    failed_attempts: int = 0,
+    locked_until: Optional[datetime] = None,
+) -> MockMFASettings:
+    """Helper function to create MFA settings directly in SQLite database.
+
+    Note: UUIDs are stored without hyphens to match SQLAlchemy's PGUUID behavior
+    when querying against SQLite in test mode.
+    Note: Enum values are stored as uppercase names (TOTP, SMS, EMAIL) to match
+    SQLAlchemy's default enum handling.
+    """
+    settings_id = uuid4().hex  # Store without hyphens
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO mfa_settings (
+                id, user_id, is_enabled, method, secret_key, recovery_email,
+                last_verified_at, failed_attempts, locked_until, created_at, updated_at
+            ) VALUES (
+                :id, :user_id, :is_enabled, :method, :secret_key, :recovery_email,
+                :last_verified_at, :failed_attempts, :locked_until, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": settings_id,
+            "user_id": user_id.hex,  # Store without hyphens for SQLite/PGUUID compatibility
+            "is_enabled": 1 if is_enabled else 0,
+            "method": method.upper(),  # Store as uppercase enum name
+            "secret_key": secret_key,
+            "recovery_email": recovery_email,
+            "last_verified_at": None,
+            "failed_attempts": failed_attempts,
+            "locked_until": locked_until.isoformat() if locked_until else None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockMFASettings(
+        id=UUID(settings_id),
+        user_id=user_id,
+        is_enabled=is_enabled,
+        method=method,
+        secret_key=secret_key,
+        recovery_email=recovery_email,
+        last_verified_at=None,
+        failed_attempts=failed_attempts,
+        locked_until=locked_until,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_mfa_backup_code_in_db(
+    session: AsyncSession,
+    mfa_settings_id: UUID,
+    code_hash: str,
+    is_used: bool = False,
+    used_at: Optional[datetime] = None,
+) -> MockMFABackupCode:
+    """Helper function to create MFA backup code directly in SQLite database.
+
+    Note: UUIDs are stored without hyphens to match SQLAlchemy's PGUUID behavior.
+    """
+    code_id = uuid4().hex  # Store without hyphens
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO mfa_backup_codes (
+                id, mfa_settings_id, code_hash, is_used, used_at, created_at
+            ) VALUES (
+                :id, :mfa_settings_id, :code_hash, :is_used, :used_at, :created_at
+            )
+        """),
+        {
+            "id": code_id,
+            "mfa_settings_id": mfa_settings_id.hex,  # Store without hyphens
+            "code_hash": code_hash,
+            "is_used": 1 if is_used else 0,
+            "used_at": used_at.isoformat() if used_at else None,
+            "created_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockMFABackupCode(
+        id=UUID(code_id),
+        mfa_settings_id=mfa_settings_id,
+        code_hash=code_hash,
+        is_used=is_used,
+        used_at=used_at,
+        created_at=now,
+    )
+
+
+async def create_mfa_ip_whitelist_in_db(
+    session: AsyncSession,
+    mfa_settings_id: UUID,
+    ip_address: str,
+    description: Optional[str] = None,
+    is_active: bool = True,
+) -> MockMFAIPWhitelist:
+    """Helper function to create MFA IP whitelist entry directly in SQLite database.
+
+    Note: UUIDs are stored without hyphens to match SQLAlchemy's PGUUID behavior.
+    """
+    entry_id = uuid4().hex  # Store without hyphens
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO mfa_ip_whitelist (
+                id, mfa_settings_id, ip_address, description, is_active,
+                created_at, updated_at
+            ) VALUES (
+                :id, :mfa_settings_id, :ip_address, :description, :is_active,
+                :created_at, :updated_at
+            )
+        """),
+        {
+            "id": entry_id,
+            "mfa_settings_id": mfa_settings_id.hex,  # Store without hyphens
+            "ip_address": ip_address,
+            "description": description,
+            "is_active": 1 if is_active else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockMFAIPWhitelist(
+        id=UUID(entry_id),
+        mfa_settings_id=mfa_settings_id,
+        ip_address=ip_address,
+        description=description,
+        is_active=is_active,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def admin_user_payload(test_user_id: UUID) -> dict[str, Any]:
+    """Create an admin user token payload."""
+    return {
+        "sub": str(test_user_id),
+        "email": "admin@example.com",
+        "role": "admin",
+    }
+
+
+@pytest.fixture
+def admin_token(admin_user_payload: dict[str, Any]) -> str:
+    """Create a valid admin JWT token for testing."""
+    return create_test_token(
+        subject=admin_user_payload["sub"],
+        expires_delta_seconds=3600,
+        additional_claims={
+            "email": admin_user_payload["email"],
+            "role": admin_user_payload["role"],
+        },
+    )
+
+
+@pytest.fixture
+def admin_auth_headers(admin_token: str) -> dict[str, str]:
+    """Create authorization headers with admin token."""
+    return {"Authorization": f"Bearer {admin_token}"}
+
+
+@pytest.fixture
+def mfa_test_secret() -> str:
+    """Generate a test TOTP secret key."""
+    import pyotp
+    return pyotp.random_base32()
+
+
+@pytest.fixture
+def mfa_valid_code(mfa_test_secret: str) -> str:
+    """Generate a valid TOTP code for the test secret."""
+    import pyotp
+    totp = pyotp.TOTP(mfa_test_secret)
+    return totp.now()
+
+
+@pytest_asyncio.fixture
+async def mfa_settings_pending_setup(
+    db_session: AsyncSession,
+    test_user_id: UUID,
+    mfa_test_secret: str,
+) -> MockMFASettings:
+    """Create MFA settings in pending setup state (secret set but not enabled)."""
+    return await create_mfa_settings_in_db(
+        db_session,
+        user_id=test_user_id,
+        is_enabled=False,
+        secret_key=mfa_test_secret,
+    )
+
+
+@pytest_asyncio.fixture
+async def mfa_settings_enabled(
+    db_session: AsyncSession,
+    test_user_id: UUID,
+    mfa_test_secret: str,
+) -> MockMFASettings:
+    """Create MFA settings in enabled state."""
+    return await create_mfa_settings_in_db(
+        db_session,
+        user_id=test_user_id,
+        is_enabled=True,
+        secret_key=mfa_test_secret,
+    )
+
+
+@pytest_asyncio.fixture
+async def mfa_settings_locked(
+    db_session: AsyncSession,
+    test_user_id: UUID,
+    mfa_test_secret: str,
+) -> MockMFASettings:
+    """Create MFA settings in locked state (too many failed attempts)."""
+    locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
+    return await create_mfa_settings_in_db(
+        db_session,
+        user_id=test_user_id,
+        is_enabled=True,
+        secret_key=mfa_test_secret,
+        failed_attempts=5,
+        locked_until=locked_until,
+    )
+
+
+@pytest_asyncio.fixture
+async def mfa_with_backup_codes(
+    db_session: AsyncSession,
+    mfa_settings_enabled: MockMFASettings,
+) -> tuple[MockMFASettings, list[MockMFABackupCode]]:
+    """Create MFA settings with backup codes."""
+    import hashlib
+
+    codes = []
+    for i in range(5):
+        code_plaintext = f"TESTCODE{i}"
+        code_hash = hashlib.sha256(code_plaintext.encode()).hexdigest()
+        backup_code = await create_mfa_backup_code_in_db(
+            db_session,
+            mfa_settings_id=mfa_settings_enabled.id,
+            code_hash=code_hash,
+            is_used=i == 0,  # First code is used
+        )
+        codes.append(backup_code)
+
+    return mfa_settings_enabled, codes
+
+
+@pytest_asyncio.fixture
+async def mfa_with_ip_whitelist(
+    db_session: AsyncSession,
+    mfa_settings_enabled: MockMFASettings,
+) -> tuple[MockMFASettings, list[MockMFAIPWhitelist]]:
+    """Create MFA settings with IP whitelist entries."""
+    entries = []
+    ip_data = [
+        ("192.168.1.100", "Home office", True),
+        ("10.0.0.0/24", "Corporate VPN", True),
+        ("172.16.0.1", "Old office (disabled)", False),
+    ]
+
+    for ip_address, description, is_active in ip_data:
+        entry = await create_mfa_ip_whitelist_in_db(
+            db_session,
+            mfa_settings_id=mfa_settings_enabled.id,
+            ip_address=ip_address,
+            description=description,
+            is_active=is_active,
+        )
+        entries.append(entry)
+
+    return mfa_settings_enabled, entries
