@@ -109,6 +109,130 @@ For cloud-based QA execution (web + mobile), use the OpenClaw layer as an extern
 - Use Langfuse tracing to track run latency, failures, and token spend.
 - If provider outage occurs, mark task blocked and switch to backup provider profile.
 
+## LLM QA Orchestration
+
+For LLM-driven exploratory QA across web, mobile, and desktop platforms, use the **LLM QA Foundation** scripts integrated with the orchestrator. These scripts enable human-like testing via scenario-based journeys executed by LLM agents.
+
+### Overview
+
+The LLM QA layer extends the orchestrator with:
+
+- **Scenario-based testing:** JSON scenarios define persona, journey steps, and assertions
+- **Cross-platform support:** web, mobile-ios, mobile-android, desktop-mac, desktop-windows, desktop-linux
+- **Standardized artifacts:** screenshots, logs, traces, and markdown reports
+- **Severity classification:** P0-P3 rubric with automatic triage rules
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `.auto-claude/scripts/run-llm-qa.sh` | Main orchestrator: creates output structure, validates scenarios, triggers execution |
+| `.auto-claude/scripts/collect-qa-artifacts.sh` | Collects and organizes artifacts with deterministic naming |
+
+### Flow
+
+1. Task spec moves to `in_progress` via standard orchestrator flow.
+2. Task calls `run-llm-qa.sh` to prepare artifact structure and validate scenarios.
+3. Platform-specific runner executes the journey (web via Playwright, mobile via Appium, etc.).
+4. `collect-qa-artifacts.sh` gathers evidence into the standard output layout.
+5. Report is updated with findings, severity classifications, and evidence links.
+6. Quality gates determine if task can proceed (P0/P1 findings block).
+
+### Running LLM QA Specs
+
+**Dry run (create structure only):**
+```bash
+.auto-claude/scripts/run-llm-qa.sh \
+  --platform web \
+  --task-id 067 \
+  --dry-run
+```
+
+**Validate scenarios:**
+```bash
+.auto-claude/scripts/run-llm-qa.sh \
+  --validate-only \
+  --scenario-dir ./scenarios/
+```
+
+**Execute scenarios:**
+```bash
+.auto-claude/scripts/run-llm-qa.sh \
+  --platform web \
+  --scenario-dir ./scenarios/smoke/ \
+  --task-id 067 \
+  --run-id pr-1234
+```
+
+**Collect artifacts:**
+```bash
+.auto-claude/scripts/collect-qa-artifacts.sh \
+  --source-dir ./playwright-report \
+  --run-dir .auto-claude/qa/runs/067/abc123/web/20260217-120000
+```
+
+### Artifact Output Structure
+
+All LLM QA runs produce artifacts under a deterministic path:
+
+```
+.auto-claude/qa/runs/{task_id}/{run_id}/{platform}/{timestamp}/
+├── metadata.json       # Run configuration and environment
+├── scenarios/          # Copies of executed scenario files
+├── screenshots/        # Captured screenshots ({timestamp}-{desc}.png)
+├── logs/               # Console and network logs ({type}-{timestamp}.log)
+├── traces/             # Execution traces ({timestamp}-trace-{name}.zip)
+└── report.md           # Markdown report with findings and evidence
+```
+
+### Recovery and Restart
+
+LLM QA specs follow the standard orchestrator recovery pattern:
+
+1. **Stuck/paused specs:** `stop-then-start-in-progress.sh` discovers specs with `building` or `paused` state.
+2. **PAUSE → restart:** The orchestrator creates a PAUSE file, waits for clean exit, then restarts.
+3. **Artifact preservation:** Previous run artifacts remain under their `run_id`; new runs get a fresh UUID.
+4. **Scheduled recovery:** Use `schedule-recover-in-3h.sh` for delayed recovery after credit resets.
+
+For LLM QA specs specifically:
+```bash
+# Recover all stuck specs (including LLM QA tasks)
+./.auto-claude/scripts/stop-then-start-in-progress.sh
+
+# Schedule recovery after 1 hour
+./.auto-claude/scripts/schedule-recover-in-3h.sh 3600
+```
+
+### Quality Gates
+
+LLM QA findings affect task progression based on severity:
+
+| Severity | PR Merge | Staging Deploy | Prod Deploy |
+|----------|----------|----------------|-------------|
+| P0 | Block | Block | Block |
+| P1 | Block | Warn | Block |
+| P2 | Warn | Pass | Pass |
+| P3 | Pass | Pass | Pass |
+
+Specs with P0/P1 findings should be marked blocked until issues are resolved.
+
+### Data Model
+
+| Artifact | Location | Purpose |
+|----------|----------|---------|
+| Scenario schema | `.auto-claude/qa/llm/scenario-schema.json` | JSON Schema for scenario validation |
+| Severity rubric | `.auto-claude/qa/llm/severity-rubric.md` | P0-P3 definitions and triage rules |
+| Run artifacts | `.auto-claude/qa/runs/{task}/{run}/{platform}/{ts}/` | Screenshots, logs, traces, report |
+| Run metadata | `.auto-claude/qa/runs/.../metadata.json` | Environment, config, scenario refs |
+
+### Operational Notes
+
+- **Scenario validation:** Always use `--validate-only` before execution to catch schema errors.
+- **Artifact naming:** Use deterministic timestamps to enable artifact correlation across runs.
+- **Platform runners:** The foundation creates structure; platform runners (web, mobile, desktop) populate results.
+- **Report consumption:** Reports link to evidence via relative paths; suitable for PR comments and issue tracking.
+- **Downstream specs:** Tasks 068-071 extend this foundation with platform-specific execution.
+
 ## Related Docs
 
 | Doc | Purpose |
@@ -119,10 +243,14 @@ For cloud-based QA execution (web + mobile), use the OpenClaw layer as an extern
 | **REFRESH_BOARD.md** | No Auto-Claude CLI to refresh the board; script uses Cursor Reload Window. |
 | **`docs/OPENCLAW_CLOUD_QA_RUNBOOK.md`** | OpenClaw cloud QA setup, execution, and incident runbook. |
 | **`docs/OPENCLAW_COST_BASELINE.md`** | Fixed and variable cost baseline for cloud QA system. |
+| **`docs/LLM_QA_FOUNDATION.md`** | End-to-end LLM QA workflow, scenario format, and runner invocation. |
+| **`.auto-claude/qa/llm/scenario-schema.json`** | JSON Schema for LLM QA scenario validation. |
+| **`.auto-claude/qa/llm/severity-rubric.md`** | P0-P3 severity definitions and triage decision rules. |
 
 ## Summary
 
 - **Orchestrator base:** `stop-then-start-in-progress.sh` — discovery, stop, move, start for all target specs.
 - **Scheduler:** `schedule-recover-in-3h.sh [delay_seconds]` — run that script after a delay (e.g. 1h or 3h).
 - **Data:** Spec and worktree dirs, `implementation_plan.json`, `review_state.json`, `PAUSE`, `.auto-claude-status`.
+- **LLM QA:** `run-llm-qa.sh` orchestrates scenario-based exploratory testing; `collect-qa-artifacts.sh` standardizes evidence collection.
 - **Extension:** Use this as the base for policies, concurrency, ordering, multi-project, health, retries, and notifications on top of Auto-Claude.
