@@ -391,6 +391,379 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
+// Intervention Plan Types
+// ============================================================================
+
+/**
+ * Status of an intervention plan.
+ */
+export type InterventionPlanStatus =
+  | 'draft'
+  | 'active'
+  | 'under_review'
+  | 'completed'
+  | 'archived';
+
+/**
+ * Review schedule frequency for intervention plans.
+ */
+export type ReviewSchedule =
+  | 'monthly'
+  | 'quarterly'
+  | 'semi_annually'
+  | 'annually';
+
+/**
+ * Status of a SMART goal.
+ */
+export type GoalStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'achieved'
+  | 'modified'
+  | 'discontinued';
+
+/**
+ * Progress level for intervention plan tracking.
+ */
+export type ProgressLevel =
+  | 'no_progress'
+  | 'minimal'
+  | 'moderate'
+  | 'significant'
+  | 'achieved';
+
+/**
+ * Categories for child's strengths.
+ */
+export type StrengthCategory =
+  | 'cognitive'
+  | 'social'
+  | 'physical'
+  | 'emotional'
+  | 'communication'
+  | 'creative'
+  | 'academic'
+  | 'adaptive'
+  | 'other';
+
+/**
+ * Categories for child's needs.
+ */
+export type NeedCategory =
+  | 'communication'
+  | 'behavior'
+  | 'academic'
+  | 'sensory'
+  | 'motor'
+  | 'social'
+  | 'emotional'
+  | 'self_care'
+  | 'cognitive'
+  | 'other';
+
+/**
+ * Priority levels for needs.
+ */
+export type NeedPriority = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * Who is responsible for a strategy or monitoring task.
+ */
+export type ResponsibleParty =
+  | 'educator'
+  | 'parent'
+  | 'therapist'
+  | 'team'
+  | 'child';
+
+/**
+ * Methods for monitoring progress.
+ */
+export type MonitoringMethod =
+  | 'observation'
+  | 'assessment'
+  | 'data_collection'
+  | 'interview'
+  | 'portfolio'
+  | 'checklist'
+  | 'other';
+
+/**
+ * Types of parent involvement activities.
+ */
+export type ParentActivityType =
+  | 'home_activity'
+  | 'communication'
+  | 'training'
+  | 'meeting'
+  | 'observation'
+  | 'documentation'
+  | 'other';
+
+/**
+ * Types of specialists for consultations.
+ */
+export type SpecialistType =
+  | 'speech_therapist'
+  | 'occupational_therapist'
+  | 'physical_therapist'
+  | 'psychologist'
+  | 'behavioral_specialist'
+  | 'special_educator'
+  | 'social_worker'
+  | 'pediatrician'
+  | 'neurologist'
+  | 'psychiatrist'
+  | 'other';
+
+/**
+ * Child's strength entry (Part 2).
+ */
+export interface InterventionStrength {
+  id: string;
+  planId: string;
+  category: StrengthCategory;
+  description: string;
+  examples?: string;
+  order: number;
+  createdAt: string;
+}
+
+/**
+ * Child's need entry (Part 3).
+ */
+export interface InterventionNeed {
+  id: string;
+  planId: string;
+  category: NeedCategory;
+  description: string;
+  priority: NeedPriority;
+  baseline?: string;
+  order: number;
+  createdAt: string;
+}
+
+/**
+ * SMART goal entry (Part 4).
+ */
+export interface InterventionGoal {
+  id: string;
+  planId: string;
+  needId?: string;
+  title: string;
+  description: string;
+  measurementCriteria: string;
+  measurementBaseline?: string;
+  measurementTarget?: string;
+  achievabilityNotes?: string;
+  relevanceNotes?: string;
+  targetDate?: string;
+  status: GoalStatus;
+  progressPercentage: number;
+  order: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Intervention strategy entry (Part 5).
+ */
+export interface InterventionStrategy {
+  id: string;
+  planId: string;
+  goalId?: string;
+  title: string;
+  description: string;
+  responsibleParty: ResponsibleParty;
+  frequency?: string;
+  materialsNeeded?: string;
+  accommodations?: string;
+  order: number;
+  createdAt: string;
+}
+
+/**
+ * Monitoring approach entry (Part 6).
+ */
+export interface InterventionMonitoring {
+  id: string;
+  planId: string;
+  goalId?: string;
+  method: MonitoringMethod;
+  description: string;
+  frequency: string;
+  responsibleParty: ResponsibleParty;
+  dataCollectionTools?: string;
+  successIndicators?: string;
+  order: number;
+  createdAt: string;
+}
+
+/**
+ * Parent involvement activity entry (Part 7).
+ */
+export interface InterventionParentInvolvement {
+  id: string;
+  planId: string;
+  activityType: ParentActivityType;
+  title: string;
+  description: string;
+  frequency?: string;
+  resourcesProvided?: string;
+  communicationMethod?: string;
+  order: number;
+  createdAt: string;
+}
+
+/**
+ * Specialist consultation entry (Part 8).
+ */
+export interface InterventionConsultation {
+  id: string;
+  planId: string;
+  specialistType: SpecialistType;
+  specialistName?: string;
+  organization?: string;
+  purpose: string;
+  recommendations?: string;
+  consultationDate?: string;
+  nextConsultationDate?: string;
+  notes?: string;
+  order: number;
+  createdAt: string;
+}
+
+/**
+ * Progress tracking record.
+ */
+export interface InterventionProgress {
+  id: string;
+  planId: string;
+  goalId?: string;
+  recordedBy: string;
+  recordDate: string;
+  progressNotes: string;
+  progressLevel: ProgressLevel;
+  measurementValue?: string;
+  barriers?: string;
+  nextSteps?: string;
+  createdAt: string;
+}
+
+/**
+ * Version history record.
+ */
+export interface InterventionVersion {
+  id: string;
+  planId: string;
+  versionNumber: number;
+  changeSummary?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/**
+ * Complete intervention plan with all 8 sections.
+ */
+export interface InterventionPlan {
+  id: string;
+  childId: string;
+  createdBy: string;
+  title: string;
+  status: InterventionPlanStatus;
+  version: number;
+  parentVersionId?: string;
+
+  // Part 1 - Identification & History
+  childName: string;
+  dateOfBirth?: string;
+  diagnosis?: string[];
+  medicalHistory?: string;
+  educationalHistory?: string;
+  familyContext?: string;
+
+  // Review scheduling
+  reviewSchedule: ReviewSchedule;
+  nextReviewDate?: string;
+
+  // Dates
+  effectiveDate?: string;
+  endDate?: string;
+
+  // Parent signature
+  parentSigned: boolean;
+  parentSignatureDate?: string;
+
+  // All 8 sections
+  strengths: InterventionStrength[];
+  needs: InterventionNeed[];
+  goals: InterventionGoal[];
+  strategies: InterventionStrategy[];
+  monitoring: InterventionMonitoring[];
+  parentInvolvements: InterventionParentInvolvement[];
+  consultations: InterventionConsultation[];
+
+  // Progress and version history
+  progressRecords: InterventionProgress[];
+  versions: InterventionVersion[];
+
+  // Timestamps
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Summary of an intervention plan for list views.
+ */
+export interface InterventionPlanSummary {
+  id: string;
+  childId: string;
+  childName: string;
+  title: string;
+  status: InterventionPlanStatus;
+  version: number;
+  reviewSchedule: ReviewSchedule;
+  nextReviewDate?: string;
+  parentSigned: boolean;
+  goalsCount: number;
+  progressCount: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Request payload for parent signature on an intervention plan.
+ */
+export interface SignInterventionPlanRequest {
+  signatureData: string;
+  agreedToTerms: boolean;
+}
+
+/**
+ * Response payload for parent signature confirmation.
+ */
+export interface SignInterventionPlanResponse {
+  planId: string;
+  parentSigned: boolean;
+  parentSignatureDate: string;
+  message: string;
+}
+
+/**
+ * Plan review reminder for notifications.
+ */
+export interface InterventionPlanReviewReminder {
+  planId: string;
+  childId: string;
+  childName: string;
+  title: string;
+  nextReviewDate: string;
+  daysUntilReview: number;
+  status: InterventionPlanStatus;
+}
+
+// ============================================================================
 // API Response Types
 // ============================================================================
 

@@ -7,12 +7,12 @@ Modules:
     coaching: Router for special needs coaching guidance endpoints
     activities: Router for activity intelligence endpoints
     analytics: Router for business intelligence and analytics endpoints
-    llm: Router for LLM service endpoints (completions, health, usage)
+    intervention_plans: Router for intervention plan endpoints
 """
 
 from app.routers.coaching import router as coaching_router
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
-from app.routers.llm import router as llm_router
+from app.routers.intervention_plans import router as intervention_plans_router
 
-__all__: list[str] = ["coaching_router", "activities_router", "analytics_router", "llm_router"]
+__all__: list[str] = ["coaching_router", "activities_router", "analytics_router", "intervention_plans_router"]

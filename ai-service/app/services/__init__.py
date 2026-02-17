@@ -7,11 +7,9 @@ Modules:
     coaching_service: Service for RAG-based special needs coaching guidance
     activity_service: Service for activity intelligence and recommendations
     analytics_service: Service for business intelligence and analytics
-    llm_service: Service for LLM completions with database session support
+    intervention_plan_service: Service for intervention plan management
 """
 
-from app.services.activity_service import ActivityService
-from app.services.analytics_service import AnalyticsService
 from app.services.coaching_service import (
     SAFETY_DISCLAIMER,
     CoachingService,
@@ -19,27 +17,33 @@ from app.services.coaching_service import (
     InvalidChildError,
     NoSourcesFoundError,
 )
-from app.services.llm_service import (
-    CompletionError,
-    LLMService,
-    LLMServiceError,
-    ProviderUnavailableError,
+from app.services.activity_service import ActivityService
+from app.services.analytics_service import AnalyticsService
+from app.services.intervention_plan_service import (
+    InterventionPlanService,
+    InterventionPlanServiceError,
+    InvalidPlanError,
+    PlanNotFoundError,
+    PlanVersionError,
+    UnauthorizedAccessError,
 )
 
 __all__: list[str] = [
-    # Activity
-    "ActivityService",
-    # Analytics
-    "AnalyticsService",
     # Coaching
     "CoachingService",
     "CoachingServiceError",
     "InvalidChildError",
     "NoSourcesFoundError",
     "SAFETY_DISCLAIMER",
-    # LLM
-    "CompletionError",
-    "LLMService",
-    "LLMServiceError",
-    "ProviderUnavailableError",
+    # Activity
+    "ActivityService",
+    # Analytics
+    "AnalyticsService",
+    # Intervention Plan
+    "InterventionPlanService",
+    "InterventionPlanServiceError",
+    "InvalidPlanError",
+    "PlanNotFoundError",
+    "PlanVersionError",
+    "UnauthorizedAccessError",
 ]
