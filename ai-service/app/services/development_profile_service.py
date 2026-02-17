@@ -221,15 +221,20 @@ class DevelopmentProfileService:
         self,
         profile_id: UUID,
         request: DevelopmentProfileRequest,
+        user_id: UUID,
     ) -> Optional[DevelopmentProfileResponse]:
         """Update an existing development profile.
 
         Args:
             profile_id: Unique identifier of the profile to update.
             request: Updated profile data.
+            user_id: ID of the user updating the profile.
 
         Returns:
             Updated profile response if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(DevelopmentProfile).where(
             cast(DevelopmentProfile.id, String) == str(profile_id)
@@ -239,6 +244,12 @@ class DevelopmentProfileService:
 
         if profile is None:
             return None
+
+        # Verify user has access to the profile
+        if not self._user_has_profile_access(profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to update this profile"
+            )
 
         # Update fields
         profile.educator_id = request.educator_id
