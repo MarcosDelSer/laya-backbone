@@ -2113,7 +2113,7 @@ def sample_observation_data(test_child_id: UUID, test_user_id: UUID) -> Dict[str
     return {
         "child_id": test_child_id,
         "observer_id": test_user_id,
-        "observation_type": "anecdotal",
+        "observation_type": "ANECDOTAL",
         "title": "Block Tower Building",
         "content": "Today, Emma built a tower using 8 blocks, demonstrating improved fine motor skills and patience. She carefully balanced each block and showed great focus throughout the activity.",
         "developmental_areas": ["motor_fine", "cognitive"],
@@ -2163,12 +2163,12 @@ async def sample_portfolio_item(
     return await create_portfolio_item_in_db(
         db_session,
         child_id=test_child_id,
-        item_type="photo",
+        item_type="PHOTO",
         title="Building Block Activity",
         description="Emma building with colorful blocks during free play time.",
         media_url="https://storage.example.com/photos/block-activity.jpg",
         thumbnail_url="https://storage.example.com/photos/block-activity-thumb.jpg",
-        privacy_level="family",
+        privacy_level="FAMILY",
         tags=["activity", "blocks", "motor-skills"],
         captured_by_id=test_user_id,
         is_family_contribution=False,
@@ -2187,7 +2187,7 @@ async def sample_observation(
         db_session,
         child_id=test_child_id,
         observer_id=test_user_id,
-        observation_type="anecdotal",
+        observation_type="ANECDOTAL",
         title="Creative Play Observation",
         content="During creative play time, the child demonstrated excellent imagination by creating a story about their block construction. They described it as a 'castle for the dragons' and engaged other children in their imaginative play.",
         developmental_areas=["cognitive", "social_emotional", "language"],
@@ -2209,7 +2209,7 @@ async def sample_observation_with_portfolio_item(
         db_session,
         child_id=test_child_id,
         observer_id=test_user_id,
-        observation_type="photo_documentation",
+        observation_type="PHOTO_DOCUMENTATION",
         title="Block Building Progress",
         content="Photo documentation of block building activity showing fine motor skill development.",
         developmental_areas=["motor_fine"],
@@ -2229,10 +2229,10 @@ async def sample_milestone(
     return await create_milestone_in_db(
         db_session,
         child_id=test_child_id,
-        category="motor_fine",
+        category="MOTOR_FINE",
         name="Stacks 6+ blocks",
         expected_age_months=24,
-        status="developing",
+        status="DEVELOPING",
         notes="Child is making good progress with block stacking.",
         is_flagged=False,
     )
@@ -2248,10 +2248,10 @@ async def sample_milestone_achieved(
     return await create_milestone_in_db(
         db_session,
         child_id=test_child_id,
-        category="language",
+        category="LANGUAGE",
         name="Uses 2-word phrases",
         expected_age_months=18,
-        status="achieved",
+        status="ACHIEVED",
         first_observed_at=now,
         achieved_at=now,
         notes="Child consistently using 2-word phrases throughout the day.",
@@ -2268,10 +2268,10 @@ async def sample_milestone_flagged(
     return await create_milestone_in_db(
         db_session,
         child_id=test_child_id,
-        category="motor_gross",
+        category="MOTOR_GROSS",
         name="Walks independently",
         expected_age_months=15,
-        status="emerging",
+        status="EMERGING",
         notes="May need additional support for gross motor development.",
         is_flagged=True,
     )
@@ -2288,7 +2288,7 @@ async def sample_work_sample(
         db_session,
         child_id=test_child_id,
         portfolio_item_id=sample_portfolio_item.id,
-        sample_type="artwork",
+        sample_type="ARTWORK",
         title="Family Portrait Drawing",
         description="Child's drawing of their family members using crayons.",
         learning_objectives=["creative expression", "fine motor skills", "family recognition"],
@@ -2308,52 +2308,52 @@ async def sample_portfolio_items(
     """Create multiple sample portfolio items with varied properties."""
     items_data = [
         {
-            "item_type": "photo",
+            "item_type": "PHOTO",
             "title": "First Day at Daycare",
             "description": "Capturing the special first day moment.",
             "media_url": "https://storage.example.com/photos/first-day.jpg",
-            "privacy_level": "family",
+            "privacy_level": "FAMILY",
             "tags": ["milestone", "first-day"],
         },
         {
-            "item_type": "photo",
+            "item_type": "PHOTO",
             "title": "Block Tower Building",
             "description": "Building with colorful blocks.",
             "media_url": "https://storage.example.com/photos/blocks.jpg",
-            "privacy_level": "family",
+            "privacy_level": "FAMILY",
             "tags": ["activity", "motor-skills"],
         },
         {
-            "item_type": "video",
+            "item_type": "VIDEO",
             "title": "Story Time",
             "description": "Reading a favorite book together.",
             "media_url": "https://storage.example.com/videos/story-time.mp4",
             "thumbnail_url": "https://storage.example.com/videos/story-time-thumb.jpg",
-            "privacy_level": "family",
+            "privacy_level": "FAMILY",
             "tags": ["activity", "language"],
         },
         {
-            "item_type": "document",
+            "item_type": "DOCUMENT",
             "title": "Artwork Scan",
             "description": "Scanned artwork from painting activity.",
             "media_url": "https://storage.example.com/documents/artwork.pdf",
-            "privacy_level": "family",
+            "privacy_level": "FAMILY",
             "tags": ["artwork", "creative"],
         },
         {
-            "item_type": "photo",
+            "item_type": "PHOTO",
             "title": "Group Activity",
             "description": "Children playing together during group time.",
             "media_url": "https://storage.example.com/photos/group.jpg",
-            "privacy_level": "shared",
+            "privacy_level": "SHARED",
             "tags": ["group", "social"],
         },
         {
-            "item_type": "photo",
+            "item_type": "PHOTO",
             "title": "Staff Note Photo",
             "description": "Photo for internal documentation only.",
             "media_url": "https://storage.example.com/photos/internal.jpg",
-            "privacy_level": "private",
+            "privacy_level": "PRIVATE",
             "tags": ["internal"],
         },
     ]
@@ -2380,28 +2380,28 @@ async def sample_observations(
     """Create multiple sample observations with varied properties."""
     observations_data = [
         {
-            "observation_type": "anecdotal",
+            "observation_type": "ANECDOTAL",
             "title": "Social Interaction",
             "content": "Child initiated play with peers and shared toys willingly.",
             "developmental_areas": ["social_emotional"],
             "context": "free play",
         },
         {
-            "observation_type": "learning_story",
+            "observation_type": "LEARNING_STORY",
             "title": "Building Adventures",
             "content": "Extended narrative about the child's building project over several days.",
             "developmental_areas": ["cognitive", "motor_fine"],
             "context": "construction area",
         },
         {
-            "observation_type": "running_record",
+            "observation_type": "RUNNING_RECORD",
             "title": "Language Development",
             "content": "Detailed record of verbal interactions during circle time.",
             "developmental_areas": ["language"],
             "context": "circle time",
         },
         {
-            "observation_type": "checklist",
+            "observation_type": "CHECKLIST",
             "title": "Self-Care Skills Check",
             "content": "Assessment of self-care abilities including hand washing and dressing.",
             "developmental_areas": ["self_care"],
@@ -2431,52 +2431,52 @@ async def sample_milestones(
     """Create multiple sample milestones with varied properties."""
     milestones_data = [
         {
-            "category": "cognitive",
+            "category": "COGNITIVE",
             "name": "Sorts by color",
             "expected_age_months": 30,
-            "status": "achieved",
+            "status": "ACHIEVED",
         },
         {
-            "category": "motor_fine",
+            "category": "MOTOR_FINE",
             "name": "Stacks 6+ blocks",
             "expected_age_months": 24,
-            "status": "developing",
+            "status": "DEVELOPING",
         },
         {
-            "category": "motor_gross",
+            "category": "MOTOR_GROSS",
             "name": "Runs smoothly",
             "expected_age_months": 24,
-            "status": "achieved",
+            "status": "ACHIEVED",
         },
         {
-            "category": "language",
+            "category": "LANGUAGE",
             "name": "Uses 2-word phrases",
             "expected_age_months": 18,
-            "status": "achieved",
+            "status": "ACHIEVED",
         },
         {
-            "category": "social_emotional",
+            "category": "SOCIAL_EMOTIONAL",
             "name": "Plays alongside peers",
             "expected_age_months": 24,
-            "status": "achieved",
+            "status": "ACHIEVED",
         },
         {
-            "category": "self_care",
+            "category": "SELF_CARE",
             "name": "Feeds self with spoon",
             "expected_age_months": 18,
-            "status": "achieved",
+            "status": "ACHIEVED",
         },
         {
-            "category": "language",
+            "category": "LANGUAGE",
             "name": "Follows 2-step instructions",
             "expected_age_months": 24,
-            "status": "emerging",
+            "status": "EMERGING",
         },
         {
-            "category": "motor_fine",
+            "category": "MOTOR_FINE",
             "name": "Holds crayon correctly",
             "expected_age_months": 36,
-            "status": "not_started",
+            "status": "NOT_STARTED",
         },
     ]
 
@@ -2500,7 +2500,7 @@ async def sample_work_samples(
 ) -> List[MockWorkSample]:
     """Create multiple sample work samples with varied properties."""
     # Get only photo/document items that can have work samples
-    valid_items = [item for item in sample_portfolio_items if item.item_type in ("photo", "document")]
+    valid_items = [item for item in sample_portfolio_items if item.item_type in ("PHOTO", "DOCUMENT")]
 
     if len(valid_items) < 3:
         raise ValueError("Not enough portfolio items for work samples fixture")
@@ -2508,7 +2508,7 @@ async def sample_work_samples(
     work_samples_data = [
         {
             "portfolio_item_id": valid_items[0].id,
-            "sample_type": "artwork",
+            "sample_type": "ARTWORK",
             "title": "Family Portrait",
             "description": "Drawing of family members.",
             "learning_objectives": ["creative expression", "fine motor"],
@@ -2516,7 +2516,7 @@ async def sample_work_samples(
         },
         {
             "portfolio_item_id": valid_items[1].id,
-            "sample_type": "construction",
+            "sample_type": "CONSTRUCTION",
             "title": "Block Tower",
             "description": "Tall tower built with blocks.",
             "learning_objectives": ["spatial awareness", "problem solving"],
@@ -2524,7 +2524,7 @@ async def sample_work_samples(
         },
         {
             "portfolio_item_id": valid_items[2].id,
-            "sample_type": "writing",
+            "sample_type": "WRITING",
             "title": "Name Practice",
             "description": "Practice writing their name.",
             "learning_objectives": ["letter recognition", "fine motor"],
@@ -2549,7 +2549,10 @@ async def sample_work_samples(
 
 @pytest.fixture
 def sample_portfolio_item_request(test_child_id: UUID) -> Dict[str, Any]:
-    """Create a sample portfolio item creation request."""
+    """Create a sample portfolio item creation request.
+
+    Note: tags field is omitted as SQLite doesn't support PostgreSQL ARRAY type.
+    """
     return {
         "child_id": str(test_child_id),
         "item_type": "photo",
@@ -2557,20 +2560,21 @@ def sample_portfolio_item_request(test_child_id: UUID) -> Dict[str, Any]:
         "description": "A new photo from today's activities.",
         "media_url": "https://storage.example.com/photos/new-photo.jpg",
         "privacy_level": "family",
-        "tags": ["activity", "new"],
     }
 
 
 @pytest.fixture
 def sample_observation_request(test_child_id: UUID, test_user_id: UUID) -> Dict[str, Any]:
-    """Create a sample observation creation request."""
+    """Create a sample observation creation request.
+
+    Note: developmental_areas field is omitted as SQLite doesn't support PostgreSQL ARRAY type.
+    """
     return {
         "child_id": str(test_child_id),
         "observer_id": str(test_user_id),
         "observation_type": "anecdotal",
         "title": "New Observation",
         "content": "Detailed observation content goes here.",
-        "developmental_areas": ["cognitive", "language"],
         "observation_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "context": "morning circle",
         "is_shared_with_family": True,
@@ -2595,13 +2599,13 @@ def sample_work_sample_request(test_child_id: UUID) -> Dict[str, Any]:
     """Create a sample work sample creation request.
 
     Note: portfolio_item_id must be added separately as it depends on a created item.
+    Note: learning_objectives field is omitted as SQLite doesn't support PostgreSQL ARRAY type.
     """
     return {
         "child_id": str(test_child_id),
         "sample_type": "artwork",
         "title": "New Work Sample",
         "description": "Description of the work sample.",
-        "learning_objectives": ["creativity", "fine motor"],
         "sample_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "is_shared_with_family": True,
     }

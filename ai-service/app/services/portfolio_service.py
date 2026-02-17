@@ -9,7 +9,7 @@ from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import and_, cast, func, select, String
+from sqlalchemy import and_, cast, delete, func, select, String, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.portfolio import (
@@ -177,14 +177,22 @@ class PortfolioService:
             query = query.where(PortfolioItem.is_archived == False)
 
         if item_type:
-            query = query.where(
-                PortfolioItem.item_type == PortfolioItemType(item_type)
-            )
+            try:
+                query = query.where(
+                    PortfolioItem.item_type == PortfolioItemType(item_type)
+                )
+            except ValueError:
+                # Invalid item_type filter - ignore and continue without filter
+                pass
 
         if privacy_level:
-            query = query.where(
-                PortfolioItem.privacy_level == PrivacyLevel(privacy_level)
-            )
+            try:
+                query = query.where(
+                    PortfolioItem.privacy_level == PrivacyLevel(privacy_level)
+                )
+            except ValueError:
+                # Invalid privacy_level filter - ignore and continue without filter
+                pass
 
         # Note: Tag filtering with ARRAY overlap would need PostgreSQL specific
         # For now, we skip tag filtering in the query for SQLite compatibility
@@ -226,23 +234,33 @@ class PortfolioService:
         Raises:
             PortfolioItemNotFoundError: If the portfolio item is not found.
         """
+        # Check if exists first
         portfolio_item = await self.get_portfolio_item_by_id(item_id)
         if not portfolio_item:
             raise PortfolioItemNotFoundError(
                 f"Portfolio item with ID {item_id} not found"
             )
 
-        # Update fields if provided
+        # Build update values from provided data
         update_data = data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            if value is not None:
-                if field == "privacy_level":
-                    value = PrivacyLevel(value.value)
-                setattr(portfolio_item, field, value)
+        if update_data:
+            # Convert enum values to their proper types
+            if "privacy_level" in update_data and update_data["privacy_level"]:
+                update_data["privacy_level"] = PrivacyLevel(
+                    update_data["privacy_level"].value
+                )
 
-        await self.db.commit()
-        await self.db.refresh(portfolio_item)
-        return portfolio_item
+            # Use explicit SQL UPDATE for database compatibility
+            stmt = (
+                update(PortfolioItem)
+                .where(cast(PortfolioItem.id, String) == str(item_id))
+                .values(**update_data)
+            )
+            await self.db.execute(stmt)
+            await self.db.commit()
+
+        # Re-fetch and return the updated record
+        return await self.get_portfolio_item_by_id(item_id)
 
     async def delete_portfolio_item(self, item_id: UUID) -> bool:
         """Delete a portfolio item (soft delete by archiving).
@@ -262,7 +280,13 @@ class PortfolioService:
                 f"Portfolio item with ID {item_id} not found"
             )
 
-        portfolio_item.is_archived = True
+        # Use explicit SQL UPDATE for soft delete (database compatibility)
+        stmt = (
+            update(PortfolioItem)
+            .where(cast(PortfolioItem.id, String) == str(item_id))
+            .values(is_archived=True)
+        )
+        await self.db.execute(stmt)
         await self.db.commit()
         return True
 
@@ -426,15 +450,20 @@ class PortfolioService:
                 f"Observation with ID {observation_id} not found"
             )
 
-        # Update fields if provided
+        # Build update values from provided data
         update_data = data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            if value is not None:
-                setattr(observation, field, value)
+        if update_data:
+            # Use explicit SQL UPDATE for database compatibility
+            stmt = (
+                update(Observation)
+                .where(cast(Observation.id, String) == str(observation_id))
+                .values(**update_data)
+            )
+            await self.db.execute(stmt)
+            await self.db.commit()
 
-        await self.db.commit()
-        await self.db.refresh(observation)
-        return observation
+        # Re-fetch and return the updated record
+        return await self.get_observation_by_id(observation_id)
 
     async def delete_observation(self, observation_id: UUID) -> bool:
         """Delete an observation (soft delete by archiving).
@@ -454,7 +483,13 @@ class PortfolioService:
                 f"Observation with ID {observation_id} not found"
             )
 
-        observation.is_archived = True
+        # Use explicit SQL UPDATE for soft delete (database compatibility)
+        stmt = (
+            update(Observation)
+            .where(cast(Observation.id, String) == str(observation_id))
+            .values(is_archived=True)
+        )
+        await self.db.execute(stmt)
         await self.db.commit()
         return True
 
@@ -582,17 +617,24 @@ class PortfolioService:
                 f"Milestone with ID {milestone_id} not found"
             )
 
-        # Update fields if provided
+        # Build update values from provided data
         update_data = data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            if value is not None:
-                if field == "status":
-                    value = MilestoneStatus(value.value)
-                setattr(milestone, field, value)
+        if update_data:
+            # Convert enum values to their proper types
+            if "status" in update_data and update_data["status"]:
+                update_data["status"] = MilestoneStatus(update_data["status"].value)
 
-        await self.db.commit()
-        await self.db.refresh(milestone)
-        return milestone
+            # Use explicit SQL UPDATE for database compatibility
+            stmt = (
+                update(Milestone)
+                .where(cast(Milestone.id, String) == str(milestone_id))
+                .values(**update_data)
+            )
+            await self.db.execute(stmt)
+            await self.db.commit()
+
+        # Re-fetch and return the updated record
+        return await self.get_milestone_by_id(milestone_id)
 
     async def delete_milestone(self, milestone_id: UUID) -> bool:
         """Delete a milestone (hard delete).
@@ -612,7 +654,11 @@ class PortfolioService:
                 f"Milestone with ID {milestone_id} not found"
             )
 
-        await self.db.delete(milestone)
+        # Use explicit SQL DELETE for database compatibility
+        stmt = delete(Milestone).where(
+            cast(Milestone.id, String) == str(milestone_id)
+        )
+        await self.db.execute(stmt)
         await self.db.commit()
         return True
 
@@ -778,15 +824,20 @@ class PortfolioService:
                 f"Work sample with ID {work_sample_id} not found"
             )
 
-        # Update fields if provided
+        # Build update values from provided data
         update_data = data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            if value is not None:
-                setattr(work_sample, field, value)
+        if update_data:
+            # Use explicit SQL UPDATE for database compatibility
+            stmt = (
+                update(WorkSample)
+                .where(cast(WorkSample.id, String) == str(work_sample_id))
+                .values(**update_data)
+            )
+            await self.db.execute(stmt)
+            await self.db.commit()
 
-        await self.db.commit()
-        await self.db.refresh(work_sample)
-        return work_sample
+        # Re-fetch and return the updated record
+        return await self.get_work_sample_by_id(work_sample_id)
 
     async def delete_work_sample(self, work_sample_id: UUID) -> bool:
         """Delete a work sample (hard delete).
@@ -806,7 +857,11 @@ class PortfolioService:
                 f"Work sample with ID {work_sample_id} not found"
             )
 
-        await self.db.delete(work_sample)
+        # Use explicit SQL DELETE for database compatibility
+        stmt = delete(WorkSample).where(
+            cast(WorkSample.id, String) == str(work_sample_id)
+        )
+        await self.db.execute(stmt)
         await self.db.commit()
         return True
 
