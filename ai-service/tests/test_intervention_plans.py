@@ -1875,3 +1875,175 @@ async def test_add_consultation_calls_verify_and_commit(
 
     assert mock_db_session.add.called
     assert mock_db_session.commit.called
+
+
+# =============================================================================
+# Snapshot Creation Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_create_plan_snapshot_captures_all_fields(
+    mock_db_session: AsyncMock,
+    mock_plan_id: UUID,
+    mock_child_id: UUID,
+    mock_user_id: UUID,
+) -> None:
+    """Test that _create_plan_snapshot captures all required fields.
+
+    Verifies that the snapshot includes:
+    - created_by field
+    - parent_version_id field
+    - All 8 sections: strengths, needs, goals, strategies, monitoring,
+      parent_involvements, consultations, progress_records
+    """
+    # Create a mock plan with all 8 sections populated
+    plan = MagicMock()
+    plan.id = mock_plan_id
+    plan.child_id = mock_child_id
+    plan.created_by = mock_user_id
+    plan.title = "Comprehensive Plan"
+    plan.status = "draft"
+    plan.version = 1
+    plan.child_name = "Test Child"
+    plan.date_of_birth = date(2020, 1, 1)
+    plan.diagnosis = ["autism"]
+    plan.medical_history = "Test history"
+    plan.educational_history = "Test education"
+    plan.family_context = "Test context"
+    plan.review_schedule = "quarterly"
+    plan.next_review_date = date.today() + timedelta(days=90)
+    plan.effective_date = date.today()
+    plan.end_date = None
+    plan.parent_signed = False
+    plan.created_at = datetime.utcnow()
+    plan.updated_at = datetime.utcnow()
+
+    # Mock strength
+    mock_strength = MagicMock()
+    mock_strength.id = uuid4()
+    mock_strength.category = "cognitive"
+    mock_strength.description = "Test strength"
+    mock_strength.examples = "Test examples"
+    mock_strength.order = 0
+
+    # Mock need
+    mock_need = MagicMock()
+    mock_need.id = uuid4()
+    mock_need.category = "communication"
+    mock_need.description = "Test need"
+    mock_need.priority = "high"
+    mock_need.baseline = "Test baseline"
+    mock_need.order = 0
+
+    # Mock goal
+    mock_goal = MagicMock()
+    mock_goal.id = uuid4()
+    mock_goal.need_id = mock_need.id
+    mock_goal.title = "Test goal"
+    mock_goal.description = "Test description"
+    mock_goal.measurement_criteria = "Test criteria"
+    mock_goal.measurement_baseline = "0"
+    mock_goal.measurement_target = "10"
+    mock_goal.achievability_notes = "Test achievability"
+    mock_goal.relevance_notes = "Test relevance"
+    mock_goal.target_date = date.today() + timedelta(days=90)
+    mock_goal.status = "not_started"
+    mock_goal.progress_percentage = 0.0
+    mock_goal.order = 0
+
+    # Mock strategy
+    mock_strategy = MagicMock()
+    mock_strategy.id = uuid4()
+    mock_strategy.goal_id = mock_goal.id
+    mock_strategy.title = "Test strategy"
+    mock_strategy.description = "Test description"
+    mock_strategy.responsible_party = "educator"
+    mock_strategy.frequency = "daily"
+    mock_strategy.materials_needed = "Test materials"
+    mock_strategy.accommodations = "Test accommodations"
+    mock_strategy.order = 0
+
+    # Mock monitoring
+    mock_monitoring = MagicMock()
+    mock_monitoring.id = uuid4()
+    mock_monitoring.goal_id = mock_goal.id
+    mock_monitoring.method = "observation"
+    mock_monitoring.description = "Test monitoring"
+    mock_monitoring.frequency = "daily"
+    mock_monitoring.responsible_party = "educator"
+    mock_monitoring.data_collection_tools = "Test tools"
+    mock_monitoring.success_indicators = "Test indicators"
+    mock_monitoring.order = 0
+
+    # Mock parent involvement
+    mock_parent_involvement = MagicMock()
+    mock_parent_involvement.id = uuid4()
+    mock_parent_involvement.activity_type = "home_activity"
+    mock_parent_involvement.title = "Test involvement"
+    mock_parent_involvement.description = "Test description"
+    mock_parent_involvement.frequency = "weekly"
+    mock_parent_involvement.resources_provided = "Test resources"
+    mock_parent_involvement.communication_method = "email"
+    mock_parent_involvement.order = 0
+
+    # Mock consultation
+    mock_consultation = MagicMock()
+    mock_consultation.id = uuid4()
+    mock_consultation.specialist_type = "speech_therapist"
+    mock_consultation.specialist_name = "Dr. Test"
+    mock_consultation.organization = "Test Org"
+    mock_consultation.purpose = "Test purpose"
+    mock_consultation.recommendations = "Test recommendations"
+    mock_consultation.consultation_date = date.today()
+    mock_consultation.next_consultation_date = date.today() + timedelta(days=7)
+    mock_consultation.notes = "Test notes"
+    mock_consultation.order = 0
+
+    # Set the sections on the plan
+    plan.strengths = [mock_strength]
+    plan.needs = [mock_need]
+    plan.goals = [mock_goal]
+    plan.strategies = [mock_strategy]
+    plan.monitoring = [mock_monitoring]
+    plan.parent_involvements = [mock_parent_involvement]
+    plan.consultations = [mock_consultation]
+
+    # Mock the version query to return None (no parent version)
+    mock_version_result = MagicMock()
+    mock_version_result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = mock_version_result
+
+    # Create the service and generate snapshot
+    service = InterventionPlanService(mock_db_session)
+    snapshot = await service._create_plan_snapshot(plan)
+
+    # Verify created_by is present
+    assert "created_by" in snapshot, "Snapshot must include created_by field"
+    assert snapshot["created_by"] == str(mock_user_id), "created_by should match user ID"
+
+    # Verify parent_version_id is present
+    assert "parent_version_id" in snapshot, "Snapshot must include parent_version_id field"
+    assert snapshot["parent_version_id"] is None, "parent_version_id should be None for first version"
+
+    # Verify all 8 sections are present
+    assert "strengths" in snapshot, "Snapshot must include strengths (Part 2)"
+    assert len(snapshot["strengths"]) == 1, "Strengths section should have 1 item"
+
+    assert "needs" in snapshot, "Snapshot must include needs (Part 3)"
+    assert len(snapshot["needs"]) == 1, "Needs section should have 1 item"
+
+    assert "goals" in snapshot, "Snapshot must include goals (Part 4)"
+    assert len(snapshot["goals"]) == 1, "Goals section should have 1 item"
+
+    assert "strategies" in snapshot, "Snapshot must include strategies (Part 5)"
+    assert len(snapshot["strategies"]) == 1, "Strategies section should have 1 item"
+
+    assert "monitoring" in snapshot, "Snapshot must include monitoring (Part 6)"
+    assert len(snapshot["monitoring"]) == 1, "Monitoring section should have 1 item"
+
+    assert "parent_involvements" in snapshot, "Snapshot must include parent_involvements (Part 7)"
+    assert len(snapshot["parent_involvements"]) == 1, "Parent involvements section should have 1 item"
+
+    assert "consultations" in snapshot, "Snapshot must include consultations (Part 8)"
+    assert len(snapshot["consultations"]) == 1, "Consultations section should have 1 item"
