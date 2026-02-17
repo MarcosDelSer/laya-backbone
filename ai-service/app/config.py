@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # JWT configuration
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
+    jwt_audience: str = "laya-ai-service"
+    jwt_issuer: str = "laya-ai-service"
 
     # Database connection pool configuration
     db_pool_size: int = 10
