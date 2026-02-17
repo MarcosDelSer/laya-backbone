@@ -742,7 +742,14 @@ async def create_or_update_notification_preference(
     service = MessagingService(db)
 
     try:
-        return await service.create_notification_preference(request)
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role")
+        return await service.create_notification_preference(request, user_id, user_role)
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
     except MessagingServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -781,7 +788,14 @@ async def get_notification_preferences(
     service = MessagingService(db)
 
     try:
-        return await service.get_notification_preferences(parent_id)
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role")
+        return await service.get_notification_preferences(parent_id, user_id, user_role)
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
     except MessagingServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -823,10 +837,19 @@ async def get_notification_preference(
     service = MessagingService(db)
 
     try:
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role")
         return await service.get_notification_preference(
             parent_id=parent_id,
             notification_type=notification_type,
             channel=channel,
+            user_id=user_id,
+            user_role=user_role,
+        )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
         )
     except NotificationPreferenceNotFoundError as e:
         raise HTTPException(
@@ -875,12 +898,21 @@ async def delete_notification_preference(
     service = MessagingService(db)
 
     try:
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role")
         await service.delete_notification_preference(
             parent_id=parent_id,
             notification_type=notification_type,
             channel=channel,
+            user_id=user_id,
+            user_role=user_role,
         )
         return {"deleted": True}
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
     except NotificationPreferenceNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -928,7 +960,14 @@ async def get_or_create_default_preferences(
     service = MessagingService(db)
 
     try:
-        return await service.get_or_create_default_preferences(parent_id)
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role")
+        return await service.get_or_create_default_preferences(parent_id, user_id, user_role)
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
     except MessagingServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -976,12 +1015,21 @@ async def set_quiet_hours(
     service = MessagingService(db)
 
     try:
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role")
         updated_count = await service.set_quiet_hours(
             parent_id=parent_id,
             quiet_hours_start=quiet_hours_start,
             quiet_hours_end=quiet_hours_end,
+            user_id=user_id,
+            user_role=user_role,
         )
         return {"updated_count": updated_count}
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
     except MessagingServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

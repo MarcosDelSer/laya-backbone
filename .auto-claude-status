@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "043-performance-optimization",
+  "spec": "087-fix-idor-vulnerabilities",
   "state": "building",
   "subtasks": {
     "completed": 6,
-    "total": 10,
+    "total": 18,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Phase 4: Documentation and Hardening",
+    "current": "Verify Messaging Authorization",
     "id": null,
-    "total": 4
+    "total": 2
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 2,
-    "started_at": "2026-02-16T16:54:27.528327"
+    "number": 358,
+    "started_at": "2026-02-17T15:22:15.108433"
   },
-  "last_update": "2026-02-16T16:59:42.585746"
+  "last_update": "2026-02-17T16:01:58.517295"
 }

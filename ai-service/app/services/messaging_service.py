@@ -864,6 +864,35 @@ class MessagingService:
 
         return False
 
+    def _verify_notification_preference_access(
+        self,
+        parent_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
+    ) -> None:
+        """Verify user has permission to access notification preferences.
+
+        Users can only access their own notification preferences unless they
+        are administrators or directors.
+
+        Args:
+            parent_id: ID of the parent whose preferences are being accessed
+            user_id: ID of the user making the request
+            user_role: Role of the user (admin, director, parent, educator)
+
+        Raises:
+            UnauthorizedAccessError: When user lacks permission to access preferences
+        """
+        # Allow admins and directors to access any preferences
+        if user_role and user_role.lower() in ["admin", "director"]:
+            return
+
+        # Otherwise, user can only access their own preferences
+        if str(parent_id) != str(user_id):
+            raise UnauthorizedAccessError(
+                "You can only access your own notification preferences"
+            )
+
     async def _build_message_response(
         self,
         message: Message,
@@ -1366,6 +1395,8 @@ class MessagingService:
     async def get_notification_preferences(
         self,
         parent_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> NotificationPreferenceListResponse:
         """Get all notification preferences for a parent.
 
@@ -1374,10 +1405,18 @@ class MessagingService:
 
         Args:
             parent_id: Unique identifier of the parent user
+            user_id: ID of the user making the request
+            user_role: Role of the requesting user (for authorization)
 
         Returns:
             NotificationPreferenceListResponse with all preferences
+
+        Raises:
+            UnauthorizedAccessError: When user lacks permission to access preferences
         """
+        # Verify user has permission to access these preferences
+        self._verify_notification_preference_access(parent_id, user_id, user_role)
+
         query = select(NotificationPreference).where(
             cast(NotificationPreference.parent_id, String) == str(parent_id)
         ).order_by(NotificationPreference.notification_type, NotificationPreference.channel)
@@ -1413,6 +1452,8 @@ class MessagingService:
         parent_id: UUID,
         notification_type: NotificationType,
         channel: NotificationChannelType,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> NotificationPreferenceResponse:
         """Get a specific notification preference.
 
@@ -1423,13 +1464,19 @@ class MessagingService:
             parent_id: Unique identifier of the parent user
             notification_type: Type of notification to retrieve
             channel: Notification delivery channel
+            user_id: ID of the user making the request
+            user_role: Role of the requesting user (for authorization)
 
         Returns:
             NotificationPreferenceResponse with the preference data
 
         Raises:
             NotificationPreferenceNotFoundError: When the preference is not found
+            UnauthorizedAccessError: When user lacks permission to access preferences
         """
+        # Verify user has permission to access these preferences
+        self._verify_notification_preference_access(parent_id, user_id, user_role)
+
         query = select(NotificationPreference).where(
             and_(
                 cast(NotificationPreference.parent_id, String) == str(parent_id),
@@ -1463,6 +1510,8 @@ class MessagingService:
     async def create_notification_preference(
         self,
         request: NotificationPreferenceRequest,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> NotificationPreferenceResponse:
         """Create a new notification preference.
 
@@ -1471,10 +1520,18 @@ class MessagingService:
 
         Args:
             request: The notification preference creation request
+            user_id: ID of the user making the request
+            user_role: Role of the requesting user (for authorization)
 
         Returns:
             NotificationPreferenceResponse with the created preference data
+
+        Raises:
+            UnauthorizedAccessError: When user lacks permission to modify preferences
         """
+        # Verify user has permission to modify these preferences
+        self._verify_notification_preference_access(request.parent_id, user_id, user_role)
+
         # Check if preference already exists
         existing_query = select(NotificationPreference).where(
             and_(
@@ -1616,6 +1673,8 @@ class MessagingService:
         parent_id: UUID,
         notification_type: NotificationType,
         channel: NotificationChannelType,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> bool:
         """Delete a notification preference.
 
@@ -1625,13 +1684,19 @@ class MessagingService:
             parent_id: Unique identifier of the parent user
             notification_type: Type of notification to delete
             channel: Notification delivery channel
+            user_id: ID of the user making the request
+            user_role: Role of the requesting user (for authorization)
 
         Returns:
             True if the preference was deleted
 
         Raises:
             NotificationPreferenceNotFoundError: When the preference is not found
+            UnauthorizedAccessError: When user lacks permission to delete preferences
         """
+        # Verify user has permission to delete these preferences
+        self._verify_notification_preference_access(parent_id, user_id, user_role)
+
         query = select(NotificationPreference).where(
             and_(
                 cast(NotificationPreference.parent_id, String) == str(parent_id),
@@ -1657,6 +1722,8 @@ class MessagingService:
     async def get_or_create_default_preferences(
         self,
         parent_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> NotificationPreferenceListResponse:
         """Get existing or create default notification preferences for a parent.
 
@@ -1666,10 +1733,18 @@ class MessagingService:
 
         Args:
             parent_id: Unique identifier of the parent user
+            user_id: ID of the user making the request
+            user_role: Role of the requesting user (for authorization)
 
         Returns:
             NotificationPreferenceListResponse with all preferences
+
+        Raises:
+            UnauthorizedAccessError: When user lacks permission to access/create preferences
         """
+        # Verify user has permission to access/create these preferences
+        self._verify_notification_preference_access(parent_id, user_id, user_role)
+
         # Check if any preferences exist
         existing_query = select(NotificationPreference).where(
             cast(NotificationPreference.parent_id, String) == str(parent_id)
@@ -1679,7 +1754,7 @@ class MessagingService:
 
         if existing_preferences:
             # Return existing preferences
-            return await self.get_notification_preferences(parent_id)
+            return await self.get_notification_preferences(parent_id, user_id, user_role)
 
         # Create default preferences for all type/channel combinations
         default_preferences = []
@@ -1755,6 +1830,8 @@ class MessagingService:
         parent_id: UUID,
         quiet_hours_start: Optional[str],
         quiet_hours_end: Optional[str],
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> int:
         """Set quiet hours for all notification preferences.
 
@@ -1765,10 +1842,18 @@ class MessagingService:
             parent_id: Unique identifier of the parent user
             quiet_hours_start: Start of quiet hours (HH:MM format, e.g., "22:00")
             quiet_hours_end: End of quiet hours (HH:MM format, e.g., "07:00")
+            user_id: ID of the user making the request
+            user_role: Role of the requesting user (for authorization)
 
         Returns:
             Number of preferences updated
+
+        Raises:
+            UnauthorizedAccessError: When user lacks permission to modify preferences
         """
+        # Verify user has permission to modify these preferences
+        self._verify_notification_preference_access(parent_id, user_id, user_role)
+
         stmt = (
             update(NotificationPreference)
             .where(
