@@ -9,6 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
+    pagination: Standardized pagination schemas
 """
 
 from app.schemas.activity import (
@@ -72,6 +73,10 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
+from app.schemas.pagination import (
+    PaginatedRequest,
+    SortOrder,
+)
 
 __all__ = [
     # Base schemas
@@ -130,4 +135,7 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
+    # Pagination schemas
+    "PaginatedRequest",
+    "SortOrder",
 ]
