@@ -10,6 +10,7 @@ Modules:
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
     pagination: Standardized pagination schemas
+    search: Full-text search schemas
 """
 
 from app.schemas.activity import (
@@ -77,6 +78,13 @@ from app.schemas.pagination import (
     PaginatedRequest,
     SortOrder,
 )
+from app.schemas.search import (
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+    SearchResultType,
+    SearchType,
+)
 
 __all__ = [
     # Base schemas
@@ -138,4 +146,10 @@ __all__ = [
     # Pagination schemas
     "PaginatedRequest",
     "SortOrder",
+    # Search schemas
+    "SearchType",
+    "SearchRequest",
+    "SearchResultType",
+    "SearchResult",
+    "SearchResponse",
 ]
