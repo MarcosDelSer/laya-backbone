@@ -1303,3 +1303,25 @@ class DocumentService:
             timestamp=audit_log.timestamp,
             created_at=audit_log.created_at,
         )
+
+    def _user_has_document_access(
+        self,
+        document: Document,
+        user_id: UUID,
+    ) -> bool:
+        """Check if a user has access to a document.
+
+        User has access if they are the creator.
+
+        Args:
+            document: The document to check access for
+            user_id: ID of the user to check
+
+        Returns:
+            True if user has access, False otherwise
+        """
+        # Creator always has access
+        if str(document.created_by) == str(user_id):
+            return True
+
+        return False
