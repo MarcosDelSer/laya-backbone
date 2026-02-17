@@ -3,23 +3,23 @@
   "spec": "087-fix-idor-7-endpoints",
   "state": "building",
   "subtasks": {
-    "completed": 8,
+    "completed": 14,
     "total": 20,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Fix Development Profile Service Authorization",
+    "current": "Authorization Testing",
     "id": null,
-    "total": 6
+    "total": 3
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 6,
+    "number": 12,
     "started_at": "2026-02-17T12:32:27.296683"
   },
-  "last_update": "2026-02-17T12:39:59.517251"
+  "last_update": "2026-02-17T12:51:30.107922"
 }

@@ -7,7 +7,7 @@ and signature workflows. Implements CRUD operations and document lifecycle manag
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Union
 from uuid import UUID
 
 from sqlalchemy import and_, case, cast, func, or_, select, String
@@ -430,7 +430,7 @@ class DocumentService:
 
     async def update_document(
         self, document_id: UUID, update_data: DocumentUpdate, user_id: UUID
-    ) -> Optional[Document | str]:
+    ) -> Optional[Union[Document, str]]:
         """Update a document.
 
         Signed documents are immutable and cannot be updated.
