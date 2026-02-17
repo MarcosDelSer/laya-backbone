@@ -9,7 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
-    document: Document e-signature and template schemas
+    llm: LLM integration schemas
 """
 
 from app.schemas.activity import (
@@ -73,30 +73,19 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
-from app.schemas.document import (
-    DocumentAuditLogCreate,
-    DocumentAuditLogListResponse,
-    DocumentAuditLogResponse,
-    DocumentBase,
-    DocumentCreate,
-    DocumentListResponse,
-    DocumentResponse,
-    DocumentStatusCount,
-    DocumentTypeCount,
-    DocumentUpdate,
-    DocumentTemplateBase,
-    DocumentTemplateCreate,
-    DocumentTemplateListResponse,
-    DocumentTemplateResponse,
-    DocumentTemplateUpdate,
-    SignatureActivity,
-    SignatureBase,
-    SignatureCreate,
-    SignatureDashboardResponse,
-    SignatureDashboardSummary,
-    SignatureRequestCreate,
-    SignatureRequestResponse,
-    SignatureResponse,
+from app.schemas.llm import (
+    LLMCompletionRequest,
+    LLMCompletionResponse,
+    LLMHealthResponse,
+    LLMMessageRole,
+    LLMMessageSchema,
+    LLMModelInfo,
+    LLMModelsListResponse,
+    LLMProvider,
+    LLMUsageListResponse,
+    LLMUsageLogResponse,
+    LLMUsageStats,
+    LLMUsageSummary,
 )
 
 __all__ = [
@@ -156,28 +145,17 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
-    # Document schemas
-    "DocumentAuditLogCreate",
-    "DocumentAuditLogListResponse",
-    "DocumentAuditLogResponse",
-    "DocumentBase",
-    "DocumentCreate",
-    "DocumentUpdate",
-    "DocumentResponse",
-    "DocumentListResponse",
-    "DocumentStatusCount",
-    "DocumentTypeCount",
-    "DocumentTemplateBase",
-    "DocumentTemplateCreate",
-    "DocumentTemplateUpdate",
-    "DocumentTemplateResponse",
-    "DocumentTemplateListResponse",
-    "SignatureBase",
-    "SignatureCreate",
-    "SignatureResponse",
-    "SignatureActivity",
-    "SignatureDashboardSummary",
-    "SignatureDashboardResponse",
-    "SignatureRequestCreate",
-    "SignatureRequestResponse",
+    # LLM schemas
+    "LLMProvider",
+    "LLMMessageRole",
+    "LLMMessageSchema",
+    "LLMCompletionRequest",
+    "LLMCompletionResponse",
+    "LLMUsageStats",
+    "LLMUsageLogResponse",
+    "LLMUsageListResponse",
+    "LLMUsageSummary",
+    "LLMHealthResponse",
+    "LLMModelInfo",
+    "LLMModelsListResponse",
 ]

@@ -30,6 +30,13 @@ class Settings(BaseSettings):
         allowed_file_types: Comma-separated list of allowed MIME types
         thumbnail_sizes: Comma-separated thumbnail sizes (e.g., '64,128,256')
         storage_quota_mb: Default storage quota per user in megabytes
+        openai_api_key: OpenAI API key for GPT models
+        anthropic_api_key: Anthropic API key for Claude models
+        llm_default_provider: Default LLM provider (openai or anthropic)
+        llm_default_model: Default model to use for completions
+        llm_temperature: Default temperature for LLM responses (0.0-2.0)
+        llm_max_tokens: Default maximum tokens for LLM responses
+        llm_timeout: Default timeout in seconds for LLM API calls
     """
 
     # Database configuration
@@ -60,6 +67,17 @@ class Settings(BaseSettings):
     )
     thumbnail_sizes: str = "64,128,256"
     storage_quota_mb: int = 1024
+
+    # LLM API Keys
+    openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+
+    # LLM Configuration
+    llm_default_provider: str = "openai"
+    llm_default_model: str = "gpt-4o"
+    llm_temperature: float = 0.7
+    llm_max_tokens: int = 4096
+    llm_timeout: int = 60
 
     @property
     def database_url(self) -> str:
