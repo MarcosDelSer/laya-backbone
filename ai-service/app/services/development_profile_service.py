@@ -533,7 +533,7 @@ class DevelopmentProfileService:
             Observation if found, None otherwise.
         """
         query = select(Observation).where(
-            cast(Observation.id, String) == str(observation_id)
+            Observation.id == observation_id
         )
         result = await self.db.execute(query)
         observation = result.scalar_one_or_none()
@@ -558,7 +558,7 @@ class DevelopmentProfileService:
             Updated observation if found, None otherwise.
         """
         query = select(Observation).where(
-            cast(Observation.id, String) == str(observation_id)
+            Observation.id == observation_id
         )
         result = await self.db.execute(query)
         observation = result.scalar_one_or_none()
@@ -593,7 +593,7 @@ class DevelopmentProfileService:
             True if deleted, False if not found.
         """
         query = select(Observation).where(
-            cast(Observation.id, String) == str(observation_id)
+            Observation.id == observation_id
         )
         result = await self.db.execute(query)
         observation = result.scalar_one_or_none()
