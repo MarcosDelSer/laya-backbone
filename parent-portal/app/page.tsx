@@ -128,7 +128,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Child Status Card */}
-      <div className="card mb-8">
+      <section className="card mb-8">
         <div className="p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -152,12 +152,12 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
         {quickStats.map((stat) => (
-          <div key={stat.label} className="card p-4">
+          <article key={stat.label} className="card p-4">
             <div className="flex items-center space-x-3">
               <StatIcon icon={stat.icon} color={stat.color} />
               <div>
@@ -165,23 +165,23 @@ export default function DashboardPage() {
                 <p className="text-lg font-semibold text-gray-900">{stat.value}</p>
               </div>
             </div>
-          </div>
+          </article>
         ))}
-      </div>
+      </section>
 
       {/* Main Content */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Left Column - Daily Summary */}
         <div className="lg:col-span-2 space-y-6">
           {/* Today's Activities */}
-          <div className="card">
-            <div className="card-header flex items-center justify-between">
+          <article className="card">
+            <header className="card-header flex items-center justify-between">
               <h3 className="section-title">Today&apos;s Activities</h3>
               <Link href="/daily-reports" className="text-sm text-primary-600 hover:text-primary-700">
                 View all
               </Link>
-            </div>
-            <div className="card-body">
+            </header>
+            <section className="card-body">
               <div className="space-y-4">
                 {todaysSummary.activities.map((activity, index) => (
                   <div key={index} className="flex items-start space-x-4">
@@ -200,17 +200,17 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
+            </section>
+          </article>
 
           {/* Meals & Naps */}
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {/* Meals */}
-            <div className="card">
-              <div className="card-header">
+            <article className="card">
+              <header className="card-header">
                 <h3 className="section-title">Meals</h3>
-              </div>
-              <div className="card-body">
+              </header>
+              <section className="card-body">
                 <div className="space-y-3">
                   {todaysSummary.meals.map((meal, index) => (
                     <div key={index} className="flex items-start space-x-3">
@@ -232,15 +232,15 @@ export default function DashboardPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
+              </section>
+            </article>
 
             {/* Naps */}
-            <div className="card">
-              <div className="card-header">
+            <article className="card">
+              <header className="card-header">
                 <h3 className="section-title">Nap Time</h3>
-              </div>
-              <div className="card-body">
+              </header>
+              <section className="card-body">
                 <div className="space-y-3">
                   {todaysSummary.naps.map((nap, index) => (
                     <div key={index} className="flex items-start space-x-3">
@@ -261,22 +261,22 @@ export default function DashboardPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
+              </section>
+            </article>
           </div>
         </div>
 
         {/* Right Column - Photos & Quick Links */}
         <div className="space-y-6">
           {/* Recent Photos */}
-          <div className="card">
-            <div className="card-header flex items-center justify-between">
+          <article className="card">
+            <header className="card-header flex items-center justify-between">
               <h3 className="section-title">Recent Photos</h3>
               <Link href="/daily-reports" className="text-sm text-primary-600 hover:text-primary-700">
                 View all
               </Link>
-            </div>
-            <div className="card-body">
+            </header>
+            <section className="card-body">
               <div className="grid grid-cols-2 gap-2">
                 {recentPhotos.map((photo) => (
                   <div
@@ -298,15 +298,15 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
+            </section>
+          </article>
 
           {/* Quick Links */}
-          <div className="card">
-            <div className="card-header">
+          <article className="card">
+            <header className="card-header">
               <h3 className="section-title">Quick Links</h3>
-            </div>
-            <div className="card-body">
+            </header>
+            <nav className="card-body">
               <div className="space-y-2">
                 <Link
                   href="/invoices"
@@ -368,8 +368,8 @@ export default function DashboardPage() {
                   </svg>
                 </Link>
               </div>
-            </div>
-          </div>
+            </nav>
+          </article>
         </div>
       </div>
     </div>

@@ -92,9 +92,9 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
   const formattedDate = formatDate(report.date);
 
   return (
-    <div className="card">
+    <article className="card">
       {/* Report Header */}
-      <div className="card-header">
+      <header className="card-header">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100">
@@ -138,21 +138,21 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
             )}
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="card-body">
+      <section className="card-body">
         {/* Photos Section */}
         {report.photos.length > 0 && (
-          <div className="mb-6">
+          <section className="mb-6">
             <SectionHeader title="Photos" count={report.photos.length} />
             <PhotoGallery photos={report.photos} maxDisplay={4} />
-          </div>
+          </section>
         )}
 
         {/* Two-column layout for meals and naps */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 mb-6">
           {/* Meals Section */}
-          <div>
+          <section>
             <SectionHeader title="Meals" count={report.meals.length} />
             {report.meals.length > 0 ? (
               <div className="space-y-4">
@@ -163,10 +163,10 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
             ) : (
               <EmptyState message="No meals recorded" />
             )}
-          </div>
+          </section>
 
           {/* Naps Section */}
-          <div>
+          <section>
             <SectionHeader title="Nap Time" count={report.naps.length} />
             {report.naps.length > 0 ? (
               <div className="space-y-4">
@@ -177,11 +177,11 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
             ) : (
               <EmptyState message="No naps recorded" />
             )}
-          </div>
+          </section>
         </div>
 
         {/* Activities Section */}
-        <div>
+        <section>
           <SectionHeader title="Activities" count={report.activities.length} />
           {report.activities.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -192,8 +192,8 @@ export function DailyReportCard({ report }: DailyReportCardProps) {
           ) : (
             <EmptyState message="No activities recorded" />
           )}
-        </div>
-      </div>
-    </div>
+        </section>
+      </section>
+    </article>
   );
 }
