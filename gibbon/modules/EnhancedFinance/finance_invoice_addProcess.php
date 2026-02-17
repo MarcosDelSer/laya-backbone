@@ -46,6 +46,13 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
     exit;
 }
 
+// CSRF check
+if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $session->get('csrf_token')) {
+    $URL .= '&return=error0';
+    header("Location: {$URL}");
+    exit;
+}
+
 // Get posted data
 $gibbonSchoolYearID = $_POST['gibbonSchoolYearID'] ?? '';
 $gibbonFamilyID = $_POST['gibbonFamilyID'] ?? '';
