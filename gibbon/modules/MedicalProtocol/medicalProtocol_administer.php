@@ -88,21 +88,40 @@ if (!isActionAccessible($guid, $connection2, '/modules/MedicalProtocol/medicalPr
             if ($protocol && $protocol['requiresTemperature'] === 'Y' && empty($temperatureC)) {
                 $page->addError(__('Temperature is required for this protocol.'));
             } else {
-                // Check interval restrictions
-                $canAdminister = $administrationGateway->canAdminister($selectedChildID, $selectedProtocolID);
+                // Check if weight is expired (Quebec FO-0647: 3-month revalidation)
+                $isWeightExpired = $authorizationGateway->isWeightExpired($authorizationID);
 
-                if ($canAdminister !== true) {
-                    $nextTime = $canAdminister['nextAllowedTime'] ?? '';
-                    $remainingMinutes = $canAdminister['remainingMinutes'] ?? 0;
-                    $page->addError(sprintf(__('Cannot administer this protocol. Minimum interval not met. Please wait %d more minutes (until %s).'), $remainingMinutes, Format::time($nextTime)));
+                if ($isWeightExpired) {
+                    $weightExpiryDate = $authorizationGateway->getWeightExpiryDate($authorizationID);
+                    $expiryDateFormatted = $weightExpiryDate ? Format::date($weightExpiryDate) : __('unknown');
+                    $page->addError(sprintf(__('Cannot administer medication. Child\'s weight data is expired (expiry date: %s). Weight must be updated and revalidated per Quebec protocol requirements (3-month maximum).'), $expiryDateFormatted));
                 } else {
-                    // Check daily limit
-                    $maxDailyDoses = $protocol['maxDailyDoses'] ?? null;
-                    $isDailyLimitReached = $maxDailyDoses ? $administrationGateway->isDailyLimitReached($selectedChildID, $selectedProtocolID, $maxDailyDoses) : false;
+                    // Comprehensive dose validation (includes interval, daily limit, and dose safety)
+                    $maxDailyDoses = $protocol['maxDailyDoses'] ?? 5;
+                    $validation = $administrationGateway->validateAdministration(
+                        $selectedChildID,
+                        $selectedProtocolID,
+                        $weightAtTimeKg,
+                        !empty($doseMg) ? $doseMg : null,
+                        $concentration,
+                        null, // ageMonths - not currently tracked, optional parameter
+                        $maxDailyDoses
+                    );
 
-                    if ($isDailyLimitReached) {
-                        $page->addError(sprintf(__('Daily limit of %d doses has been reached for this child and protocol.'), $maxDailyDoses));
+                    // Check if administration can proceed
+                    if (!$validation['canAdminister']) {
+                        // Display all validation errors
+                        foreach ($validation['errors'] as $error) {
+                            $page->addError($error);
+                        }
                     } else {
+                        // Display any warnings (e.g., borderline doses)
+                        if (!empty($validation['warnings'])) {
+                            foreach ($validation['warnings'] as $warning) {
+                                $page->addWarning($warning);
+                            }
+                        }
+
                         // Calculate follow-up time (60 minutes after administration)
                         $followUpTime = null;
                         if ($scheduleFollowUp === 'Y' && $protocol['requiresTemperature'] === 'Y') {

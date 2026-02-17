@@ -900,3 +900,34 @@ export interface PortfolioSummary {
   totalWorkSamples: number;
   recentActivity: string;
 }
+
+// ============================================================================
+// Medical Protocol Types (Quebec FO-0647)
+// ============================================================================
+
+/**
+ * Acetaminophen concentration types per Quebec FO-0647 protocol.
+ *
+ * Approved concentrations:
+ * - 80mg/mL: Infant oral drops (0+ months, 4.3-15.9kg)
+ * - 160mg/5mL: Children's suspension (3+ months, 5.5-35kg)
+ * - 325mg: Adult tablet (72+ months, 21.8-35kg)
+ * - 500mg: Adult tablet (72+ months, 32+kg)
+ */
+export type AcetaminophenConcentration = '80mg/mL' | '160mg/5mL' | '325mg' | '500mg';
+
+/**
+ * Dosing information for a specific concentration and weight range.
+ * Used by DosingChart component to display medication dosing options.
+ */
+export interface DosingInfo {
+  protocolId: string;
+  concentration: AcetaminophenConcentration;
+  minWeightKg: number;
+  maxWeightKg: number;
+  minDoseMg: number;
+  maxDoseMg: number;
+  minDoseMl: number;
+  maxDoseMl: number;
+  displayLabel: string;
+}

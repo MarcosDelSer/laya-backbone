@@ -72,6 +72,7 @@ const mockProtocolSummaries: Record<string, ProtocolSummary[]> = {
       authorizationStatus: 'active',
       lastAuthorizedAt: '2024-01-15T10:00:00Z',
       weightKg: 15.2,
+      weightRecordedAt: '2024-01-15T10:00:00Z',
       isWeightExpired: false,
       canAdminister: true,
     },
@@ -115,6 +116,47 @@ function calculateAgeInMonths(dateOfBirth: string): number {
     (now.getFullYear() - birth.getFullYear()) * 12 +
     (now.getMonth() - birth.getMonth());
   return months;
+}
+
+/**
+ * Format date for display.
+ */
+function formatDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Calculate weight expiry date (3 months from recorded date).
+ */
+function calculateWeightExpiryDate(weightRecordedAt: string): Date {
+  const recordedDate = new Date(weightRecordedAt);
+  const expiryDate = new Date(recordedDate);
+  expiryDate.setMonth(expiryDate.getMonth() + 3);
+  return expiryDate;
+}
+
+/**
+ * Check if weight is expired (>3 months old).
+ */
+function isWeightStale(weightRecordedAt: string): boolean {
+  const expiryDate = calculateWeightExpiryDate(weightRecordedAt);
+  return new Date() > expiryDate;
+}
+
+/**
+ * Get days until weight expires.
+ */
+function getDaysUntilWeightExpiry(weightRecordedAt: string): number {
+  const expiryDate = calculateWeightExpiryDate(weightRecordedAt);
+  const now = new Date();
+  const diffTime = expiryDate.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
 }
 
 /**
@@ -281,14 +323,16 @@ export default function AuthorizePage() {
   const handleSubmitAuthorization = (request: CreateProtocolAuthorizationRequest) => {
     // In production, this would call the API
     // Update local state to reflect the new authorization
+    const now = new Date().toISOString();
     setProtocolSummaries((prev) =>
       prev.map((p) =>
         p.protocolId === request.protocolId
           ? {
               ...p,
               authorizationStatus: 'active' as ProtocolAuthorizationStatus,
-              lastAuthorizedAt: new Date().toISOString(),
+              lastAuthorizedAt: now,
               weightKg: request.weightKg || p.weightKg,
+              weightRecordedAt: request.weightKg ? now : p.weightRecordedAt,
               isWeightExpired: false,
               canAdminister: true,
             }
@@ -516,6 +560,39 @@ export default function AuthorizePage() {
         </div>
       )}
 
+      {/* Weight Expiry Warning */}
+      {protocolSummaries.some(
+        (p) => p.weightRecordedAt && isWeightStale(p.weightRecordedAt)
+      ) && (
+        <div className="mb-6 rounded-lg bg-amber-50 border border-amber-200 p-4">
+          <div className="flex">
+            <svg
+              className="h-5 w-5 text-amber-400 flex-shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-amber-800">
+                Weight Update Required
+              </h3>
+              <p className="mt-1 text-sm text-amber-700">
+                {child?.firstName}'s weight for medication protocols is more than 3 months old.
+                Quebec regulations require weight to be updated every 3 months for accurate
+                medication dosing. Please update the weight before authorizing medication protocols.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Quebec Protocol Info */}
       <div className="mb-6 rounded-lg bg-blue-50 border border-blue-200 p-4">
         <div className="flex">
@@ -641,17 +718,42 @@ export default function AuthorizePage() {
 
                     {/* Weight info for authorized protocols */}
                     {summary?.authorizationStatus === 'active' && summary.weightKg && (
-                      <div className="mt-3 text-sm">
-                        <span className="text-gray-600">
+                      <div className="mt-3 space-y-1">
+                        <div className="text-sm text-gray-600">
                           Authorized weight:{' '}
                           <span className="font-medium text-gray-900">
                             {summary.weightKg} kg
                           </span>
-                        </span>
-                        {summary.isWeightExpired && (
-                          <span className="ml-2 text-amber-600 font-medium">
-                            (Weight update required)
-                          </span>
+                        </div>
+                        {summary.weightRecordedAt && (
+                          <div className="text-xs text-gray-500">
+                            Weight recorded: {formatDate(summary.weightRecordedAt)}
+                            {' • '}
+                            Expires: {formatDate(calculateWeightExpiryDate(summary.weightRecordedAt).toISOString())}
+                            {!isWeightStale(summary.weightRecordedAt) && (
+                              <span className="ml-1">
+                                ({getDaysUntilWeightExpiry(summary.weightRecordedAt)} days remaining)
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {summary.weightRecordedAt && isWeightStale(summary.weightRecordedAt) && (
+                          <div className="flex items-center text-sm text-amber-600 font-medium">
+                            <svg
+                              className="mr-1.5 h-4 w-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                              />
+                            </svg>
+                            Weight expired - update required before next administration
+                          </div>
                         )}
                       </div>
                     )}

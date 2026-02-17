@@ -332,6 +332,53 @@ class AuthorizationGateway extends QueryableGateway
     }
 
     /**
+     * Get the weight expiry date for an authorization.
+     *
+     * @param int $gibbonMedicalProtocolAuthorizationID Authorization ID
+     * @return string|false Weight expiry date (Y-m-d format) or false if not found
+     */
+    public function getWeightExpiryDate($gibbonMedicalProtocolAuthorizationID)
+    {
+        $data = ['gibbonMedicalProtocolAuthorizationID' => $gibbonMedicalProtocolAuthorizationID];
+        $sql = "SELECT weightExpiryDate
+                FROM gibbonMedicalProtocolAuthorization
+                WHERE gibbonMedicalProtocolAuthorizationID=:gibbonMedicalProtocolAuthorizationID";
+
+        $result = $this->db()->selectOne($sql, $data);
+
+        return !empty($result) ? $result['weightExpiryDate'] : false;
+    }
+
+    /**
+     * Check if an authorization requires a weight update (3-month revalidation).
+     *
+     * This method checks if the weight data is expired or will expire soon,
+     * requiring revalidation per Quebec protocol requirements.
+     *
+     * @param int $gibbonMedicalProtocolAuthorizationID Authorization ID
+     * @param int $warningDays Number of days before expiry to trigger warning (default: 14)
+     * @return bool True if weight update is required or will be needed soon
+     */
+    public function requiresWeightUpdate($gibbonMedicalProtocolAuthorizationID, $warningDays = 14)
+    {
+        $data = ['gibbonMedicalProtocolAuthorizationID' => $gibbonMedicalProtocolAuthorizationID];
+        $sql = "SELECT weightExpiryDate
+                FROM gibbonMedicalProtocolAuthorization
+                WHERE gibbonMedicalProtocolAuthorizationID=:gibbonMedicalProtocolAuthorizationID";
+
+        $result = $this->db()->selectOne($sql, $data);
+
+        if (empty($result) || empty($result['weightExpiryDate'])) {
+            return true;
+        }
+
+        $expiryDate = strtotime($result['weightExpiryDate']);
+        $warningDate = strtotime("+{$warningDays} days");
+
+        return $expiryDate <= $warningDate;
+    }
+
+    /**
      * Check if weight is expired for a child and protocol.
      *
      * @param int $gibbonPersonID Child's person ID

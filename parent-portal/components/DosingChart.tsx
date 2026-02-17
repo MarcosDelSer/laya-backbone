@@ -1,6 +1,13 @@
 'use client';
 
 import type { DosingInfo, AcetaminophenConcentration } from '@/lib/types';
+import {
+  getDoseRange,
+  calculateMgPerKg,
+  isOverdoseRisk,
+  MIN_MG_PER_KG,
+  MAX_MG_PER_KG,
+} from '@/lib/doseValidation';
 
 /**
  * Weight range constants for medical protocol dosing.
@@ -24,28 +31,35 @@ const MIN_INTERVAL_HOURS = 4;
  */
 const CONCENTRATION_INFO: Record<
   AcetaminophenConcentration,
-  { label: string; description: string; icon: 'drops' | 'syrup' | 'concentrated' }
+  { label: string; description: string; icon: 'drops' | 'syrup' | 'concentrated' | 'tablet' }
 > = {
   '80mg/mL': {
     label: 'Infant Drops',
     description: '80 mg per 1 mL',
     icon: 'drops',
   },
-  '80mg/5mL': {
-    label: "Children's Syrup",
-    description: '80 mg per 5 mL',
-    icon: 'syrup',
-  },
   '160mg/5mL': {
-    label: 'Concentrated Syrup',
+    label: 'Children\'s Suspension',
     description: '160 mg per 5 mL',
     icon: 'concentrated',
+  },
+  '325mg': {
+    label: '325mg Tablet',
+    description: '325 mg per tablet',
+    icon: 'tablet',
+  },
+  '500mg': {
+    label: '500mg Tablet',
+    description: '500 mg per tablet',
+    icon: 'tablet',
   },
 };
 
 interface DosingChartProps {
   /** Child's weight in kilograms */
   weightKg: number | null;
+  /** Child's age in months (optional, for age-based warnings) */
+  ageMonths?: number;
   /** Optional pre-calculated dosing options from API */
   dosingOptions?: DosingInfo[];
   /** Recommended concentration to highlight */
@@ -69,10 +83,10 @@ function calculateDosing(weightKg: number): DosingInfo[] {
     return [];
   }
 
-  const minDoseMg = Math.round(weightKg * 10);
-  const maxDoseMg = Math.round(weightKg * 15);
+  const minDoseMg = Math.round(weightKg * MIN_MG_PER_KG); // 10 mg/kg
+  const maxDoseMg = Math.round(weightKg * MAX_MG_PER_KG); // 15 mg/kg
 
-  const concentrations: AcetaminophenConcentration[] = ['80mg/mL', '80mg/5mL', '160mg/5mL'];
+  const concentrations: AcetaminophenConcentration[] = ['80mg/mL', '160mg/5mL', '325mg', '500mg'];
 
   return concentrations.map((concentration) => {
     let minDoseMl: number;
@@ -80,19 +94,24 @@ function calculateDosing(weightKg: number): DosingInfo[] {
 
     switch (concentration) {
       case '80mg/mL':
-        // 80 mg per 1 mL
+        // Infant drops: 80 mg per 1 mL
         minDoseMl = minDoseMg / 80;
         maxDoseMl = maxDoseMg / 80;
         break;
-      case '80mg/5mL':
-        // 80 mg per 5 mL = 16 mg per 1 mL
-        minDoseMl = (minDoseMg / 80) * 5;
-        maxDoseMl = (maxDoseMg / 80) * 5;
-        break;
       case '160mg/5mL':
-        // 160 mg per 5 mL = 32 mg per 1 mL
+        // Children's suspension: 160 mg per 5 mL = 32 mg per 1 mL
         minDoseMl = (minDoseMg / 160) * 5;
         maxDoseMl = (maxDoseMg / 160) * 5;
+        break;
+      case '325mg':
+        // 325mg tablet: show as fraction of tablet
+        minDoseMl = minDoseMg / 325;
+        maxDoseMl = maxDoseMg / 325;
+        break;
+      case '500mg':
+        // 500mg tablet: show as fraction of tablet
+        minDoseMl = minDoseMg / 500;
+        maxDoseMl = maxDoseMg / 500;
         break;
     }
 
@@ -103,7 +122,7 @@ function calculateDosing(weightKg: number): DosingInfo[] {
       maxWeightKg: weightKg,
       minDoseMg,
       maxDoseMg,
-      minDoseMl: Math.round(minDoseMl * 10) / 10,
+      minDoseMl: Math.round(minDoseMl * 10) / 10, // Round to 1 decimal place
       maxDoseMl: Math.round(maxDoseMl * 10) / 10,
       displayLabel: CONCENTRATION_INFO[concentration].label,
     };
@@ -113,7 +132,7 @@ function calculateDosing(weightKg: number): DosingInfo[] {
 /**
  * Get icon for concentration type.
  */
-function getConcentrationIcon(type: 'drops' | 'syrup' | 'concentrated'): React.ReactNode {
+function getConcentrationIcon(type: 'drops' | 'syrup' | 'concentrated' | 'tablet'): React.ReactNode {
   switch (type) {
     case 'drops':
       return (
@@ -163,6 +182,22 @@ function getConcentrationIcon(type: 'drops' | 'syrup' | 'concentrated'): React.R
           />
         </svg>
       );
+    case 'tablet':
+      return (
+        <svg
+          className="h-5 w-5 text-green-600"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+      );
   }
 }
 
@@ -186,10 +221,71 @@ function formatDoseMg(minMg: number, maxMg: number): string {
   return `${minMg} - ${maxMg} mg`;
 }
 
+/**
+ * Get age-based safety warnings per Quebec FO-0647.
+ */
+function getAgeWarnings(ageMonths: number | undefined): string[] {
+  const warnings: string[] = [];
+
+  if (ageMonths === undefined) {
+    return warnings;
+  }
+
+  // Under 3 months (0-2 months) - require doctor approval
+  if (ageMonths < 3) {
+    warnings.push(
+      '⚠️ CAUTION: Acetaminophen for infants under 3 months requires healthcare provider approval.'
+    );
+  }
+
+  // Under 6 months - extra monitoring
+  if (ageMonths >= 3 && ageMonths < 6) {
+    warnings.push(
+      'For infants under 6 months, closely monitor for effectiveness and side effects.'
+    );
+  }
+
+  return warnings;
+}
+
+/**
+ * Get dose validation severity based on mg/kg.
+ */
+function getDoseSeverity(mgPerKg: number): 'safe' | 'warning' | 'error' {
+  if (mgPerKg > MAX_MG_PER_KG) {
+    return 'error';
+  }
+  if (mgPerKg < MIN_MG_PER_KG) {
+    return 'warning';
+  }
+  if (mgPerKg >= 14.0 && mgPerKg <= MAX_MG_PER_KG) {
+    return 'warning'; // Upper limit warning
+  }
+  if (mgPerKg >= MIN_MG_PER_KG && mgPerKg <= 11.0) {
+    return 'warning'; // Lower limit warning
+  }
+  return 'safe';
+}
+
+/**
+ * Get severity badge classes.
+ */
+function getSeverityBadgeClass(severity: 'safe' | 'warning' | 'error'): string {
+  switch (severity) {
+    case 'safe':
+      return 'bg-green-100 text-green-800 border-green-200';
+    case 'warning':
+      return 'bg-amber-100 text-amber-800 border-amber-200';
+    case 'error':
+      return 'bg-red-100 text-red-800 border-red-200';
+  }
+}
+
 export function DosingChart({
   weightKg,
+  ageMonths,
   dosingOptions,
-  recommendedConcentration = '80mg/5mL',
+  recommendedConcentration = '80mg/mL',
   showDailyDoseWarning = true,
   onConcentrationSelect,
   selectedConcentration,
@@ -201,6 +297,12 @@ export function DosingChart({
   // Check if weight is out of range
   const isWeightOutOfRange =
     weightKg !== null && (weightKg < MIN_WEIGHT_KG || weightKg > MAX_WEIGHT_KG);
+
+  // Get recommended dose range for validation
+  const recommendedRange = weightKg !== null ? getDoseRange(weightKg) : null;
+
+  // Get age-based warnings
+  const ageWarnings = getAgeWarnings(ageMonths);
 
   // Render empty state if no weight
   if (weightKg === null) {
@@ -315,6 +417,78 @@ export function DosingChart({
           </div>
         )}
 
+        {/* Recommended Dose Range - Prominent Display */}
+        {recommendedRange && (
+          <div className="mb-4 rounded-lg border-2 border-green-200 bg-green-50 p-4">
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-6 w-6 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-green-900">
+                  Recommended Dose Range
+                </h4>
+                <p className="mt-1 text-base font-bold text-green-800">
+                  {recommendedRange.minMg} - {recommendedRange.maxMg} mg
+                </p>
+                <p className="mt-1 text-xs text-green-700">
+                  For {weightKg} kg: {MIN_MG_PER_KG}-{MAX_MG_PER_KG} mg per kg of body weight
+                </p>
+                <div className="mt-2 flex items-center space-x-2">
+                  <span className="inline-flex items-center rounded-full border bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 border-green-200">
+                    ✓ Safe Range
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Age-Based Safety Warnings */}
+        {ageWarnings.length > 0 && (
+          <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-4">
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-orange-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-orange-800">Age-Based Safety Notice</h4>
+                <div className="mt-2 space-y-1">
+                  {ageWarnings.map((warning, index) => (
+                    <p key={index} className="text-sm text-orange-700">
+                      {warning}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Dosing table */}
         <div className="overflow-hidden rounded-lg border border-gray-200">
           <table className="min-w-full divide-y divide-gray-200">
@@ -351,6 +525,14 @@ export function DosingChart({
                 const isRecommended = info.concentration === recommendedConcentration;
                 const isSelected = info.concentration === selectedConcentration;
 
+                // Calculate mg/kg for min and max doses
+                const minMgPerKg = weightKg !== null ? calculateMgPerKg(weightKg, info.minDoseMg) : 0;
+                const maxMgPerKg = weightKg !== null ? calculateMgPerKg(weightKg, info.maxDoseMg) : 0;
+
+                // Determine severity (use max dose for safety check)
+                const severity = getDoseSeverity(maxMgPerKg);
+                const isOverdose = weightKg !== null && isOverdoseRisk(weightKg, info.maxDoseMg);
+
                 return (
                   <tr
                     key={info.concentration}
@@ -386,9 +568,21 @@ export function DosingChart({
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span className="text-sm font-medium text-gray-900">
-                        {formatDoseMg(info.minDoseMg, info.maxDoseMg)}
-                      </span>
+                      <div className="space-y-1">
+                        <span className="text-sm font-medium text-gray-900">
+                          {formatDoseMg(info.minDoseMg, info.maxDoseMg)}
+                        </span>
+                        <div className="flex items-center space-x-1">
+                          <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium ${getSeverityBadgeClass(severity)}`}>
+                            {minMgPerKg.toFixed(1)}-{maxMgPerKg.toFixed(1)} mg/kg
+                          </span>
+                          {isOverdose && (
+                            <span className="inline-flex items-center rounded border bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-800 border-red-200">
+                              ⚠️ Risk
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="text-sm font-semibold text-blue-600">
@@ -418,6 +612,64 @@ export function DosingChart({
             </tbody>
           </table>
         </div>
+
+        {/* Dose Safety Legend */}
+        <div className="mt-3 rounded-lg bg-gray-50 p-3">
+          <h5 className="text-xs font-semibold text-gray-700 mb-2">Dose Safety Guide:</h5>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            <div className="flex items-center space-x-2">
+              <span className="inline-flex items-center rounded border bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 border-green-200">
+                Safe
+              </span>
+              <span className="text-gray-600">{MIN_MG_PER_KG}-{MAX_MG_PER_KG} mg/kg</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="inline-flex items-center rounded border bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 border-amber-200">
+                Warning
+              </span>
+              <span className="text-gray-600">Borderline dose</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="inline-flex items-center rounded border bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 border-red-200">
+                Risk
+              </span>
+              <span className="text-gray-600">&gt;{MAX_MG_PER_KG} mg/kg overdose risk</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Overdose Warning - Only show if any dose poses risk */}
+        {weightKg !== null && dosing.some(info => isOverdoseRisk(weightKg, info.maxDoseMg)) && (
+          <div className="mt-4 rounded-lg bg-red-50 border-2 border-red-200 p-4">
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-6 w-6 text-red-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-red-800">⚠️ OVERDOSE RISK DETECTED</h4>
+                <p className="mt-1 text-sm text-red-700">
+                  One or more doses exceed the maximum safe dose of {MAX_MG_PER_KG} mg/kg for this weight.
+                </p>
+                <p className="mt-2 text-sm font-medium text-red-800">
+                  DO NOT administer doses marked with "Risk". Consult a healthcare provider immediately
+                  if unsure about proper dosing.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Daily dose warning */}
         {showDailyDoseWarning && (
