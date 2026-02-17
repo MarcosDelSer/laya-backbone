@@ -538,6 +538,10 @@ class ActivityService:
         Returns:
             Activity if found with relationships loaded, None otherwise
         """
+        # Ensure activity_id is UUID type for proper index usage
+        if isinstance(activity_id, str):
+            activity_id = UUID(activity_id)
+
         query = select(Activity).where(Activity.id == activity_id)
 
         # Apply eager loading to prevent N+1 queries
