@@ -279,19 +279,187 @@ class CsrfValidationMiddleware
             header('Location: ' . $this->config['errorRedirect'] . '?error=csrf_validation_failed');
             exit;
         } else {
-            // Return 403 Forbidden
-            http_response_code(403);
-            header('Content-Type: application/json');
+            // Check if this is an API request (JSON expected)
+            $isApiRequest = $this->isApiRequest();
 
-            $errorResponse = [
-                'error' => 'CSRF Validation Failed',
-                'message' => 'The request could not be completed due to a security validation failure. Please refresh the page and try again.',
-                'code' => 'CSRF_VALIDATION_FAILED',
-            ];
+            if ($isApiRequest) {
+                // Return JSON response for API requests
+                http_response_code(403);
+                header('Content-Type: application/json');
 
-            echo json_encode($errorResponse);
-            exit;
+                $errorResponse = [
+                    'error' => 'CSRF Validation Failed',
+                    'message' => 'The request could not be completed due to a security validation failure. Please refresh the page and try again.',
+                    'code' => 'CSRF_VALIDATION_FAILED',
+                ];
+
+                echo json_encode($errorResponse);
+                exit;
+            } else {
+                // Return user-friendly HTML error page for web requests
+                $this->displayErrorPage();
+            }
         }
+    }
+
+    /**
+     * Check if the current request is an API request
+     *
+     * @return bool True if request expects JSON response
+     */
+    private function isApiRequest(): bool
+    {
+        // Check if path starts with /api/
+        $path = $this->getRequestPath();
+        if (strpos($path, '/api/') === 0) {
+            return true;
+        }
+
+        // Check Accept header
+        $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+        if (strpos($accept, 'application/json') !== false) {
+            return true;
+        }
+
+        // Check Content-Type header
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (strpos($contentType, 'application/json') !== false) {
+            return true;
+        }
+
+        // Check X-Requested-With header (AJAX requests)
+        $requestedWith = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+        if (strtolower($requestedWith) === 'xmlhttprequest') {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Display user-friendly HTML error page
+     *
+     * Shows a clear error message explaining the CSRF validation failure
+     * with instructions on how to proceed.
+     *
+     * @return void Exits after displaying error page
+     */
+    private function displayErrorPage(): void
+    {
+        http_response_code(403);
+        header('Content-Type: text/html; charset=utf-8');
+
+        $errorTitle = 'Security Validation Failed';
+        $errorMessage = 'Your request could not be completed due to a security validation failure.';
+        $errorDetails = 'This can happen if your session has expired or if you submitted a form from a stale page.';
+        $errorAction = 'Please refresh the page and try again. If the problem persists, please log out and log back in.';
+
+        // Display clean, user-friendly HTML error page
+        echo '<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>' . htmlspecialchars($errorTitle) . '</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .error-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            padding: 40px;
+            text-align: center;
+        }
+        .error-icon {
+            width: 80px;
+            height: 80px;
+            background-color: #dc3545;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 20px;
+            color: white;
+            font-size: 48px;
+            font-weight: bold;
+        }
+        h1 {
+            color: #333;
+            font-size: 28px;
+            margin: 0 0 10px 0;
+        }
+        .error-message {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 15px 0;
+        }
+        .error-details {
+            color: #888;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 15px 0;
+        }
+        .error-actions {
+            margin-top: 30px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            margin: 0 5px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        .error-code {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon">!</div>
+        <h1>' . htmlspecialchars($errorTitle) . '</h1>
+        <p class="error-message">' . htmlspecialchars($errorMessage) . '</p>
+        <p class="error-details">' . htmlspecialchars($errorDetails) . '</p>
+        <p class="error-details">' . htmlspecialchars($errorAction) . '</p>
+        <div class="error-actions">
+            <a href="javascript:history.back()" class="btn btn-secondary">Go Back</a>
+            <a href="javascript:location.reload()" class="btn">Refresh Page</a>
+        </div>
+        <div class="error-code">
+            Error Code: CSRF_VALIDATION_FAILED | HTTP 403 Forbidden
+        </div>
+    </div>
+</body>
+</html>';
+        exit;
     }
 
     /**
