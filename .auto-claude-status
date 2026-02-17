@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "043-performance-optimization",
+  "spec": "088-fix-token-blacklist-bypass",
   "state": "building",
   "subtasks": {
-    "completed": 6,
-    "total": 10,
+    "completed": 1,
+    "total": 15,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Phase 4: Documentation and Hardening",
+    "current": "Redis Integration and JTI Implementation",
     "id": null,
-    "total": 4
+    "total": 3
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 2,
-    "started_at": "2026-02-16T16:54:27.528327"
+    "number": 3,
+    "started_at": "2026-02-17T11:40:14.325818"
   },
-  "last_update": "2026-02-16T16:59:42.585746"
+  "last_update": "2026-02-17T11:45:29.172633"
 }

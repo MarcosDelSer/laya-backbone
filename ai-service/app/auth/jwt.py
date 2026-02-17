@@ -5,6 +5,7 @@ Provides JWT token creation, validation, and payload management.
 
 from datetime import datetime, timezone
 from typing import Any, Optional
+import uuid
 
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -53,6 +54,7 @@ def create_token(
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
+        "jti": str(uuid.uuid4()),
     }
 
     if additional_claims:
