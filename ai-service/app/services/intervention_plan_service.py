@@ -275,6 +275,23 @@ class InterventionPlanService:
         Updates the plan's Part 1 fields and metadata. Optionally creates
         a new version record to track changes.
 
+        Snapshot Behavior:
+            When create_version=True (default), creates a snapshot of the plan's
+            current state BEFORE applying changes. The snapshot captures:
+            - All Part 1 fields (identification, history, review schedule)
+            - All 8 plan sections (strengths, needs, goals, strategies, monitoring,
+              parent involvements, consultations) with their current data
+            - Version lineage via parent_version_id linking to previous version
+            - Metadata (timestamps, status, signatures)
+
+            After snapshot creation:
+            - Increments the plan's version number
+            - Applies the requested changes
+            - Stores the snapshot in a new InterventionVersion record
+            - Generates an automatic change summary from modified fields
+
+            This enables full audit trail and version comparison capabilities.
+
         Args:
             plan_id: ID of the intervention plan to update
             request: The update request with fields to modify
@@ -451,6 +468,30 @@ class InterventionPlanService:
 
         Creates a version record capturing the current state of the plan
         for historical reference and audit trail.
+
+        Snapshot Behavior:
+            Captures a complete JSON snapshot of the plan's current state including:
+            - All Part 1 fields (child info, diagnosis, history, family context)
+            - Part 2: All strengths with categories and examples
+            - Part 3: All needs with priority and baseline data
+            - Part 4: All SMART goals with measurements and progress
+            - Part 5: All intervention strategies
+            - Part 6: All monitoring approaches
+            - Part 7: All parent involvement activities
+            - Part 8: All external consultations
+            - Version lineage tracking via parent_version_id
+            - All metadata (status, dates, signatures)
+
+            The snapshot is created using _create_plan_snapshot which:
+            - Loads all relationships eagerly before snapshot
+            - Validates that relationships are loaded (logs warnings if not)
+            - Serializes all data to JSON-compatible dictionary format
+            - Links to the previous version for change tracking
+
+            After snapshot creation:
+            - Increments the plan's version number
+            - Stores snapshot in new InterventionVersion record
+            - Enables version comparison and rollback capabilities
 
         Args:
             plan_id: ID of the intervention plan
@@ -1098,11 +1139,54 @@ class InterventionPlanService:
     async def _create_plan_snapshot(self, plan: InterventionPlan) -> dict:
         """Create a JSON snapshot of the plan for versioning.
 
+        Creates a complete JSON-serializable snapshot capturing all plan data
+        for version history and comparison. This is the core snapshotting method
+        used by create_version and update_plan.
+
+        Snapshot Contents:
+            The snapshot includes a complete representation of:
+            - Plan metadata: id, version, status, timestamps
+            - Part 1: Child identification, diagnosis, medical/educational/family history
+            - Part 2: Strengths - all items with categories, descriptions, examples
+            - Part 3: Needs - all items with priority, baseline, categories
+            - Part 4: SMART Goals - all goals with measurements, targets, progress
+            - Part 5: Strategies - all intervention strategies with responsible parties
+            - Part 6: Monitoring - all monitoring approaches with success indicators
+            - Part 7: Parent Involvement - all parent activities and communications
+            - Part 8: Consultations - all external specialist consultations
+            - Version lineage: parent_version_id linking to previous version
+            - Review schedule and next review date
+            - Parent signature status and data
+
+        Relationship Loading Validation:
+            Before creating the snapshot, validates that all required relationships
+            (strengths, needs, goals, strategies, monitoring, parent_involvements,
+            consultations) are loaded into memory. If any relationships are unloaded,
+            logs a warning but continues with snapshot creation to prevent data loss.
+            Unloaded relationships will appear as empty arrays in the snapshot.
+
+        Version Lineage Tracking:
+            Automatically retrieves the most recent InterventionVersion record and
+            stores its ID as parent_version_id in the snapshot. This creates a
+            version chain that enables:
+            - Complete version history traversal
+            - Change tracking across versions
+            - Identifying when specific changes were introduced
+
+        Data Serialization:
+            All data is converted to JSON-compatible types:
+            - UUIDs → strings
+            - Dates → ISO format strings
+            - Enums → string values
+            - Related objects → nested dictionaries with full data
+
         Args:
-            plan: The intervention plan to snapshot
+            plan: The intervention plan to snapshot. Should have all relationships
+                  loaded via selectinload for complete snapshot data.
 
         Returns:
-            Dictionary representation of the plan
+            Dictionary representation of the complete plan state, fully serializable
+            to JSON for storage in InterventionVersion.snapshot_data
         """
         # Validate that relationships are loaded before snapshot
         logger = logging.getLogger(__name__)
