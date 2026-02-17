@@ -592,196 +592,194 @@ export interface ApiErrorResponse {
 }
 
 // ============================================================================
-// Medical Types
+// Portfolio Types
 // ============================================================================
 
 /**
- * Type of allergen.
+ * Portfolio item type categories.
  */
-export type AllergenType =
-  | 'food'
-  | 'medication'
-  | 'environmental'
-  | 'insect'
-  | 'contact'
+export type PortfolioItemType = 'photo' | 'video' | 'document' | 'artwork';
+
+/**
+ * Observation type categories.
+ */
+export type ObservationType =
+  | 'anecdotal'
+  | 'running_record'
+  | 'learning_story'
+  | 'checklist'
+  | 'time_sample';
+
+/**
+ * Milestone status.
+ */
+export type MilestoneStatus = 'not_started' | 'in_progress' | 'achieved';
+
+/**
+ * Developmental domain categories.
+ */
+export type DevelopmentalDomain =
+  | 'cognitive'
+  | 'physical'
+  | 'social_emotional'
+  | 'language'
+  | 'creative';
+
+/**
+ * Work sample type categories.
+ */
+export type WorkSampleType =
+  | 'drawing'
+  | 'writing'
+  | 'craft'
+  | 'photo'
+  | 'recording'
   | 'other';
 
 /**
- * Allergy severity levels.
+ * Individual portfolio item (photo/video/document).
  */
-export type AllergySeverity = 'mild' | 'moderate' | 'severe' | 'life_threatening';
-
-/**
- * Type of medication.
- */
-export type MedicationType =
-  | 'prescription'
-  | 'over_the_counter'
-  | 'supplement'
-  | 'other';
-
-/**
- * Route of medication administration.
- */
-export type MedicationRoute =
-  | 'oral'
-  | 'topical'
-  | 'injection'
-  | 'inhalation'
-  | 'drops'
-  | 'other';
-
-/**
- * Who administers the medication.
- */
-export type AdministeredBy = 'staff' | 'nurse' | 'self';
-
-/**
- * Type of accommodation plan.
- */
-export type AccommodationPlanType =
-  | 'health_plan'
-  | 'emergency_plan'
-  | 'dietary_plan'
-  | 'behavioral_plan'
-  | 'other';
-
-/**
- * Status of an accommodation plan.
- */
-export type AccommodationPlanStatus = 'draft' | 'pending_approval' | 'approved' | 'expired';
-
-/**
- * Type of medical alert.
- */
-export type AlertType =
-  | 'allergy'
-  | 'medication'
-  | 'condition'
-  | 'dietary'
-  | 'emergency'
-  | 'general';
-
-/**
- * Severity level of medical alert.
- */
-export type AlertLevel = 'info' | 'warning' | 'critical';
-
-/**
- * Allergy information for a child.
- */
-export interface AllergyInfo {
+export interface PortfolioItem {
   id: string;
   childId: string;
-  allergenName: string;
-  allergenType: AllergenType;
-  severity: AllergySeverity;
-  reaction?: string;
-  treatment?: string;
-  epiPenRequired: boolean;
-  epiPenLocation?: string;
-  diagnosedDate?: string;
-  diagnosedBy?: string;
-  notes?: string;
-  isVerified: boolean;
-  verifiedById?: string;
-  verifiedDate?: string;
-  isActive: boolean;
-  createdAt?: string;
+  type: PortfolioItemType;
+  title: string;
+  caption: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  date: string;
+  uploadedBy: string;
+  tags: string[];
+  isPrivate: boolean;
+  createdAt: string;
   updatedAt?: string;
 }
 
 /**
- * Medication information for a child.
+ * Observation note for a child.
  */
-export interface MedicationInfo {
+export interface Observation {
   id: string;
   childId: string;
-  medicationName: string;
-  medicationType: MedicationType;
-  dosage: string;
-  frequency: string;
-  route: MedicationRoute;
-  prescribedBy?: string;
-  prescriptionDate?: string;
-  expirationDate?: string;
-  purpose?: string;
-  sideEffects?: string;
-  storageLocation?: string;
-  administeredBy: AdministeredBy;
-  notes?: string;
-  parentConsent: boolean;
-  parentConsentDate?: string;
-  isVerified: boolean;
-  verifiedById?: string;
-  verifiedDate?: string;
-  isActive: boolean;
-  createdAt?: string;
+  type: ObservationType;
+  title: string;
+  content: string;
+  date: string;
+  observedBy: string;
+  domains: DevelopmentalDomain[];
+  linkedMilestones: string[];
+  linkedWorkSamples: string[];
+  isPrivate: boolean;
+  createdAt: string;
   updatedAt?: string;
 }
 
 /**
- * Accommodation plan for a child with special needs.
+ * Developmental milestone for tracking progress.
  */
-export interface AccommodationPlan {
+export interface Milestone {
   id: string;
   childId: string;
-  schoolYearId?: string;
-  planType: AccommodationPlanType;
-  planName: string;
-  description: string;
-  accommodations: string;
-  emergencyProcedures?: string;
-  triggersSigns?: string;
-  staffNotifications?: string;
-  documentPath?: string;
-  effectiveDate: string;
-  expirationDate?: string;
-  reviewDate?: string;
-  notes?: string;
-  approvedById?: string;
-  approvedDate?: string;
-  status: AccommodationPlanStatus;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-/**
- * Medical alert for staff awareness.
- */
-export interface MedicalAlert {
-  id: string;
-  childId: string;
-  alertType: AlertType;
-  alertLevel: AlertLevel;
+  domain: DevelopmentalDomain;
   title: string;
   description: string;
-  actionRequired?: string;
-  displayOnDashboard: boolean;
-  displayOnAttendance: boolean;
-  displayOnReports: boolean;
-  notifyOnCheckIn: boolean;
-  relatedAllergyId?: string;
-  relatedMedicationId?: string;
-  relatedPlanId?: string;
-  effectiveDate?: string;
-  expirationDate?: string;
-  isActive: boolean;
-  createdAt?: string;
+  expectedAgeMonths?: number;
+  status: MilestoneStatus;
+  achievedDate?: string;
+  notes?: string;
+  evidenceIds: string[];
+  createdAt: string;
   updatedAt?: string;
 }
 
 /**
- * Summary of a child's medical information.
+ * Work sample documentation.
  */
-export interface ChildMedicalSummary {
+export interface WorkSample {
+  id: string;
   childId: string;
-  allergies: AllergyInfo[];
-  medications: MedicationInfo[];
-  accommodationPlans: AccommodationPlan[];
-  activeAlerts: MedicalAlert[];
-  hasSevereAllergies: boolean;
-  hasEpiPen: boolean;
-  hasStaffAdministeredMedications: boolean;
-  generatedAt: string;
+  type: WorkSampleType;
+  title: string;
+  description: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  date: string;
+  domains: DevelopmentalDomain[];
+  teacherNotes?: string;
+  familyContribution?: string;
+  isPrivate: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
+ * Request payload for creating a portfolio item.
+ */
+export interface CreatePortfolioItemRequest {
+  childId: string;
+  type: PortfolioItemType;
+  title: string;
+  caption: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  date: string;
+  tags?: string[];
+  isPrivate?: boolean;
+}
+
+/**
+ * Request payload for creating an observation.
+ */
+export interface CreateObservationRequest {
+  childId: string;
+  type: ObservationType;
+  title: string;
+  content: string;
+  date: string;
+  domains?: DevelopmentalDomain[];
+  linkedMilestones?: string[];
+  linkedWorkSamples?: string[];
+  isPrivate?: boolean;
+}
+
+/**
+ * Request payload for creating a milestone.
+ */
+export interface CreateMilestoneRequest {
+  childId: string;
+  domain: DevelopmentalDomain;
+  title: string;
+  description: string;
+  expectedAgeMonths?: number;
+  status?: MilestoneStatus;
+  notes?: string;
+}
+
+/**
+ * Request payload for creating a work sample.
+ */
+export interface CreateWorkSampleRequest {
+  childId: string;
+  type: WorkSampleType;
+  title: string;
+  description: string;
+  mediaUrl: string;
+  thumbnailUrl?: string;
+  date: string;
+  domains?: DevelopmentalDomain[];
+  teacherNotes?: string;
+  isPrivate?: boolean;
+}
+
+/**
+ * Portfolio summary for a child.
+ */
+export interface PortfolioSummary {
+  childId: string;
+  totalItems: number;
+  totalObservations: number;
+  totalMilestones: number;
+  milestonesAchieved: number;
+  totalWorkSamples: number;
+  recentActivity: string;
 }

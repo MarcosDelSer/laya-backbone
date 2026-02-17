@@ -9,7 +9,7 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
-    rbac: Models for Role-Based Access Control
+    portfolio: Models for educational portfolio and documentation
 """
 
 from app.models.base import Base
@@ -38,20 +38,17 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
-from app.models.medical import (
-    AccommodationPlan,
-    AccommodationPlanStatus,
-    AccommodationPlanType,
-    AdministeredBy,
-    AlertLevel,
-    AlertType,
-    Allergy,
-    AllergenType,
-    AllergySeverity,
-    MedicalAlert,
-    Medication,
-    MedicationRoute,
-    MedicationType,
+from app.models.portfolio import (
+    Milestone,
+    MilestoneCategory,
+    MilestoneStatus,
+    Observation,
+    ObservationType,
+    PortfolioItem,
+    PortfolioItemType,
+    PrivacyLevel,
+    WorkSample,
+    WorkSampleType,
 )
 
 __all__ = [
@@ -77,18 +74,15 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
-    # Medical models
-    "Allergy",
-    "AllergenType",
-    "AllergySeverity",
-    "Medication",
-    "MedicationType",
-    "MedicationRoute",
-    "AdministeredBy",
-    "AccommodationPlan",
-    "AccommodationPlanType",
-    "AccommodationPlanStatus",
-    "MedicalAlert",
-    "AlertType",
-    "AlertLevel",
+    # Portfolio models
+    "PortfolioItem",
+    "PortfolioItemType",
+    "PrivacyLevel",
+    "Observation",
+    "ObservationType",
+    "Milestone",
+    "MilestoneCategory",
+    "MilestoneStatus",
+    "WorkSample",
+    "WorkSampleType",
 ]

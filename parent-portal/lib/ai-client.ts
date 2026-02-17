@@ -15,27 +15,24 @@ import type {
   CoachingCategory,
   CoachingGuidanceRequest,
   CoachingGuidanceResponse,
-  CreateDevelopmentProfileRequest,
-  CreateMonthlySnapshotRequest,
+  CreateMilestoneRequest,
   CreateObservationRequest,
-  CreateSkillAssessmentRequest,
+  CreatePortfolioItemRequest,
+  CreateWorkSampleRequest,
   DevelopmentalDomain,
-  DevelopmentProfile,
-  DevelopmentProfileSummary,
-  GrowthTrajectory,
   HealthCheckResponse,
-  MonthlySnapshot,
+  Milestone,
+  MilestoneStatus,
   Observation,
-  ObserverType,
-  OverallProgress,
+  ObservationType,
   PaginatedResponse,
   PaginationParams,
-  SkillAssessment,
-  SkillStatus,
+  PortfolioItem,
+  PortfolioItemType,
+  PortfolioSummary,
   SpecialNeedType,
-  UpdateMonthlySnapshotRequest,
-  UpdateObservationRequest,
-  UpdateSkillAssessmentRequest,
+  WorkSample,
+  WorkSampleType,
 } from './types';
 
 // ============================================================================
@@ -60,22 +57,16 @@ const ENDPOINTS = {
   CHILD_ANALYTICS: (childId: string) => `/api/v1/analytics/children/${childId}`,
   PROGRESS_REPORT: (childId: string) => `/api/v1/analytics/children/${childId}/progress`,
 
-  // Development Profiles
-  DEVELOPMENT_PROFILES: '/api/v1/development-profiles',
-  DEVELOPMENT_PROFILE: (profileId: string) => `/api/v1/development-profiles/${profileId}`,
-  DEVELOPMENT_PROFILE_BY_CHILD: (childId: string) => `/api/v1/development-profiles/child/${childId}`,
-  SKILL_ASSESSMENTS: (profileId: string) => `/api/v1/development-profiles/${profileId}/assessments`,
-  SKILL_ASSESSMENT: (profileId: string, assessmentId: string) =>
-    `/api/v1/development-profiles/${profileId}/assessments/${assessmentId}`,
-  OBSERVATIONS: (profileId: string) => `/api/v1/development-profiles/${profileId}/observations`,
-  OBSERVATION: (profileId: string, observationId: string) =>
-    `/api/v1/development-profiles/${profileId}/observations/${observationId}`,
-  MONTHLY_SNAPSHOTS: (profileId: string) => `/api/v1/development-profiles/${profileId}/snapshots`,
-  MONTHLY_SNAPSHOT_GENERATE: (profileId: string) =>
-    `/api/v1/development-profiles/${profileId}/snapshots/generate`,
-  MONTHLY_SNAPSHOT: (profileId: string, snapshotId: string) =>
-    `/api/v1/development-profiles/${profileId}/snapshots/${snapshotId}`,
-  GROWTH_TRAJECTORY: (profileId: string) => `/api/v1/development-profiles/${profileId}/trajectory`,
+  // Portfolio
+  PORTFOLIO_ITEMS: '/api/v1/portfolio/items',
+  PORTFOLIO_ITEM: (id: string) => `/api/v1/portfolio/items/${id}`,
+  OBSERVATIONS: '/api/v1/portfolio/observations',
+  OBSERVATION: (id: string) => `/api/v1/portfolio/observations/${id}`,
+  MILESTONES: '/api/v1/portfolio/milestones',
+  MILESTONE: (id: string) => `/api/v1/portfolio/milestones/${id}`,
+  WORK_SAMPLES: '/api/v1/portfolio/work-samples',
+  WORK_SAMPLE: (id: string) => `/api/v1/portfolio/work-samples/${id}`,
+  PORTFOLIO_SUMMARY: (childId: string) => `/api/v1/portfolio/children/${childId}/summary`,
 } as const;
 
 // ============================================================================
@@ -366,6 +357,444 @@ export async function getChildInsights(
     analytics:
       analytics.status === 'fulfilled' ? analytics.value : null,
   };
+}
+
+// ============================================================================
+// Portfolio API
+// ============================================================================
+
+/**
+ * Parameters for fetching portfolio items.
+ */
+export interface PortfolioItemParams extends PaginationParams {
+  childId?: string;
+  type?: PortfolioItemType;
+  isPrivate?: boolean;
+}
+
+/**
+ * Fetch portfolio items with optional filters.
+ */
+export async function getPortfolioItems(
+  params?: PortfolioItemParams
+): Promise<PaginatedResponse<PortfolioItem>> {
+  return aiServiceClient.get<PaginatedResponse<PortfolioItem>>(ENDPOINTS.PORTFOLIO_ITEMS, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      child_id: params?.childId,
+      type: params?.type,
+      is_private: params?.isPrivate,
+    },
+  });
+}
+
+/**
+ * Fetch a specific portfolio item by ID.
+ */
+export async function getPortfolioItem(itemId: string): Promise<PortfolioItem> {
+  return aiServiceClient.get<PortfolioItem>(ENDPOINTS.PORTFOLIO_ITEM(itemId));
+}
+
+/**
+ * Create a new portfolio item.
+ */
+export async function createPortfolioItem(
+  request: CreatePortfolioItemRequest
+): Promise<PortfolioItem> {
+  return aiServiceClient.post<PortfolioItem>(ENDPOINTS.PORTFOLIO_ITEMS, {
+    child_id: request.childId,
+    type: request.type,
+    title: request.title,
+    caption: request.caption,
+    media_url: request.mediaUrl,
+    thumbnail_url: request.thumbnailUrl,
+    date: request.date,
+    tags: request.tags ?? [],
+    is_private: request.isPrivate ?? false,
+  });
+}
+
+/**
+ * Update an existing portfolio item.
+ */
+export async function updatePortfolioItem(
+  itemId: string,
+  updates: Partial<Omit<CreatePortfolioItemRequest, 'childId'>>
+): Promise<PortfolioItem> {
+  return aiServiceClient.patch<PortfolioItem>(ENDPOINTS.PORTFOLIO_ITEM(itemId), {
+    type: updates.type,
+    title: updates.title,
+    caption: updates.caption,
+    media_url: updates.mediaUrl,
+    thumbnail_url: updates.thumbnailUrl,
+    date: updates.date,
+    tags: updates.tags,
+    is_private: updates.isPrivate,
+  });
+}
+
+/**
+ * Delete a portfolio item.
+ */
+export async function deletePortfolioItem(itemId: string): Promise<void> {
+  return aiServiceClient.delete(ENDPOINTS.PORTFOLIO_ITEM(itemId));
+}
+
+// ============================================================================
+// Observation API
+// ============================================================================
+
+/**
+ * Parameters for fetching observations.
+ */
+export interface ObservationParams extends PaginationParams {
+  childId?: string;
+  type?: ObservationType;
+  domain?: DevelopmentalDomain;
+  isPrivate?: boolean;
+}
+
+/**
+ * Fetch observations with optional filters.
+ */
+export async function getObservations(
+  params?: ObservationParams
+): Promise<PaginatedResponse<Observation>> {
+  return aiServiceClient.get<PaginatedResponse<Observation>>(ENDPOINTS.OBSERVATIONS, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      child_id: params?.childId,
+      type: params?.type,
+      domain: params?.domain,
+      is_private: params?.isPrivate,
+    },
+  });
+}
+
+/**
+ * Fetch a specific observation by ID.
+ */
+export async function getObservation(observationId: string): Promise<Observation> {
+  return aiServiceClient.get<Observation>(ENDPOINTS.OBSERVATION(observationId));
+}
+
+/**
+ * Create a new observation.
+ */
+export async function createObservation(
+  request: CreateObservationRequest
+): Promise<Observation> {
+  return aiServiceClient.post<Observation>(ENDPOINTS.OBSERVATIONS, {
+    child_id: request.childId,
+    type: request.type,
+    title: request.title,
+    content: request.content,
+    date: request.date,
+    domains: request.domains ?? [],
+    linked_milestones: request.linkedMilestones ?? [],
+    linked_work_samples: request.linkedWorkSamples ?? [],
+    is_private: request.isPrivate ?? false,
+  });
+}
+
+/**
+ * Update an existing observation.
+ */
+export async function updateObservation(
+  observationId: string,
+  updates: Partial<Omit<CreateObservationRequest, 'childId'>>
+): Promise<Observation> {
+  return aiServiceClient.patch<Observation>(ENDPOINTS.OBSERVATION(observationId), {
+    type: updates.type,
+    title: updates.title,
+    content: updates.content,
+    date: updates.date,
+    domains: updates.domains,
+    linked_milestones: updates.linkedMilestones,
+    linked_work_samples: updates.linkedWorkSamples,
+    is_private: updates.isPrivate,
+  });
+}
+
+/**
+ * Delete an observation.
+ */
+export async function deleteObservation(observationId: string): Promise<void> {
+  return aiServiceClient.delete(ENDPOINTS.OBSERVATION(observationId));
+}
+
+// ============================================================================
+// Milestone API
+// ============================================================================
+
+/**
+ * Parameters for fetching milestones.
+ */
+export interface MilestoneParams extends PaginationParams {
+  childId?: string;
+  domain?: DevelopmentalDomain;
+  status?: MilestoneStatus;
+}
+
+/**
+ * Fetch milestones with optional filters.
+ */
+export async function getMilestones(
+  params?: MilestoneParams
+): Promise<PaginatedResponse<Milestone>> {
+  return aiServiceClient.get<PaginatedResponse<Milestone>>(ENDPOINTS.MILESTONES, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      child_id: params?.childId,
+      domain: params?.domain,
+      status: params?.status,
+    },
+  });
+}
+
+/**
+ * Fetch a specific milestone by ID.
+ */
+export async function getMilestone(milestoneId: string): Promise<Milestone> {
+  return aiServiceClient.get<Milestone>(ENDPOINTS.MILESTONE(milestoneId));
+}
+
+/**
+ * Create a new milestone.
+ */
+export async function createMilestone(
+  request: CreateMilestoneRequest
+): Promise<Milestone> {
+  return aiServiceClient.post<Milestone>(ENDPOINTS.MILESTONES, {
+    child_id: request.childId,
+    domain: request.domain,
+    title: request.title,
+    description: request.description,
+    expected_age_months: request.expectedAgeMonths,
+    status: request.status ?? 'not_started',
+    notes: request.notes,
+  });
+}
+
+/**
+ * Update an existing milestone.
+ */
+export async function updateMilestone(
+  milestoneId: string,
+  updates: Partial<Omit<CreateMilestoneRequest, 'childId'>> & {
+    achievedDate?: string;
+    evidenceIds?: string[];
+  }
+): Promise<Milestone> {
+  return aiServiceClient.patch<Milestone>(ENDPOINTS.MILESTONE(milestoneId), {
+    domain: updates.domain,
+    title: updates.title,
+    description: updates.description,
+    expected_age_months: updates.expectedAgeMonths,
+    status: updates.status,
+    achieved_date: updates.achievedDate,
+    notes: updates.notes,
+    evidence_ids: updates.evidenceIds,
+  });
+}
+
+/**
+ * Delete a milestone.
+ */
+export async function deleteMilestone(milestoneId: string): Promise<void> {
+  return aiServiceClient.delete(ENDPOINTS.MILESTONE(milestoneId));
+}
+
+// ============================================================================
+// Work Sample API
+// ============================================================================
+
+/**
+ * Parameters for fetching work samples.
+ */
+export interface WorkSampleParams extends PaginationParams {
+  childId?: string;
+  type?: WorkSampleType;
+  domain?: DevelopmentalDomain;
+  isPrivate?: boolean;
+}
+
+/**
+ * Fetch work samples with optional filters.
+ */
+export async function getWorkSamples(
+  params?: WorkSampleParams
+): Promise<PaginatedResponse<WorkSample>> {
+  return aiServiceClient.get<PaginatedResponse<WorkSample>>(ENDPOINTS.WORK_SAMPLES, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      child_id: params?.childId,
+      type: params?.type,
+      domain: params?.domain,
+      is_private: params?.isPrivate,
+    },
+  });
+}
+
+/**
+ * Fetch a specific work sample by ID.
+ */
+export async function getWorkSample(workSampleId: string): Promise<WorkSample> {
+  return aiServiceClient.get<WorkSample>(ENDPOINTS.WORK_SAMPLE(workSampleId));
+}
+
+/**
+ * Create a new work sample.
+ */
+export async function createWorkSample(
+  request: CreateWorkSampleRequest
+): Promise<WorkSample> {
+  return aiServiceClient.post<WorkSample>(ENDPOINTS.WORK_SAMPLES, {
+    child_id: request.childId,
+    type: request.type,
+    title: request.title,
+    description: request.description,
+    media_url: request.mediaUrl,
+    thumbnail_url: request.thumbnailUrl,
+    date: request.date,
+    domains: request.domains ?? [],
+    teacher_notes: request.teacherNotes,
+    is_private: request.isPrivate ?? false,
+  });
+}
+
+/**
+ * Update an existing work sample.
+ */
+export async function updateWorkSample(
+  workSampleId: string,
+  updates: Partial<Omit<CreateWorkSampleRequest, 'childId'>> & {
+    familyContribution?: string;
+  }
+): Promise<WorkSample> {
+  return aiServiceClient.patch<WorkSample>(ENDPOINTS.WORK_SAMPLE(workSampleId), {
+    type: updates.type,
+    title: updates.title,
+    description: updates.description,
+    media_url: updates.mediaUrl,
+    thumbnail_url: updates.thumbnailUrl,
+    date: updates.date,
+    domains: updates.domains,
+    teacher_notes: updates.teacherNotes,
+    family_contribution: updates.familyContribution,
+    is_private: updates.isPrivate,
+  });
+}
+
+/**
+ * Delete a work sample.
+ */
+export async function deleteWorkSample(workSampleId: string): Promise<void> {
+  return aiServiceClient.delete(ENDPOINTS.WORK_SAMPLE(workSampleId));
+}
+
+// ============================================================================
+// Portfolio Summary API
+// ============================================================================
+
+/**
+ * Get portfolio summary for a child.
+ */
+export async function getPortfolioSummary(childId: string): Promise<PortfolioSummary> {
+  return aiServiceClient.get<PortfolioSummary>(ENDPOINTS.PORTFOLIO_SUMMARY(childId));
+}
+
+/**
+ * Get complete portfolio data for a child.
+ */
+export interface ChildPortfolio {
+  summary: PortfolioSummary;
+  items: PortfolioItem[];
+  observations: Observation[];
+  milestones: Milestone[];
+  workSamples: WorkSample[];
+}
+
+/**
+ * Fetch complete portfolio data for a child in one call.
+ */
+export async function getChildPortfolio(
+  childId: string,
+  limit: number = 10
+): Promise<ChildPortfolio> {
+  const [summary, items, observations, milestones, workSamples] = await Promise.allSettled([
+    getPortfolioSummary(childId),
+    getPortfolioItems({ childId, limit }),
+    getObservations({ childId, limit }),
+    getMilestones({ childId, limit }),
+    getWorkSamples({ childId, limit }),
+  ]);
+
+  return {
+    summary:
+      summary.status === 'fulfilled'
+        ? summary.value
+        : {
+            childId,
+            totalItems: 0,
+            totalObservations: 0,
+            totalMilestones: 0,
+            milestonesAchieved: 0,
+            totalWorkSamples: 0,
+            recentActivity: '',
+          },
+    items:
+      items.status === 'fulfilled' ? items.value.items : [],
+    observations:
+      observations.status === 'fulfilled' ? observations.value.items : [],
+    milestones:
+      milestones.status === 'fulfilled' ? milestones.value.items : [],
+    workSamples:
+      workSamples.status === 'fulfilled' ? workSamples.value.items : [],
+  };
+}
+
+/**
+ * Get milestones by domain for a child.
+ */
+export async function getMilestonesByDomain(
+  childId: string,
+  domain: DevelopmentalDomain
+): Promise<Milestone[]> {
+  const response = await getMilestones({
+    childId,
+    domain,
+    limit: 100,
+  });
+  return response.items;
+}
+
+/**
+ * Get achieved milestones for a child.
+ */
+export async function getAchievedMilestones(childId: string): Promise<Milestone[]> {
+  const response = await getMilestones({
+    childId,
+    status: 'achieved',
+    limit: 100,
+  });
+  return response.items;
+}
+
+/**
+ * Get in-progress milestones for a child.
+ */
+export async function getInProgressMilestones(childId: string): Promise<Milestone[]> {
+  const response = await getMilestones({
+    childId,
+    status: 'in_progress',
+    limit: 100,
+  });
+  return response.items;
 }
 
 // ============================================================================
