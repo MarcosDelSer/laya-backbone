@@ -109,6 +109,12 @@ if (!isActionAccessible($guid, $connection2, '/modules/StaffManagement/staffMana
 
     // Handle form submission
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // CSRF check
+        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $session->get('csrf_token')) {
+            $page->addError(__('Your request failed because you do not have access to this action.'));
+            return;
+        }
+
         // Collect form data
         $gibbonPersonIDInput = $_POST['gibbonPersonID'] ?? null;
 
@@ -236,6 +242,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/StaffManagement/staffMana
 
     $form = Form::create('staffProfileForm', $formAction);
     $form->setMethod('post');
+
+    // Add CSRF token
+    $form->addHiddenValue('csrf_token', $session->get('csrf_token'));
 
     // Person Selection (only for add mode)
     if ($mode === 'add') {

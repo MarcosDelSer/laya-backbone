@@ -108,6 +108,7 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
     $form->addHiddenValue('gibbonSchoolYearID', $gibbonSchoolYearID);
     $form->addHiddenValue('gstRate', $gstRate);
     $form->addHiddenValue('qstRate', $qstRate);
+    $form->addHiddenValue('csrf_token', $session->get('csrf_token'));
 
     // Invoice Details Section
     $form->addRow()->addHeading(__('Invoice Details'));

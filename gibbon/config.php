@@ -42,7 +42,34 @@ $caching = 10;
 
 /**
  * Enables the System Admin > Impersonate User action, for testing and development.
- * This option is off by default. Access can be granted by adding usernames to 
+ * This option is off by default. Access can be granted by adding usernames to
  * the list below. Allowed users must also have administrator access.
  */
 $allowImpersonateUser = [];
+
+/**
+ * Session Cookie Security Configuration
+ *
+ * Configures secure session cookie parameters to protect against CSRF attacks
+ * and session hijacking. These settings are used by the SessionManager.
+ *
+ * SameSite Attribute Options:
+ * - 'Strict': Provides maximum CSRF protection. Cookies are only sent in
+ *   first-party contexts (recommended for most applications)
+ * - 'Lax': Allows cookies for top-level navigation from external sites
+ * - 'None': No restrictions (requires Secure=true, not recommended)
+ *
+ * Security Best Practices:
+ * - SameSite=Strict: Prevents CSRF attacks
+ * - Secure=true: Requires HTTPS (auto-detected in production)
+ * - HttpOnly=true: Prevents JavaScript access to cookies (XSS protection)
+ * - Lifetime=0: Session cookie (expires when browser closes)
+ */
+$sessionCookieParams = [
+    'samesite' => 'Strict',  // CSRF protection
+    'secure' => true,         // Require HTTPS in production
+    'httponly' => true,       // Prevent JavaScript access
+    'lifetime' => 0,          // Session cookie (browser close)
+    'path' => '/',            // Cookie available for entire domain
+    'domain' => '',           // Current domain only
+];
