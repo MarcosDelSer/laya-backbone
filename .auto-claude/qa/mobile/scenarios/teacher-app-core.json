@@ -1,0 +1,836 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "metadata": {
+    "name": "Teacher App Core Scenarios",
+    "description": "LLM-driven exploratory test scenarios for the Teacher App covering authentication, class management, student interactions, and core teaching workflows",
+    "version": "1.0.0",
+    "app": {
+      "bundleId": "com.laya.teacherapp",
+      "packageName": "com.laya.teacherapp",
+      "minVersion": "1.0.0"
+    },
+    "platforms": ["ios", "android"],
+    "tags": ["core", "smoke", "exploratory"]
+  },
+  "config": {
+    "defaultTimeout": 30000,
+    "waitAfterNavigation": 2000,
+    "delayAwareActions": {
+      "enabled": true,
+      "useExplicitWaits": true,
+      "captureEvidenceOnFailure": true
+    },
+    "retryOnFlake": {
+      "maxAttempts": 3,
+      "exponentialBackoff": true
+    }
+  },
+  "sharedElements": {
+    "loginEmail": {
+      "ios": { "strategy": "accessibilityId", "selector": "emailInput" },
+      "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/email_input" },
+      "description": "Email input field on login screen"
+    },
+    "loginPassword": {
+      "ios": { "strategy": "accessibilityId", "selector": "passwordInput" },
+      "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/password_input" },
+      "description": "Password input field on login screen"
+    },
+    "loginButton": {
+      "ios": { "strategy": "accessibilityId", "selector": "loginButton" },
+      "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/login_button" },
+      "description": "Login submit button"
+    },
+    "logoutButton": {
+      "ios": { "strategy": "accessibilityId", "selector": "logoutButton" },
+      "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/logout_button" },
+      "description": "Logout button in settings or menu"
+    },
+    "dashboardHeader": {
+      "ios": { "strategy": "accessibilityId", "selector": "dashboardHeader" },
+      "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/dashboard_header" },
+      "description": "Dashboard header element indicating successful login"
+    },
+    "errorMessage": {
+      "ios": { "strategy": "-ios predicate string", "selector": "type == 'XCUIElementTypeStaticText' AND name CONTAINS 'Error'" },
+      "android": { "strategy": "xpath", "selector": "//*[contains(@text, 'Error')]" },
+      "description": "Error message element for failed operations"
+    },
+    "loadingIndicator": {
+      "ios": { "strategy": "accessibilityId", "selector": "loadingIndicator" },
+      "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/loading_indicator" },
+      "description": "Loading spinner/indicator"
+    },
+    "hamburgerMenu": {
+      "ios": { "strategy": "accessibilityId", "selector": "menuButton" },
+      "android": { "strategy": "accessibilityId", "selector": "Open navigation drawer" },
+      "description": "Navigation menu button"
+    },
+    "classCard": {
+      "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[`name CONTAINS 'classCard'`]" },
+      "android": { "strategy": "xpath", "selector": "//android.widget.LinearLayout[contains(@resource-id, 'class_card')]" },
+      "description": "Class card element in the class list"
+    },
+    "studentListItem": {
+      "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[`name CONTAINS 'studentItem'`]" },
+      "android": { "strategy": "xpath", "selector": "//android.widget.LinearLayout[contains(@resource-id, 'student_item')]" },
+      "description": "Student list item in class roster"
+    }
+  },
+  "journeys": [
+    {
+      "id": "teacher-login-happy-path",
+      "name": "Teacher Login - Happy Path",
+      "description": "Standard login flow with valid credentials leading to dashboard",
+      "category": "authentication",
+      "priority": "critical",
+      "tags": ["login", "happy-path", "smoke"],
+      "preconditions": [
+        "App is freshly installed or logged out",
+        "Network connectivity is available",
+        "Valid test credentials exist"
+      ],
+      "testData": {
+        "validEmail": "${TEST_TEACHER_EMAIL:-teacher@laya.test}",
+        "validPassword": "${TEST_TEACHER_PASSWORD:-TestPassword123!}"
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "loginEmail",
+          "description": "Wait for login screen to load",
+          "waitCondition": "visible",
+          "timeout": 30000
+        },
+        {
+          "id": "step-2",
+          "action": "typeText",
+          "target": "loginEmail",
+          "value": "${testData.validEmail}",
+          "description": "Enter email address",
+          "clearFirst": true
+        },
+        {
+          "id": "step-3",
+          "action": "typeText",
+          "target": "loginPassword",
+          "value": "${testData.validPassword}",
+          "description": "Enter password",
+          "clearFirst": true,
+          "hideKeyboardAfter": true
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "loginButton",
+          "description": "Tap login button"
+        },
+        {
+          "id": "step-5",
+          "action": "waitForElement",
+          "target": "dashboardHeader",
+          "description": "Verify dashboard loads after login",
+          "waitCondition": "visible",
+          "timeout": 45000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "User is logged in and sees the teacher dashboard",
+          "verifyElement": "dashboardHeader"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog", "elementHierarchy"]
+      }
+    },
+    {
+      "id": "teacher-login-invalid-credentials",
+      "name": "Teacher Login - Invalid Credentials",
+      "description": "Login attempt with invalid credentials should show error",
+      "category": "authentication",
+      "priority": "high",
+      "tags": ["login", "unhappy-path", "error-handling"],
+      "preconditions": [
+        "App is on login screen",
+        "Network connectivity is available"
+      ],
+      "testData": {
+        "invalidEmail": "invalid@notreal.test",
+        "invalidPassword": "wrongpassword123"
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "loginEmail",
+          "description": "Wait for login screen",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-2",
+          "action": "typeText",
+          "target": "loginEmail",
+          "value": "${testData.invalidEmail}",
+          "description": "Enter invalid email",
+          "clearFirst": true
+        },
+        {
+          "id": "step-3",
+          "action": "typeText",
+          "target": "loginPassword",
+          "value": "${testData.invalidPassword}",
+          "description": "Enter invalid password",
+          "clearFirst": true,
+          "hideKeyboardAfter": true
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "loginButton",
+          "description": "Tap login button"
+        },
+        {
+          "id": "step-5",
+          "action": "waitForElement",
+          "target": "errorMessage",
+          "description": "Verify error message appears",
+          "waitCondition": "visible",
+          "timeout": 15000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Error message displayed indicating invalid credentials",
+          "verifyElement": "errorMessage"
+        },
+        "noNavigation": true
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog"]
+      }
+    },
+    {
+      "id": "teacher-login-empty-fields",
+      "name": "Teacher Login - Empty Fields Validation",
+      "description": "Login attempt with empty fields should show validation error",
+      "category": "authentication",
+      "priority": "medium",
+      "tags": ["login", "unhappy-path", "validation"],
+      "preconditions": [
+        "App is on login screen"
+      ],
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "loginButton",
+          "description": "Wait for login button to be visible",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-2",
+          "action": "tap",
+          "target": "loginButton",
+          "description": "Tap login without entering credentials"
+        },
+        {
+          "id": "step-3",
+          "action": "waitForElement",
+          "target": "errorMessage",
+          "description": "Verify validation error appears",
+          "waitCondition": "visible",
+          "timeout": 10000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Validation error message displayed",
+          "verifyElement": "errorMessage"
+        }
+      }
+    },
+    {
+      "id": "teacher-view-classes",
+      "name": "Teacher View Classes",
+      "description": "Navigate to and view list of assigned classes",
+      "category": "class-management",
+      "priority": "critical",
+      "tags": ["classes", "navigation", "happy-path"],
+      "preconditions": [
+        "User is logged in as teacher",
+        "Teacher has at least one assigned class"
+      ],
+      "customElements": {
+        "classesNavItem": {
+          "ios": { "strategy": "accessibilityId", "selector": "classesTab" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/nav_classes" },
+          "description": "Classes tab in bottom navigation"
+        },
+        "classesListContainer": {
+          "ios": { "strategy": "accessibilityId", "selector": "classesListContainer" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/classes_list" },
+          "description": "Container for class list"
+        },
+        "emptyClassesMessage": {
+          "ios": { "strategy": "accessibilityId", "selector": "noClassesMessage" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/empty_state_text" },
+          "description": "Empty state message when no classes"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "waitForElement",
+          "target": "dashboardHeader",
+          "description": "Verify on dashboard",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-2",
+          "action": "tap",
+          "target": "classesNavItem",
+          "description": "Navigate to classes section"
+        },
+        {
+          "id": "step-3",
+          "action": "waitAfterNavigation",
+          "description": "Wait for navigation to complete"
+        },
+        {
+          "id": "step-4",
+          "action": "waitForElement",
+          "target": "classesListContainer",
+          "description": "Wait for classes list to load",
+          "waitCondition": "visible",
+          "timeout": 30000
+        },
+        {
+          "id": "step-5",
+          "action": "verifyElementExists",
+          "target": "classCard",
+          "description": "Verify at least one class card is displayed",
+          "orTarget": "emptyClassesMessage"
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Classes list is displayed with class cards or empty state",
+          "verifyElement": "classesListContainer"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog", "elementHierarchy"]
+      }
+    },
+    {
+      "id": "teacher-select-class-view-students",
+      "name": "Teacher Select Class and View Students",
+      "description": "Select a class and view the student roster",
+      "category": "class-management",
+      "priority": "high",
+      "tags": ["classes", "students", "navigation", "happy-path"],
+      "preconditions": [
+        "User is logged in as teacher",
+        "Teacher has at least one class with students"
+      ],
+      "customElements": {
+        "firstClassCard": {
+          "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[`name CONTAINS 'classCard'`][1]" },
+          "android": { "strategy": "xpath", "selector": "(//android.widget.LinearLayout[contains(@resource-id, 'class_card')])[1]" },
+          "description": "First class card in the list"
+        },
+        "classDetailHeader": {
+          "ios": { "strategy": "accessibilityId", "selector": "classDetailHeader" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/class_detail_header" },
+          "description": "Class detail screen header"
+        },
+        "studentsTab": {
+          "ios": { "strategy": "accessibilityId", "selector": "studentsTab" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/students_tab" },
+          "description": "Students tab in class detail"
+        },
+        "studentsList": {
+          "ios": { "strategy": "accessibilityId", "selector": "studentsList" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/students_list" },
+          "description": "Students list container"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "scrollToElement",
+          "target": "firstClassCard",
+          "description": "Scroll to find first class card",
+          "scrollDirection": "down",
+          "maxScrolls": 3
+        },
+        {
+          "id": "step-2",
+          "action": "tap",
+          "target": "firstClassCard",
+          "description": "Tap on first class card"
+        },
+        {
+          "id": "step-3",
+          "action": "waitAfterNavigation",
+          "description": "Wait for class detail to load"
+        },
+        {
+          "id": "step-4",
+          "action": "waitForElement",
+          "target": "classDetailHeader",
+          "description": "Verify class detail screen loads",
+          "waitCondition": "visible",
+          "timeout": 30000
+        },
+        {
+          "id": "step-5",
+          "action": "tap",
+          "target": "studentsTab",
+          "description": "Tap on students tab"
+        },
+        {
+          "id": "step-6",
+          "action": "waitForElement",
+          "target": "studentsList",
+          "description": "Wait for students list to appear",
+          "waitCondition": "visible",
+          "timeout": 20000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Student roster is displayed for the selected class",
+          "verifyElement": "studentsList"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog", "elementHierarchy"]
+      }
+    },
+    {
+      "id": "teacher-assign-activity",
+      "name": "Teacher Assign Activity to Class",
+      "description": "Create and assign a new activity to a class",
+      "category": "teaching-workflow",
+      "priority": "critical",
+      "tags": ["activities", "assignment", "happy-path"],
+      "preconditions": [
+        "User is logged in as teacher",
+        "Teacher has at least one class",
+        "On class detail or activities screen"
+      ],
+      "customElements": {
+        "assignActivityButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "assignActivityButton" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/assign_activity_fab" },
+          "description": "Floating action button to assign activity"
+        },
+        "activityTypeSelector": {
+          "ios": { "strategy": "accessibilityId", "selector": "activityTypeSelector" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/activity_type_dropdown" },
+          "description": "Activity type dropdown/selector"
+        },
+        "activityTypeReading": {
+          "ios": { "strategy": "accessibilityId", "selector": "activityTypeReading" },
+          "android": { "strategy": "xpath", "selector": "//*[@text='Reading']" },
+          "description": "Reading activity type option"
+        },
+        "activityTitleInput": {
+          "ios": { "strategy": "accessibilityId", "selector": "activityTitleInput" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/activity_title_input" },
+          "description": "Activity title input field"
+        },
+        "dueDatePicker": {
+          "ios": { "strategy": "accessibilityId", "selector": "dueDatePicker" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/due_date_picker" },
+          "description": "Due date picker"
+        },
+        "confirmAssignButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "confirmAssignButton" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/confirm_assign_button" },
+          "description": "Confirm assignment button"
+        },
+        "successToast": {
+          "ios": { "strategy": "-ios predicate string", "selector": "type == 'XCUIElementTypeStaticText' AND name CONTAINS 'assigned'" },
+          "android": { "strategy": "xpath", "selector": "//*[contains(@text, 'assigned')]" },
+          "description": "Success toast message"
+        }
+      },
+      "testData": {
+        "activityTitle": "Test Reading Activity - ${Date.now()}"
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "tap",
+          "target": "assignActivityButton",
+          "description": "Tap assign activity button"
+        },
+        {
+          "id": "step-2",
+          "action": "waitForElement",
+          "target": "activityTypeSelector",
+          "description": "Wait for activity creation form",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-3",
+          "action": "tap",
+          "target": "activityTypeSelector",
+          "description": "Open activity type selector"
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "activityTypeReading",
+          "description": "Select reading activity type"
+        },
+        {
+          "id": "step-5",
+          "action": "typeText",
+          "target": "activityTitleInput",
+          "value": "${testData.activityTitle}",
+          "description": "Enter activity title",
+          "clearFirst": true
+        },
+        {
+          "id": "step-6",
+          "action": "tap",
+          "target": "confirmAssignButton",
+          "description": "Confirm assignment"
+        },
+        {
+          "id": "step-7",
+          "action": "waitForElement",
+          "target": "successToast",
+          "description": "Verify success message",
+          "waitCondition": "visible",
+          "timeout": 15000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Activity is assigned and success message displayed",
+          "verifyElement": "successToast"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog", "elementHierarchy"]
+      }
+    },
+    {
+      "id": "teacher-view-student-progress",
+      "name": "Teacher View Student Progress",
+      "description": "Navigate to a student profile and view their learning progress",
+      "category": "student-interaction",
+      "priority": "high",
+      "tags": ["students", "progress", "analytics", "happy-path"],
+      "preconditions": [
+        "User is logged in as teacher",
+        "Viewing a class with students"
+      ],
+      "customElements": {
+        "firstStudentItem": {
+          "ios": { "strategy": "-ios class chain", "selector": "**/XCUIElementTypeCell[`name CONTAINS 'studentItem'`][1]" },
+          "android": { "strategy": "xpath", "selector": "(//android.widget.LinearLayout[contains(@resource-id, 'student_item')])[1]" },
+          "description": "First student in the list"
+        },
+        "studentProfileHeader": {
+          "ios": { "strategy": "accessibilityId", "selector": "studentProfileHeader" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/student_profile_header" },
+          "description": "Student profile screen header"
+        },
+        "progressTab": {
+          "ios": { "strategy": "accessibilityId", "selector": "progressTab" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/progress_tab" },
+          "description": "Progress tab in student profile"
+        },
+        "progressChart": {
+          "ios": { "strategy": "accessibilityId", "selector": "progressChart" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/progress_chart" },
+          "description": "Progress chart/visualization"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "tap",
+          "target": "firstStudentItem",
+          "description": "Tap on first student"
+        },
+        {
+          "id": "step-2",
+          "action": "waitAfterNavigation",
+          "description": "Wait for navigation"
+        },
+        {
+          "id": "step-3",
+          "action": "waitForElement",
+          "target": "studentProfileHeader",
+          "description": "Verify student profile loads",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "progressTab",
+          "description": "Navigate to progress tab"
+        },
+        {
+          "id": "step-5",
+          "action": "waitForElement",
+          "target": "progressChart",
+          "description": "Wait for progress data to load",
+          "waitCondition": "visible",
+          "timeout": 30000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Student progress chart/data is displayed",
+          "verifyElement": "progressChart"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot"],
+        "onFailure": ["screenshot", "deviceLog"]
+      }
+    },
+    {
+      "id": "teacher-logout",
+      "name": "Teacher Logout",
+      "description": "Navigate to settings and log out of the application",
+      "category": "authentication",
+      "priority": "high",
+      "tags": ["logout", "happy-path"],
+      "preconditions": [
+        "User is logged in as teacher"
+      ],
+      "customElements": {
+        "settingsNavItem": {
+          "ios": { "strategy": "accessibilityId", "selector": "settingsTab" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/nav_settings" },
+          "description": "Settings tab in navigation"
+        },
+        "settingsHeader": {
+          "ios": { "strategy": "accessibilityId", "selector": "settingsHeader" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/settings_header" },
+          "description": "Settings screen header"
+        },
+        "confirmLogoutButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "confirmLogoutButton" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/confirm_logout" },
+          "description": "Confirm logout in dialog"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "tap",
+          "target": "settingsNavItem",
+          "description": "Navigate to settings"
+        },
+        {
+          "id": "step-2",
+          "action": "waitForElement",
+          "target": "settingsHeader",
+          "description": "Verify settings screen loads",
+          "waitCondition": "visible"
+        },
+        {
+          "id": "step-3",
+          "action": "scrollToElement",
+          "target": "logoutButton",
+          "description": "Scroll to logout button if needed",
+          "scrollDirection": "down",
+          "maxScrolls": 3
+        },
+        {
+          "id": "step-4",
+          "action": "tap",
+          "target": "logoutButton",
+          "description": "Tap logout button"
+        },
+        {
+          "id": "step-5",
+          "action": "waitForElement",
+          "target": "confirmLogoutButton",
+          "description": "Wait for confirmation dialog",
+          "waitCondition": "visible",
+          "timeout": 5000
+        },
+        {
+          "id": "step-6",
+          "action": "tap",
+          "target": "confirmLogoutButton",
+          "description": "Confirm logout"
+        },
+        {
+          "id": "step-7",
+          "action": "waitForElement",
+          "target": "loginEmail",
+          "description": "Verify returned to login screen",
+          "waitCondition": "visible",
+          "timeout": 15000
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "User is logged out and returned to login screen",
+          "verifyElement": "loginEmail"
+        }
+      }
+    },
+    {
+      "id": "teacher-network-error-recovery",
+      "name": "Teacher Network Error Recovery",
+      "description": "Verify app handles network errors gracefully during data fetch",
+      "category": "error-handling",
+      "priority": "medium",
+      "tags": ["network", "error-handling", "unhappy-path"],
+      "preconditions": [
+        "User is logged in as teacher",
+        "Network can be toggled (simulator/emulator capability)"
+      ],
+      "customElements": {
+        "retryButton": {
+          "ios": { "strategy": "accessibilityId", "selector": "retryButton" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/retry_button" },
+          "description": "Retry button for failed requests"
+        },
+        "networkErrorMessage": {
+          "ios": { "strategy": "-ios predicate string", "selector": "type == 'XCUIElementTypeStaticText' AND (name CONTAINS 'network' OR name CONTAINS 'connection' OR name CONTAINS 'offline')" },
+          "android": { "strategy": "xpath", "selector": "//*[contains(@text, 'network') or contains(@text, 'connection') or contains(@text, 'offline')]" },
+          "description": "Network error message"
+        },
+        "offlineBanner": {
+          "ios": { "strategy": "accessibilityId", "selector": "offlineBanner" },
+          "android": { "strategy": "id", "selector": "com.laya.teacherapp:id/offline_banner" },
+          "description": "Offline status banner"
+        }
+      },
+      "steps": [
+        {
+          "id": "step-1",
+          "action": "llmExplore",
+          "description": "LLM: Attempt to navigate to a data-heavy screen while simulating network issues",
+          "llmPrompt": "Navigate to a screen that requires network data (like classes or students list) and observe how the app handles potential network delays or errors"
+        },
+        {
+          "id": "step-2",
+          "action": "verifyElementExists",
+          "target": "networkErrorMessage",
+          "orTarget": "retryButton",
+          "orTarget2": "offlineBanner",
+          "description": "Verify appropriate error handling UI is shown",
+          "optional": true
+        },
+        {
+          "id": "step-3",
+          "action": "llmExplore",
+          "description": "LLM: If retry button visible, test retry functionality",
+          "llmPrompt": "If a retry button or similar recovery mechanism is visible, interact with it and verify the app attempts to recover"
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "App shows appropriate error state or recovers gracefully",
+          "acceptableStates": ["networkErrorMessage", "retryButton", "offlineBanner", "classesListContainer"]
+        }
+      },
+      "evidenceCollection": {
+        "always": ["screenshot", "deviceLog"]
+      }
+    },
+    {
+      "id": "teacher-full-journey-smoke",
+      "name": "Teacher Full Journey Smoke Test",
+      "description": "Complete end-to-end journey: login -> view classes -> view students -> assign activity -> logout",
+      "category": "smoke-test",
+      "priority": "critical",
+      "tags": ["e2e", "smoke", "critical-path"],
+      "preconditions": [
+        "App is freshly installed or logged out",
+        "Valid test teacher account exists",
+        "Test teacher has classes and students"
+      ],
+      "testData": {
+        "validEmail": "${TEST_TEACHER_EMAIL:-teacher@laya.test}",
+        "validPassword": "${TEST_TEACHER_PASSWORD:-TestPassword123!}"
+      },
+      "composedOf": [
+        "teacher-login-happy-path",
+        "teacher-view-classes",
+        "teacher-select-class-view-students",
+        "teacher-logout"
+      ],
+      "steps": [
+        {
+          "id": "composite-step",
+          "action": "runJourney",
+          "journeyId": "teacher-login-happy-path",
+          "description": "Execute login journey"
+        },
+        {
+          "id": "composite-step-2",
+          "action": "runJourney",
+          "journeyId": "teacher-view-classes",
+          "description": "Execute view classes journey"
+        },
+        {
+          "id": "composite-step-3",
+          "action": "runJourney",
+          "journeyId": "teacher-select-class-view-students",
+          "description": "Execute view students journey"
+        },
+        {
+          "id": "composite-step-4",
+          "action": "runJourney",
+          "journeyId": "teacher-logout",
+          "description": "Execute logout journey"
+        }
+      ],
+      "expectedOutcome": {
+        "success": {
+          "description": "Full journey completes successfully ending on login screen"
+        }
+      },
+      "evidenceCollection": {
+        "onSuccess": ["screenshot", "video"],
+        "onFailure": ["screenshot", "video", "deviceLog", "elementHierarchy"]
+      }
+    }
+  ],
+  "llmExploratoryHints": {
+    "focusAreas": [
+      "Authentication edge cases (session expiry, concurrent logins)",
+      "Class management workflows",
+      "Student data loading and display",
+      "Activity assignment and management",
+      "Navigation consistency and back button behavior",
+      "Error states and recovery mechanisms",
+      "Loading state handling",
+      "Pull-to-refresh functionality"
+    ],
+    "commonIssues": [
+      "Slow loading on class lists with many students",
+      "Keyboard overlapping input fields",
+      "iOS simulator tap delays on buttons",
+      "Stale element references after navigation",
+      "Alert handling timing issues"
+    ],
+    "explorationBoundaries": {
+      "maxDepth": 5,
+      "avoidScreens": ["payment", "subscription", "admin"],
+      "focusScreens": ["login", "dashboard", "classes", "students", "activities", "settings"]
+    }
+  }
+}

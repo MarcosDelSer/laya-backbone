@@ -119,6 +119,13 @@ struct InvoiceListView: View {
 
     private var invoiceListContent: some View {
         VStack(spacing: 0) {
+            // Offline status banner
+            OfflineStatusBanner(
+                isOffline: viewModel.isOffline,
+                pendingSyncCount: viewModel.pendingSyncCount,
+                isLoadingFromCache: viewModel.isLoadingFromCache
+            )
+
             // Stats header
             statsHeader
 

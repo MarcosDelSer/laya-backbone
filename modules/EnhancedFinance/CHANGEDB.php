@@ -139,3 +139,98 @@ INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `val
 ++$count;
 $sql[$count][0] = '1.0.01';
 $sql[$count][1] = "";
+
+// v1.0.02 - Expense tracking and accounting export
+++$count;
+$sql[$count][0] = '1.0.02';
+$sql[$count][1] = "
+CREATE TABLE IF NOT EXISTS `gibbonEnhancedFinanceExpenseCategory` (
+    `gibbonEnhancedFinanceExpenseCategoryID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(100) NOT NULL,
+    `description` TEXT NULL,
+    `accountCode` VARCHAR(20) NULL COMMENT 'Accounting software account code',
+    `isActive` TINYINT(1) NOT NULL DEFAULT 1,
+    `sortOrder` INT UNSIGNED NOT NULL DEFAULT 0,
+    `createdByID` INT UNSIGNED NOT NULL COMMENT 'Staff who created',
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX `idx_name` (`name`),
+    INDEX `idx_active` (`isActive`),
+    INDEX `idx_sort` (`sortOrder`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonEnhancedFinanceExpense` (
+    `gibbonEnhancedFinanceExpenseID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonEnhancedFinanceExpenseCategoryID` INT UNSIGNED NOT NULL,
+    `gibbonSchoolYearID` INT UNSIGNED NOT NULL,
+    `expenseDate` DATE NOT NULL,
+    `amount` DECIMAL(10,2) NOT NULL,
+    `taxAmount` DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'GST/QST amount if applicable',
+    `totalAmount` DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'amount + taxAmount',
+    `vendor` VARCHAR(150) NULL COMMENT 'Vendor/supplier name',
+    `reference` VARCHAR(100) NULL COMMENT 'Invoice/receipt number',
+    `paymentMethod` ENUM('Cash','Cheque','ETransfer','CreditCard','DebitCard','Other') NOT NULL DEFAULT 'Other',
+    `description` TEXT NULL,
+    `receiptPath` VARCHAR(255) NULL COMMENT 'Path to uploaded receipt file',
+    `status` ENUM('Pending','Approved','Rejected','Paid') NOT NULL DEFAULT 'Pending',
+    `approvedByID` INT UNSIGNED NULL COMMENT 'Staff who approved',
+    `approvedAt` DATETIME NULL,
+    `createdByID` INT UNSIGNED NOT NULL COMMENT 'Staff who created',
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_category` (`gibbonEnhancedFinanceExpenseCategoryID`),
+    INDEX `idx_school_year` (`gibbonSchoolYearID`),
+    INDEX `idx_expense_date` (`expenseDate`),
+    INDEX `idx_status` (`status`),
+    INDEX `idx_vendor` (`vendor`),
+    CONSTRAINT `fk_expense_category` FOREIGN KEY (`gibbonEnhancedFinanceExpenseCategoryID`)
+        REFERENCES `gibbonEnhancedFinanceExpenseCategory`(`gibbonEnhancedFinanceExpenseCategoryID`)
+        ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonEnhancedFinanceExportLog` (
+    `gibbonEnhancedFinanceExportLogID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `exportType` ENUM('Sage50','QuickBooks','BankReconciliation','Revenue','Aging','Collection','Excel') NOT NULL,
+    `exportFormat` VARCHAR(20) NOT NULL COMMENT 'File format: CSV, IIF, QBO, XLSX',
+    `gibbonSchoolYearID` INT UNSIGNED NULL,
+    `dateRangeStart` DATE NULL,
+    `dateRangeEnd` DATE NULL,
+    `recordCount` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Number of records exported',
+    `totalAmount` DECIMAL(12,2) NULL COMMENT 'Total monetary value in export',
+    `fileName` VARCHAR(255) NOT NULL,
+    `filePath` VARCHAR(500) NOT NULL,
+    `fileSize` INT UNSIGNED NULL COMMENT 'File size in bytes',
+    `checksum` VARCHAR(64) NULL COMMENT 'SHA256 checksum for integrity',
+    `status` ENUM('Pending','Processing','Completed','Failed') NOT NULL DEFAULT 'Pending',
+    `errorMessage` TEXT NULL COMMENT 'Error details if export failed',
+    `exportedByID` INT UNSIGNED NOT NULL COMMENT 'Staff who initiated export',
+    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX `idx_export_type` (`exportType`),
+    INDEX `idx_school_year` (`gibbonSchoolYearID`),
+    INDEX `idx_date_range` (`dateRangeStart`, `dateRangeEnd`),
+    INDEX `idx_status` (`status`),
+    INDEX `idx_created` (`timestampCreated`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+INSERT INTO `gibbonEnhancedFinanceExpenseCategory` (`name`, `description`, `accountCode`, `isActive`, `sortOrder`, `createdByID`) VALUES
+    ('Payroll', 'Staff salaries and wages', '5100', 1, 1, 1),
+    ('Supplies', 'Educational and office supplies', '5200', 1, 2, 1),
+    ('Utilities', 'Electricity, water, gas, internet', '5300', 1, 3, 1),
+    ('Rent', 'Facility rental costs', '5400', 1, 4, 1),
+    ('Insurance', 'Liability and property insurance', '5500', 1, 5, 1),
+    ('Food', 'Meals and snacks for children', '5600', 1, 6, 1),
+    ('Equipment', 'Furniture, toys, and equipment', '5700', 1, 7, 1),
+    ('Professional Development', 'Staff training and certifications', '5800', 1, 8, 1),
+    ('Maintenance', 'Building and equipment repairs', '5900', 1, 9, 1),
+    ('Other', 'Miscellaneous expenses', '5999', 1, 99, 1)
+ON DUPLICATE KEY UPDATE name=name;end
+
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Enhanced Finance', 'expenseApprovalRequired', 'Expense Approval Required', 'Require approval for expenses before they can be marked as paid (Y/N)', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Enhanced Finance', 'expenseReceiptRequired', 'Expense Receipt Required', 'Require receipt upload for all expenses (Y/N)', 'N') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Enhanced Finance', 'sage50AccountsReceivable', 'Sage 50 Accounts Receivable Account', 'Account code for Accounts Receivable in Sage 50 exports', '1200') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Enhanced Finance', 'sage50RevenueAccount', 'Sage 50 Revenue Account', 'Account code for Revenue in Sage 50 exports', '4100') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Enhanced Finance', 'quickbooksIncomeAccount', 'QuickBooks Income Account', 'Account name for Income in QuickBooks exports', 'Childcare Revenue') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Enhanced Finance', 'quickbooksARAccount', 'QuickBooks A/R Account', 'Account name for Accounts Receivable in QuickBooks exports', 'Accounts Receivable') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Enhanced Finance', 'exportRetentionDays', 'Export File Retention (Days)', 'Number of days to retain exported files before automatic cleanup', '90') ON DUPLICATE KEY UPDATE scope=scope;end
+";

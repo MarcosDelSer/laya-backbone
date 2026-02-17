@@ -119,6 +119,13 @@ struct StaffListView: View {
 
     private var staffListContent: some View {
         VStack(spacing: 0) {
+            // Offline status banner
+            OfflineStatusBanner(
+                isOffline: viewModel.isOffline,
+                pendingSyncCount: viewModel.pendingSyncCount,
+                isLoadingFromCache: viewModel.isLoadingFromCache
+            )
+
             // Stats header
             statsHeader
 

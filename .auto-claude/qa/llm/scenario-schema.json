@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://auto-claude.dev/schemas/llm-qa-scenario.json",
+  "title": "LLM QA Scenario Schema",
+  "description": "Canonical schema for LLM-driven exploratory QA scenarios across web, mobile, and desktop platforms",
+  "type": "object",
+  "required": ["scenario_id", "name", "platform", "persona", "journey"],
+  "properties": {
+    "scenario_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "Unique identifier for the scenario (kebab-case)",
+      "examples": ["user-login-flow", "checkout-guest-user", "dashboard-data-export"]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "description": "Human-readable name for the scenario"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Brief description of what this scenario tests"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["web", "mobile-ios", "mobile-android", "desktop-mac", "desktop-windows", "desktop-linux"],
+      "description": "Target platform for this scenario"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^@[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "uniqueItems": true,
+      "description": "Test tags for filtering (e.g., @smoke, @regression, @critical)",
+      "examples": [["@smoke", "@auth"], ["@regression", "@payments"]]
+    },
+    "risk_tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["security", "data-loss", "financial", "privacy", "compliance", "ux-critical", "performance"]
+      },
+      "uniqueItems": true,
+      "description": "Risk categories this scenario helps validate"
+    },
+    "persona": {
+      "type": "object",
+      "required": ["role", "goal"],
+      "description": "The user persona executing this journey",
+      "properties": {
+        "role": {
+          "type": "string",
+          "minLength": 2,
+          "description": "The role or type of user (e.g., 'new user', 'admin', 'power user')",
+          "examples": ["new user", "returning customer", "admin", "guest", "premium subscriber"]
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 10,
+          "description": "What this persona is trying to accomplish",
+          "examples": ["Complete first purchase to evaluate the platform", "Export monthly sales data for reporting"]
+        },
+        "context": {
+          "type": "string",
+          "description": "Additional context about the persona's situation or constraints",
+          "examples": ["Using mobile device during commute", "First time using the feature"]
+        },
+        "technical_level": {
+          "type": "string",
+          "enum": ["novice", "intermediate", "advanced", "expert"],
+          "default": "intermediate",
+          "description": "Technical proficiency level of the persona"
+        },
+        "accessibility_needs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["screen-reader", "keyboard-only", "high-contrast", "reduced-motion", "large-text"]
+          },
+          "uniqueItems": true,
+          "description": "Accessibility requirements for this persona"
+        }
+      }
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["condition"],
+        "properties": {
+          "condition": {
+            "type": "string",
+            "description": "A condition that must be true before the journey starts"
+          },
+          "setup_hint": {
+            "type": "string",
+            "description": "Hint for how to establish this precondition"
+          }
+        }
+      },
+      "description": "Conditions that must be met before executing the journey"
+    },
+    "journey": {
+      "type": "object",
+      "required": ["steps"],
+      "description": "The sequence of actions and checkpoints in this scenario",
+      "properties": {
+        "entry_point": {
+          "type": "string",
+          "description": "Starting URL, screen, or application state",
+          "examples": ["/login", "Home Screen", "https://app.example.com/dashboard"]
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["step_id", "action"],
+            "properties": {
+              "step_id": {
+                "type": "string",
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                "description": "Unique identifier for this step within the journey"
+              },
+              "action": {
+                "type": "string",
+                "minLength": 5,
+                "description": "Natural language description of what the LLM should do",
+                "examples": [
+                  "Navigate to the login page and enter valid credentials",
+                  "Click the 'Add to Cart' button for the first product",
+                  "Fill in the shipping address form with valid US address"
+                ]
+              },
+              "target_hint": {
+                "type": "string",
+                "description": "Optional hint about the UI element or area to interact with",
+                "examples": ["button[data-testid='submit']", "Login form", "Navigation menu"]
+              },
+              "wait_for": {
+                "type": "string",
+                "description": "Condition to wait for after this action",
+                "examples": ["page load", "spinner disappears", "confirmation modal appears"]
+              },
+              "timeout_ms": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 60000,
+                "default": 10000,
+                "description": "Maximum time to wait for this step to complete"
+              },
+              "on_failure": {
+                "type": "string",
+                "enum": ["fail", "skip", "retry", "screenshot-and-continue"],
+                "default": "fail",
+                "description": "What to do if this step fails"
+              },
+              "assertions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/assertion"
+                },
+                "description": "Assertions to check after this step completes"
+              }
+            }
+          }
+        },
+        "max_duration_ms": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 600000,
+          "default": 120000,
+          "description": "Maximum total duration for the entire journey"
+        }
+      }
+    },
+    "assertions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/assertion"
+      },
+      "description": "Final assertions to verify after the journey completes"
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Configuration for artifacts to collect during execution",
+      "properties": {
+        "screenshots": {
+          "type": "string",
+          "enum": ["none", "on-failure", "per-step", "all"],
+          "default": "on-failure",
+          "description": "When to capture screenshots"
+        },
+        "video": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to record video of the entire journey"
+        },
+        "network_logs": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to capture network request/response logs"
+        },
+        "console_logs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to capture browser/app console logs"
+        },
+        "accessibility_audit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to run accessibility audit at journey end"
+        }
+      }
+    },
+    "retry_policy": {
+      "type": "object",
+      "description": "Retry configuration for flaky scenarios",
+      "properties": {
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 1,
+          "description": "Maximum number of retry attempts"
+        },
+        "retry_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30000,
+          "default": 2000,
+          "description": "Delay between retry attempts"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata for tracking and reporting",
+      "properties": {
+        "owner": {
+          "type": "string",
+          "description": "Team or person responsible for this scenario"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this scenario was created"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this scenario was last updated"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Scenario version (semver)"
+        },
+        "related_specs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Auto-Claude spec IDs this scenario relates to"
+        },
+        "jira_tickets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Related JIRA ticket IDs"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "assertion": {
+      "type": "object",
+      "required": ["type", "description"],
+      "description": "A verification check to perform",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "visual",
+            "text-content",
+            "element-exists",
+            "element-not-exists",
+            "element-state",
+            "url-matches",
+            "api-response",
+            "performance",
+            "accessibility",
+            "custom"
+          ],
+          "description": "The type of assertion"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 5,
+          "description": "Natural language description of what to verify",
+          "examples": [
+            "Verify the success message is displayed",
+            "Check that the user avatar appears in the header",
+            "Confirm no error toasts are visible"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "description": "Element selector or identifier to check",
+          "examples": ["[data-testid='success-message']", ".error-toast", "#user-avatar"]
+        },
+        "expected": {
+          "type": ["string", "number", "boolean", "object", "array"],
+          "description": "Expected value or state"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["P0", "P1", "P2", "P3"],
+          "default": "P2",
+          "description": "Severity level if this assertion fails (P0=critical, P3=minor)"
+        },
+        "evidence_required": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["screenshot", "dom-snapshot", "network-log", "console-log", "video-clip"]
+          },
+          "description": "Evidence to capture if assertion fails"
+        }
+      }
+    }
+  }
+}

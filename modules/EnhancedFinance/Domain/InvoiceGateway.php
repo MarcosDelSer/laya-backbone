@@ -373,6 +373,89 @@ class InvoiceGateway extends QueryableGateway
     }
 
     /**
+     * Select outstanding balances grouped by family for a school year.
+     *
+     * @param int $gibbonSchoolYearID
+     * @param int $limit Maximum number of families to return
+     * @return Result
+     */
+    public function selectOutstandingByFamily($gibbonSchoolYearID, $limit = 10)
+    {
+        $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID];
+        $sql = "SELECT
+                gibbonFamily.gibbonFamilyID,
+                gibbonFamily.name AS familyName,
+                COUNT(gibbonEnhancedFinanceInvoice.gibbonEnhancedFinanceInvoiceID) AS invoiceCount,
+                SUM(gibbonEnhancedFinanceInvoice.totalAmount - gibbonEnhancedFinanceInvoice.paidAmount) AS totalOutstanding,
+                MIN(gibbonEnhancedFinanceInvoice.dueDate) AS oldestDueDate,
+                MAX(CASE WHEN gibbonEnhancedFinanceInvoice.dueDate < CURDATE() THEN 1 ELSE 0 END) AS hasOverdue,
+                SUM(CASE WHEN gibbonEnhancedFinanceInvoice.dueDate < CURDATE() THEN (gibbonEnhancedFinanceInvoice.totalAmount - gibbonEnhancedFinanceInvoice.paidAmount) ELSE 0 END) AS overdueAmount
+            FROM gibbonEnhancedFinanceInvoice
+            INNER JOIN gibbonFamily ON gibbonEnhancedFinanceInvoice.gibbonFamilyID = gibbonFamily.gibbonFamilyID
+            WHERE gibbonEnhancedFinanceInvoice.gibbonSchoolYearID = :gibbonSchoolYearID
+            AND gibbonEnhancedFinanceInvoice.status IN ('Issued', 'Partial')
+            GROUP BY gibbonFamily.gibbonFamilyID, gibbonFamily.name
+            HAVING totalOutstanding > 0
+            ORDER BY totalOutstanding DESC
+            LIMIT " . (int) $limit;
+
+        return $this->db()->select($sql, $data);
+    }
+
+    /**
+     * Get summary of outstanding balances by family for a school year.
+     *
+     * @param int $gibbonSchoolYearID
+     * @return array
+     */
+    public function selectOutstandingByFamilySummary($gibbonSchoolYearID)
+    {
+        $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID];
+        $sql = "SELECT
+                COUNT(DISTINCT gibbonEnhancedFinanceInvoice.gibbonFamilyID) AS familyCount,
+                COUNT(gibbonEnhancedFinanceInvoice.gibbonEnhancedFinanceInvoiceID) AS invoiceCount,
+                SUM(gibbonEnhancedFinanceInvoice.totalAmount - gibbonEnhancedFinanceInvoice.paidAmount) AS totalOutstanding
+            FROM gibbonEnhancedFinanceInvoice
+            WHERE gibbonEnhancedFinanceInvoice.gibbonSchoolYearID = :gibbonSchoolYearID
+            AND gibbonEnhancedFinanceInvoice.status IN ('Issued', 'Partial')
+            AND (gibbonEnhancedFinanceInvoice.totalAmount - gibbonEnhancedFinanceInvoice.paidAmount) > 0";
+
+        return $this->db()->selectOne($sql, $data);
+    }
+
+    /**
+     * Get aging summary for overdue invoices by school year.
+     * Returns counts and amounts grouped by 30, 60, 90+ day aging buckets.
+     *
+     * @param int $gibbonSchoolYearID
+     * @return array
+     */
+    public function selectAgingSummaryByYear($gibbonSchoolYearID)
+    {
+        $data = [
+            'gibbonSchoolYearID' => $gibbonSchoolYearID,
+            'today' => date('Y-m-d')
+        ];
+        $sql = "SELECT
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 1 AND 30 THEN 1 ELSE 0 END) AS count_1_30,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 1 AND 30 THEN (totalAmount - paidAmount) ELSE 0 END) AS amount_1_30,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 31 AND 60 THEN 1 ELSE 0 END) AS count_31_60,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 31 AND 60 THEN (totalAmount - paidAmount) ELSE 0 END) AS amount_31_60,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 61 AND 90 THEN 1 ELSE 0 END) AS count_61_90,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) BETWEEN 61 AND 90 THEN (totalAmount - paidAmount) ELSE 0 END) AS amount_61_90,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) > 90 THEN 1 ELSE 0 END) AS count_90_plus,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) > 90 THEN (totalAmount - paidAmount) ELSE 0 END) AS amount_90_plus,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) > 0 THEN 1 ELSE 0 END) AS total_overdue_count,
+                SUM(CASE WHEN DATEDIFF(:today, dueDate) > 0 THEN (totalAmount - paidAmount) ELSE 0 END) AS total_overdue_amount
+            FROM gibbonEnhancedFinanceInvoice
+            WHERE gibbonSchoolYearID = :gibbonSchoolYearID
+            AND status IN ('Issued', 'Partial')
+            AND dueDate < :today";
+
+        return $this->db()->selectOne($sql, $data);
+    }
+
+    /**
      * Get filter rules for invoice queries.
      *
      * @return array

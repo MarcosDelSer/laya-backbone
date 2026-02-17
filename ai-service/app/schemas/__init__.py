@@ -9,6 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
+    development_profile: Quebec-aligned developmental tracking schemas
 """
 
 from app.schemas.activity import (
@@ -72,6 +73,36 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
+from app.schemas.development_profile import (
+    DevelopmentalDomain,
+    DevelopmentProfileBase,
+    DevelopmentProfileListResponse,
+    DevelopmentProfileRequest,
+    DevelopmentProfileResponse,
+    DevelopmentProfileSummaryResponse,
+    DomainSummary,
+    GrowthDataPoint,
+    GrowthTrajectoryRequest,
+    GrowthTrajectoryResponse,
+    MonthlySnapshotBase,
+    MonthlySnapshotListResponse,
+    MonthlySnapshotRequest,
+    MonthlySnapshotResponse,
+    MonthlySnapshotUpdateRequest,
+    ObservationBase,
+    ObservationListResponse,
+    ObservationRequest,
+    ObservationResponse,
+    ObservationUpdateRequest,
+    ObserverType,
+    OverallProgress,
+    SkillAssessmentBase,
+    SkillAssessmentListResponse,
+    SkillAssessmentRequest,
+    SkillAssessmentResponse,
+    SkillAssessmentUpdateRequest,
+    SkillStatus,
+)
 
 __all__ = [
     # Base schemas
@@ -130,4 +161,33 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
+    # Development Profile schemas
+    "DevelopmentalDomain",
+    "SkillStatus",
+    "ObserverType",
+    "OverallProgress",
+    "DomainSummary",
+    "DevelopmentProfileBase",
+    "DevelopmentProfileRequest",
+    "DevelopmentProfileResponse",
+    "DevelopmentProfileSummaryResponse",
+    "DevelopmentProfileListResponse",
+    "SkillAssessmentBase",
+    "SkillAssessmentRequest",
+    "SkillAssessmentUpdateRequest",
+    "SkillAssessmentResponse",
+    "SkillAssessmentListResponse",
+    "ObservationBase",
+    "ObservationRequest",
+    "ObservationUpdateRequest",
+    "ObservationResponse",
+    "ObservationListResponse",
+    "MonthlySnapshotBase",
+    "MonthlySnapshotRequest",
+    "MonthlySnapshotUpdateRequest",
+    "MonthlySnapshotResponse",
+    "MonthlySnapshotListResponse",
+    "GrowthDataPoint",
+    "GrowthTrajectoryRequest",
+    "GrowthTrajectoryResponse",
 ]
