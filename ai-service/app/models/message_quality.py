@@ -8,10 +8,10 @@ parent-educator communication in daycare settings.
 
 from datetime import datetime
 from typing import Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -47,17 +47,17 @@ class MessageAnalysis(Base):
     __tablename__ = "message_analyses"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     user_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
     child_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=True,
         index=True,
     )
@@ -162,7 +162,7 @@ class MessageTemplate(Base):
     __tablename__ = "message_templates"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
@@ -203,7 +203,7 @@ class MessageTemplate(Base):
         default=0,
     )
     created_by: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -253,7 +253,7 @@ class TrainingExample(Base):
     __tablename__ = "training_examples"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
@@ -298,7 +298,7 @@ class TrainingExample(Base):
         nullable=True,
     )
     created_by: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
