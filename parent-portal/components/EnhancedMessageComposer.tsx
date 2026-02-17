@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { QualityCoachPanel } from './QualityCoachPanel';
 import { analyzeMessageForComposer } from '@/lib/ai-client';
+import { useAuth } from '@/contexts/AuthContext';
 import type {
   MessageAnalysisResponse,
   RewriteSuggestion,
@@ -38,7 +39,8 @@ type ComposerTranslationKey =
   | 'analyzing'
   | 'qualityIssuesDetected'
   | 'reviewBeforeSending'
-  | 'sendAnyway';
+  | 'sendAnyway'
+  | 'viewAnalytics';
 
 const composerTranslations: Record<MessageLanguage, Record<ComposerTranslationKey, string>> = {
   en: {
@@ -55,6 +57,7 @@ const composerTranslations: Record<MessageLanguage, Record<ComposerTranslationKe
     qualityIssuesDetected: 'quality {count} detected.',
     reviewBeforeSending: 'Review suggestions before sending.',
     sendAnyway: 'Send anyway',
+    viewAnalytics: 'View Analytics',
   },
   fr: {
     qualityAnalysisUnavailable: 'Analyse qualité non disponible :',
@@ -70,6 +73,7 @@ const composerTranslations: Record<MessageLanguage, Record<ComposerTranslationKe
     qualityIssuesDetected: '{count} problème(s) de qualité détecté(s).',
     reviewBeforeSending: 'Révisez les suggestions avant d\'envoyer.',
     sendAnyway: 'Envoyer quand même',
+    viewAnalytics: 'Voir les statistiques',
   },
 };
 
@@ -96,6 +100,8 @@ export function EnhancedMessageComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const { user } = useAuth();
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -260,6 +266,31 @@ export function EnhancedMessageComposer({
 
   return (
     <div className="space-y-4">
+      {/* Analytics Link for Directors (Admins Only) */}
+      {showQualityCoach && user?.role === 'admin' && (
+        <div className="flex justify-end">
+          <a
+            href="/message-quality/analytics"
+            className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-colors"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+            <span>{t.viewAnalytics}</span>
+          </a>
+        </div>
+      )}
+
       {/* Quality Coach Panel */}
       {showQualityCoach && (
         <QualityCoachPanel
