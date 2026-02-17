@@ -16,6 +16,7 @@ import {NavigationContainer} from '@react-navigation/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 import AppNavigator from './src/navigation/AppNavigator';
+import {AuthProvider} from './src/hooks/useAuth';
 
 // Import platform-specific styling utilities
 import {
@@ -132,17 +133,19 @@ function App(): React.JSX.Element {
   ]);
 
   return (
-    <SafeAreaProvider>
-      {/* Platform-specific status bar configuration */}
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor={isAndroid ? '#4A90D9' : 'transparent'}
-        translucent={isAndroid}
-      />
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>
-    </SafeAreaProvider>
+    <AuthProvider>
+      <SafeAreaProvider>
+        {/* Platform-specific status bar configuration */}
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor={isAndroid ? '#4A90D9' : 'transparent'}
+          translucent={isAndroid}
+        />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </AuthProvider>
   );
 }
 
