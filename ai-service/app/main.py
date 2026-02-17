@@ -22,7 +22,7 @@ from app.middleware.rate_limit import (
     get_auth_rate_limiter,
     get_general_rate_limiter,
 )
-from app.middleware.security import get_cors_origins, get_xss_protection_middleware
+from app.middleware.security import get_cors_origins, get_xss_protection_middleware, get_hsts_middleware
 from app.redis_client import close_redis
 from app.routers import coaching
 from app.routers.activities import router as activities_router
@@ -134,6 +134,9 @@ app.add_middleware(
 
 # 3. XSS protection middleware adds security headers to all responses
 app.middleware("http")(get_xss_protection_middleware())
+
+# 4. HSTS middleware adds Strict-Transport-Security header to HTTPS responses
+app.middleware("http")(get_hsts_middleware())
 
 # Register API routers
 app.include_router(health_router, prefix="/api/v1", tags=["health"])
