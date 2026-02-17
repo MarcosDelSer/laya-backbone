@@ -649,6 +649,138 @@ class InterventionPlanService:
 
         return VersionResponse.model_validate(version)
 
+    async def compare_versions(
+        self,
+        plan_id: UUID,
+        version1: int,
+        version2: int,
+    ) -> dict:
+        """Compare two version snapshots and highlight differences.
+
+        Compares two version snapshots of a plan and returns a detailed
+        diff showing what changed between the versions.
+
+        Args:
+            plan_id: ID of the intervention plan
+            version1: First version number to compare
+            version2: Second version number to compare
+
+        Returns:
+            Dictionary with comparison results and highlighted changes
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            PlanVersionError: When either version is not found
+        """
+        # Verify plan exists
+        query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
+        result = await self.db.execute(query)
+        plan = result.scalar_one_or_none()
+
+        if not plan:
+            raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Get both versions
+        version_query = (
+            select(InterventionVersion)
+            .where(
+                InterventionVersion.plan_id == plan_id,
+                InterventionVersion.version_number.in_([version1, version2]),
+            )
+            .order_by(InterventionVersion.version_number.asc())
+        )
+        version_result = await self.db.execute(version_query)
+        versions = version_result.scalars().all()
+
+        if len(versions) != 2:
+            missing = []
+            found_numbers = [v.version_number for v in versions]
+            if version1 not in found_numbers:
+                missing.append(version1)
+            if version2 not in found_numbers:
+                missing.append(version2)
+            raise PlanVersionError(
+                f"Version(s) {', '.join(map(str, missing))} not found for plan {plan_id}"
+            )
+
+        # Extract snapshots
+        v1 = versions[0] if versions[0].version_number == version1 else versions[1]
+        v2 = versions[1] if versions[1].version_number == version2 else versions[0]
+
+        snapshot1 = v1.snapshot_data
+        snapshot2 = v2.snapshot_data
+
+        # Compare snapshots and build diff
+        changes = {
+            "plan_id": str(plan_id),
+            "version1": version1,
+            "version2": version2,
+            "version1_date": v1.created_at.isoformat() if v1.created_at else None,
+            "version2_date": v2.created_at.isoformat() if v2.created_at else None,
+            "changes": {},
+        }
+
+        # Compare main plan fields
+        main_fields = [
+            "title", "status", "child_name", "date_of_birth", "diagnosis",
+            "medical_history", "educational_history", "family_context",
+            "review_schedule", "next_review_date", "effective_date", "end_date",
+            "parent_signed",
+        ]
+
+        for field in main_fields:
+            val1 = snapshot1.get(field)
+            val2 = snapshot2.get(field)
+            if val1 != val2:
+                changes["changes"][field] = {
+                    "from": val1,
+                    "to": val2,
+                }
+
+        # Compare relationship collections
+        collection_fields = [
+            "strengths", "needs", "goals", "strategies",
+            "monitoring", "parent_involvements", "consultations",
+        ]
+
+        for collection in collection_fields:
+            items1 = snapshot1.get(collection, [])
+            items2 = snapshot2.get(collection, [])
+
+            # Build ID-based maps for comparison
+            map1 = {item["id"]: item for item in items1}
+            map2 = {item["id"]: item for item in items2}
+
+            added = [item for item_id, item in map2.items() if item_id not in map1]
+            removed = [item for item_id, item in map1.items() if item_id not in map2]
+            modified = []
+
+            # Check for modifications in items that exist in both
+            for item_id in set(map1.keys()) & set(map2.keys()):
+                if map1[item_id] != map2[item_id]:
+                    # Find specific field changes
+                    field_changes = {}
+                    for key in map1[item_id].keys():
+                        if map1[item_id].get(key) != map2[item_id].get(key):
+                            field_changes[key] = {
+                                "from": map1[item_id].get(key),
+                                "to": map2[item_id].get(key),
+                            }
+                    if field_changes:
+                        modified.append({
+                            "id": item_id,
+                            "changes": field_changes,
+                        })
+
+            if added or removed or modified:
+                changes["changes"][collection] = {
+                    "added": added,
+                    "removed": removed,
+                    "modified": modified,
+                }
+
+        return changes
+
     async def get_plans_for_review(
         self,
         user_id: UUID,
