@@ -22,7 +22,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 use Gibbon\Forms\Form;
 use Gibbon\FileUploader;
 use Gibbon\Services\Format;
+use Gibbon\Domain\User\FamilyGateway;
 use Gibbon\Module\PhotoManagement\Domain\PhotoGateway;
+use Gibbon\Module\PhotoManagement\Domain\PhotoTagGateway;
+use Gibbon\Module\PhotoManagement\Service\PhotoAccessService;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -36,11 +41,26 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_upl
         ->add(__('Photo Gallery'), 'photos.php')
         ->add(__('Upload Photo'));
 
+    // Get gateways and settings
+    $photoGateway = $container->get(PhotoGateway::class);
+    $photoTagGateway = $container->get(PhotoTagGateway::class);
+    $familyGateway = $container->get(FamilyGateway::class);
+    $settingGateway = $container->get(SettingGateway::class);
+
+    // Initialize PhotoAccessService
+    $photoAccessService = new PhotoAccessService($photoGateway, $photoTagGateway, $familyGateway, $settingGateway);
+
     // Get settings
-    $settingGateway = $container->get(\Gibbon\Domain\System\SettingGateway::class);
     $maxSizeMB = $settingGateway->getSettingByScope('Photo Management', 'photoMaxSizeMB') ?? 10;
     $allowedTypes = $settingGateway->getSettingByScope('Photo Management', 'photoAllowedTypes') ?? 'jpg,jpeg,png,gif';
     $defaultShareWithParent = $settingGateway->getSettingByScope('Photo Management', 'photoDefaultShareWithParent') ?? 'Y';
+
+    // Get AI Sync service for webhook notifications
+    try {
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
 
     // Handle form submission
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -53,7 +73,6 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_upl
             exit;
         }
 
-        $photoGateway = $container->get(PhotoGateway::class);
         $gibbonSchoolYearID = $session->get('gibbonSchoolYearID');
         $gibbonPersonID = $session->get('gibbonPersonID');
 
@@ -75,7 +94,26 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_upl
             exit;
         }
 
-        // Validate file type
+        // Get file info
+        $file = $_FILES['photo'];
+        $fileSize = $file['size'];
+        $mimeType = $file['type'];
+
+        // Validate file type using service
+        if (!$photoAccessService->isValidPhotoType($mimeType, $allowedTypes)) {
+            $URL .= '&return=error3';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Validate file size using service
+        if (!$photoAccessService->isValidFileSize($fileSize)) {
+            $URL .= '&return=error4';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Validate file type for FileUploader
         $fileUploader = $container->get(FileUploader::class);
         $allowedTypesArray = explode(',', str_replace(' ', '', $allowedTypes));
         $fileUploader->setFileSuffixes($allowedTypesArray);
@@ -90,7 +128,6 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_upl
         }
 
         // Upload the file
-        $file = $_FILES['photo'];
         $filename = $fileUploader->upload($file, $uploadPath);
 
         if (empty($filename)) {
@@ -99,20 +136,8 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_upl
             exit;
         }
 
-        // Get file info
+        // Get file path
         $filePath = $uploadPath . '/' . $filename;
-        $fileSize = $file['size'];
-        $mimeType = $file['type'];
-
-        // Validate file size
-        $maxSizeBytes = $maxSizeMB * 1024 * 1024;
-        if ($fileSize > $maxSizeBytes) {
-            // Delete uploaded file
-            @unlink($session->get('absolutePath') . '/' . $filePath);
-            $URL .= '&return=error4';
-            header("Location: {$URL}");
-            exit;
-        }
 
         // Insert photo record
         $photoID = $photoGateway->insertPhoto([
@@ -132,6 +157,26 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_upl
             $URL .= '&return=error2';
             header("Location: {$URL}");
             exit;
+        }
+
+        // Trigger webhook for AI sync
+        if ($aiSyncService !== null) {
+            try {
+                $photoData = [
+                    'gibbonPhotoUploadID' => $photoID,
+                    'gibbonSchoolYearID' => $gibbonSchoolYearID,
+                    'filename' => $filename,
+                    'filePath' => $filePath,
+                    'caption' => $caption,
+                    'mimeType' => $mimeType,
+                    'fileSize' => $fileSize,
+                    'uploadedByID' => $gibbonPersonID,
+                    'sharedWithParent' => $sharedWithParent,
+                ];
+                $aiSyncService->syncPhotoUpload($photoID, $photoData);
+            } catch (Exception $e) {
+                // Silently fail - don't break UX if webhook fails
+            }
         }
 
         // Success - redirect to tagging page

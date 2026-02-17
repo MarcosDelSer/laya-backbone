@@ -1,5 +1,8 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+import { useFormatting } from '@/lib/hooks/useFormatting';
+
 interface Document {
   id: string;
   title: string;
@@ -14,27 +17,6 @@ interface Document {
 interface DocumentCardProps {
   document: Document;
   onSign: (documentId: string) => void;
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function formatDateTime(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
 }
 
 function getDocumentTypeIcon(type: string): React.ReactNode {
@@ -127,6 +109,9 @@ function getDocumentTypeIcon(type: string): React.ReactNode {
 }
 
 export function DocumentCard({ document, onSign }: DocumentCardProps) {
+  const t = useTranslations();
+  const { formatDate, formatDateTime } = useFormatting();
+
   const handleDownload = () => {
     if (document.pdfUrl) {
       window.open(document.pdfUrl, '_blank');
@@ -134,13 +119,13 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
   };
 
   return (
-    <div className="card">
+    <article className="card" aria-labelledby={`document-${document.id}-title`}>
       <div className="card-body">
         <div className="flex items-start justify-between">
           {/* Document info */}
           <div className="flex items-start space-x-4">
             {/* Document type icon */}
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0" aria-hidden="true">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
                 {getDocumentTypeIcon(document.type)}
               </div>
@@ -148,24 +133,25 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
 
             {/* Document details */}
             <div className="flex-1 min-w-0">
-              <h3 className="text-base font-semibold text-gray-900 truncate">
+              <h3 id={`document-${document.id}-title`} className="text-base font-semibold text-gray-900 truncate">
                 {document.title}
               </h3>
               <p className="mt-1 text-sm text-gray-500">
                 {document.type}
               </p>
               <p className="mt-1 text-xs text-gray-400">
-                Uploaded: {formatDate(document.uploadDate)}
+                {t('documents.card.uploaded', { date: formatDate(document.uploadDate) })}
               </p>
 
               {/* Signed info */}
               {document.status === 'signed' && document.signedAt && (
-                <div className="mt-2 flex items-center text-xs text-green-600">
+                <div className="mt-2 flex items-center text-xs text-green-600" role="status">
                   <svg
                     className="mr-1 h-4 w-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
+                    aria-hidden="true"
                   >
                     <path
                       strokeLinecap="round"
@@ -174,7 +160,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                       d="M5 13l4 4L19 7"
                     />
                   </svg>
-                  Signed on {formatDateTime(document.signedAt)}
+                  {t('documents.card.signedOn', { date: formatDateTime(document.signedAt) })}
                 </div>
               )}
             </div>
@@ -183,12 +169,13 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
           {/* Status badge */}
           <div className="flex-shrink-0">
             {document.status === 'signed' ? (
-              <span className="badge badge-success">
+              <span className="badge badge-success" role="status" aria-label="Document status: Signed">
                 <svg
                   className="mr-1 h-3 w-3"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -197,15 +184,16 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                     d="M5 13l4 4L19 7"
                   />
                 </svg>
-                Signed
+                {t('common.status.signed')}
               </span>
             ) : (
-              <span className="badge badge-warning">
+              <span className="badge badge-warning" role="status" aria-label="Document status: Pending signature">
                 <svg
                   className="mr-1 h-3 w-3"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -214,7 +202,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                Pending
+                {t('common.status.pending')}
               </span>
             )}
           </div>
@@ -226,6 +214,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
           <button
             type="button"
             onClick={handleDownload}
+            aria-label={`View document: ${document.title}`}
             className="btn btn-outline text-sm"
           >
             <svg
@@ -233,6 +222,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -247,7 +237,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                 d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
               />
             </svg>
-            View Document
+            {t('documents.card.viewDocument')}
           </button>
 
           {/* Sign button (only for pending documents) */}
@@ -255,6 +245,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
             <button
               type="button"
               onClick={() => onSign(document.id)}
+              aria-label={`Sign document: ${document.title}`}
               className="btn btn-primary text-sm"
             >
               <svg
@@ -262,6 +253,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -270,7 +262,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                   d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
                 />
               </svg>
-              Sign Document
+              {t('documents.card.signDocument')}
             </button>
           )}
 
@@ -280,12 +272,14 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
               type="button"
               className="btn btn-outline text-sm text-green-600 border-green-300 hover:bg-green-50"
               onClick={() => window.open(document.signatureUrl, '_blank')}
+              aria-label="View your signature"
             >
               <svg
                 className="mr-2 h-4 w-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -294,7 +288,7 @@ export function DocumentCard({ document, onSign }: DocumentCardProps) {
                   d="M5 13l4 4L19 7"
                 />
               </svg>
-              View Signature
+              {t('documents.card.viewSignature')}
             </button>
           )}
         </div>

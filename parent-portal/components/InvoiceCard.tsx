@@ -1,6 +1,8 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { PaymentStatusBadge } from './PaymentStatusBadge';
+import { useFormatting } from '@/lib/hooks/useFormatting';
 
 interface InvoiceItem {
   description: string;
@@ -22,32 +24,10 @@ export interface InvoiceCardProps {
   };
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount);
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-function getDaysUntilDue(dueDate: string): number {
-  const due = new Date(dueDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  due.setHours(0, 0, 0, 0);
-  const diffTime = due.getTime() - today.getTime();
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-}
-
 export function InvoiceCard({ invoice }: InvoiceCardProps) {
+  const t = useTranslations();
+  const { formatCurrency, formatDate, getDaysUntilDue } = useFormatting();
+
   const daysUntilDue = getDaysUntilDue(invoice.dueDate);
   const isPastDue = daysUntilDue < 0 && invoice.status !== 'paid';
 
@@ -59,13 +39,26 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
     }
   };
 
+  /**
+   * Get the due date status message using translations with plural support.
+   */
+  const getDueDateStatus = () => {
+    if (isPastDue) {
+      return t('common.time.daysOverdue', { count: Math.abs(daysUntilDue) });
+    } else if (daysUntilDue === 0) {
+      return t('common.time.dueToday');
+    } else {
+      return t('common.time.daysRemaining', { count: daysUntilDue });
+    }
+  };
+
   return (
-    <div className="card">
+    <article className="card" aria-labelledby={`invoice-${invoice.id}-title`}>
       {/* Invoice Header */}
       <div className="card-header">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100" aria-hidden="true">
               <svg
                 className="h-6 w-6 text-blue-600"
                 fill="none"
@@ -81,11 +74,11 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 id={`invoice-${invoice.id}-title`} className="text-lg font-semibold text-gray-900">
                 Invoice #{invoice.number}
               </h3>
               <p className="text-sm text-gray-600">
-                Issued: {formatDate(invoice.date)}
+                {t('invoices.issued', { date: formatDate(invoice.date) })}
               </p>
             </div>
           </div>
@@ -99,23 +92,19 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
         {/* Amount and Due Date */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <p className="text-sm text-gray-500">Total Amount</p>
+            <p className="text-sm text-gray-500">{t('invoices.totalAmount')}</p>
             <p className="text-2xl font-bold text-gray-900">
               {formatCurrency(invoice.amount)}
             </p>
           </div>
           <div className="text-left sm:text-right">
-            <p className="text-sm text-gray-500">Due Date</p>
+            <p className="text-sm text-gray-500">{t('invoices.dueDate')}</p>
             <p className={`font-medium ${isPastDue ? 'text-red-600' : 'text-gray-900'}`}>
               {formatDate(invoice.dueDate)}
             </p>
             {invoice.status !== 'paid' && (
               <p className={`text-xs ${isPastDue ? 'text-red-500' : 'text-gray-500'}`}>
-                {isPastDue
-                  ? `${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''} overdue`
-                  : daysUntilDue === 0
-                    ? 'Due today'
-                    : `${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''} remaining`}
+                {getDueDateStatus()}
               </p>
             )}
           </div>
@@ -124,21 +113,21 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
         {/* Invoice Items */}
         {invoice.items.length > 0 && (
           <div className="mb-6">
-            <h4 className="font-medium text-gray-900 mb-3">Invoice Details</h4>
+            <h4 className="font-medium text-gray-900 mb-3">{t('invoices.invoiceDetails')}</h4>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label="Invoice items">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Description
                     </th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Qty
                     </th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Unit Price
                     </th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Total
                     </th>
                   </tr>
@@ -163,9 +152,9 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
                 </tbody>
                 <tfoot className="bg-gray-50">
                   <tr>
-                    <td colSpan={3} className="px-3 py-2 text-sm font-medium text-gray-900 text-right">
+                    <th scope="row" colSpan={3} className="px-3 py-2 text-sm font-medium text-gray-900 text-right">
                       Total
-                    </td>
+                    </th>
                     <td className="px-3 py-2 text-sm font-bold text-gray-900 text-right">
                       {formatCurrency(invoice.amount)}
                     </td>
@@ -181,6 +170,7 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
           <button
             type="button"
             onClick={handleDownload}
+            aria-label={`Download PDF for invoice ${invoice.number}`}
             className="btn btn-outline flex-1 sm:flex-none"
           >
             <svg
@@ -188,6 +178,7 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -196,19 +187,21 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
                 d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
               />
             </svg>
-            Download PDF
+            {t('invoices.actions.downloadPdf')}
           </button>
           {invoice.status !== 'paid' && (
             <button
               type="button"
               className="btn btn-primary flex-1 sm:flex-none"
               disabled
+              aria-label={`Pay invoice ${invoice.number} (Coming soon)`}
             >
               <svg
                 className="mr-2 h-4 w-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -217,7 +210,7 @@ export function InvoiceCard({ invoice }: InvoiceCardProps) {
                   d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
                 />
               </svg>
-              Pay Now
+              {t('invoices.actions.payNow')}
             </button>
           )}
         </div>

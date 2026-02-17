@@ -23,6 +23,10 @@ use Gibbon\Forms\Form;
 use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\CareTracking\Service\AttendanceService;
+use Gibbon\Module\CareTracking\Validator\AttendanceValidator;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -47,17 +51,33 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateway via DI container
     $attendanceGateway = $container->get(AttendanceGateway::class);
 
+    // Initialize AttendanceService
+    $attendanceValidator = new AttendanceValidator();
+    $attendanceService = new AttendanceService($attendanceGateway, $attendanceValidator);
+
+    // Get AI Sync service for webhook notifications
+    try {
+        $settingGateway = $container->get(SettingGateway::class);
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
+
     // Handle check-in/check-out actions
     $action = $_POST['action'] ?? '';
     $childID = $_POST['gibbonPersonID'] ?? null;
 
     if (!empty($action) && !empty($childID)) {
+        // CSRF check
+        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $session->get('csrf_token')) {
+            $page->addError(__('Your request failed because you do not have access to this action.'));
+        } else {
         $time = date('H:i:s');
         $lateArrival = $_POST['lateArrival'] ?? 'N';
         $notes = $_POST['notes'] ?? null;
 
         if ($action === 'checkIn') {
-            $result = $attendanceGateway->checkIn(
+            $serviceResult = $attendanceService->checkIn(
                 $childID,
                 $gibbonSchoolYearID,
                 $date,
@@ -67,10 +87,30 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                 $notes
             );
 
-            if ($result !== false) {
+            if ($serviceResult['success']) {
+                $result = $serviceResult['id'];
                 $page->addSuccess(__('Child has been checked in successfully.'));
+
+                // Trigger webhook for AI sync
+                if ($aiSyncService !== null) {
+                    try {
+                        $attendanceData = [
+                            'gibbonCareAttendanceID' => $result,
+                            'gibbonPersonID' => $childID,
+                            'date' => $date,
+                            'checkInTime' => $time,
+                            'lateArrival' => $lateArrival,
+                            'notes' => $notes,
+                            'checkInByID' => $gibbonPersonID,
+                        ];
+                        $aiSyncService->syncCheckIn($result, $attendanceData);
+                    } catch (Exception $e) {
+                        // Silently fail - don't break UX if webhook fails
+                    }
+                }
             } else {
-                $page->addError(__('Failed to check in child.'));
+                $errors = implode(', ', $serviceResult['errors']);
+                $page->addError(__('Failed to check in child.') . ($errors ? ' ' . $errors : ''));
             }
         } elseif ($action === 'checkOut') {
             $attendanceID = $_POST['gibbonCareAttendanceID'] ?? null;
@@ -78,7 +118,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
             $pickupPersonName = $_POST['pickupPersonName'] ?? null;
 
             if (!empty($attendanceID)) {
-                $result = $attendanceGateway->checkOut(
+                $serviceResult = $attendanceService->checkOut(
                     $attendanceID,
                     $time,
                     $gibbonPersonID,
@@ -89,12 +129,33 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                     $notes
                 );
 
-                if ($result !== false) {
+                if ($serviceResult['success']) {
                     $page->addSuccess(__('Child has been checked out successfully.'));
+
+                    // Trigger webhook for AI sync
+                    if ($aiSyncService !== null) {
+                        try {
+                            $attendanceData = [
+                                'gibbonCareAttendanceID' => $attendanceID,
+                                'gibbonPersonID' => $childID,
+                                'date' => $date,
+                                'checkOutTime' => $time,
+                                'earlyDeparture' => $earlyDeparture,
+                                'pickupPersonName' => $pickupPersonName,
+                                'notes' => $notes,
+                                'checkOutByID' => $gibbonPersonID,
+                            ];
+                            $aiSyncService->syncCheckOut($attendanceID, $attendanceData);
+                        } catch (Exception $e) {
+                            // Silently fail - don't break UX if webhook fails
+                        }
+                    }
                 } else {
-                    $page->addError(__('Failed to check out child.'));
+                    $errors = implode(', ', $serviceResult['errors']);
+                    $page->addError(__('Failed to check out child.') . ($errors ? ' ' . $errors : ''));
                 }
             }
+        }
         }
     }
 
@@ -118,8 +179,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Display formatted date
     echo '<p class="text-lg mb-4">' . __('Showing attendance for') . ': <strong>' . Format::date($date) . '</strong></p>';
 
-    // Get summary statistics
-    $summary = $attendanceGateway->getAttendanceSummaryByDate($gibbonSchoolYearID, $date);
+    // Get summary statistics using service
+    $summary = $attendanceService->getAttendanceSummaryByDate($gibbonSchoolYearID, $date);
 
     // Display summary
     echo '<div class="bg-white rounded-lg shadow p-4 mb-4">';
@@ -135,12 +196,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Section: Children Not Yet Checked In
     echo '<h3 class="text-lg font-semibold mt-6 mb-3">' . __('Awaiting Check-In') . '</h3>';
 
-    $notCheckedIn = $attendanceGateway->selectChildrenNotCheckedIn($gibbonSchoolYearID, $date);
+    $notCheckedIn = $attendanceService->getChildrenNotCheckedIn($gibbonSchoolYearID, $date);
 
     if ($notCheckedIn->rowCount() > 0) {
         echo '<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">';
         echo '<form method="post" action="' . $session->get('absoluteURL') . '/index.php?q=/modules/CareTracking/careTracking_attendance.php&date=' . $date . '">';
         echo '<input type="hidden" name="action" value="checkIn">';
+        echo '<input type="hidden" name="csrf_token" value="' . $session->get('csrf_token') . '">';
 
         echo '<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">';
         foreach ($notCheckedIn as $child) {
@@ -173,12 +235,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Section: Children Currently Checked In (Ready for Check-Out)
     echo '<h3 class="text-lg font-semibold mt-6 mb-3">' . __('Currently Checked In') . '</h3>';
 
-    $currentlyCheckedIn = $attendanceGateway->selectChildrenCurrentlyCheckedIn($gibbonSchoolYearID, $date);
+    $currentlyCheckedIn = $attendanceService->getChildrenCurrentlyCheckedIn($gibbonSchoolYearID, $date);
 
     if ($currentlyCheckedIn->rowCount() > 0) {
         echo '<div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">';
         echo '<form method="post" action="' . $session->get('absoluteURL') . '/index.php?q=/modules/CareTracking/careTracking_attendance.php&date=' . $date . '">';
         echo '<input type="hidden" name="action" value="checkOut">';
+        echo '<input type="hidden" name="csrf_token" value="' . $session->get('csrf_token') . '">';
 
         echo '<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">';
         foreach ($currentlyCheckedIn as $child) {
@@ -220,8 +283,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         ->sortBy(['surname', 'preferredName'])
         ->fromPOST();
 
-    // Get attendance data for the date
-    $attendance = $attendanceGateway->queryAttendanceByDate($criteria, $gibbonSchoolYearID, $date);
+    // Get attendance data for the date using service
+    $attendance = $attendanceService->queryAttendanceByDate($criteria, $gibbonSchoolYearID, $date);
 
     // Build DataTable
     $table = DataTable::createPaginated('attendance', $criteria);

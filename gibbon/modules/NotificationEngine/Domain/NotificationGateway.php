@@ -24,12 +24,18 @@ namespace Gibbon\Module\NotificationEngine\Domain;
 use Gibbon\Domain\Traits\TableAware;
 use Gibbon\Domain\QueryCriteria;
 use Gibbon\Domain\QueryableGateway;
+use Gibbon\Module\NotificationEngine\Service\DeliveryRulesService;
+use Gibbon\Module\NotificationEngine\Service\PreferenceService;
 
 /**
  * NotificationGateway
  *
  * Gateway for notification queue, template, preference, and FCM token operations.
- * Supports multi-channel notifications (email, push) with retry logic.
+ * Provides data access layer for notifications.
+ *
+ * Business logic has been moved to service classes:
+ * - DeliveryRulesService: Retry logic, delivery scheduling, queue health
+ * - PreferenceService: Notification preference management
  *
  * @version v1.0.00
  * @since   v1.0.00
@@ -41,6 +47,38 @@ class NotificationGateway extends QueryableGateway
     private static $tableName = 'gibbonNotificationQueue';
     private static $primaryKey = 'gibbonNotificationQueueID';
     private static $searchableColumns = ['gibbonNotificationQueue.title', 'gibbonNotificationQueue.body'];
+
+    /**
+     * @var DeliveryRulesService|null
+     */
+    private $deliveryRulesService;
+
+    /**
+     * @var PreferenceService|null
+     */
+    private $preferenceService;
+
+    /**
+     * Set the delivery rules service.
+     *
+     * @param DeliveryRulesService $service
+     * @return void
+     */
+    public function setDeliveryRulesService(DeliveryRulesService $service)
+    {
+        $this->deliveryRulesService = $service;
+    }
+
+    /**
+     * Set the preference service.
+     *
+     * @param PreferenceService $service
+     * @return void
+     */
+    public function setPreferenceService(PreferenceService $service)
+    {
+        $this->preferenceService = $service;
+    }
 
     // =========================================================================
     // QUEUE OPERATIONS
@@ -86,18 +124,27 @@ class NotificationGateway extends QueryableGateway
     }
 
     /**
-     * Query pending notifications ready for processing.
+     * Query pending notifications ready for processing with exponential backoff.
+     *
+     * Only returns notifications that are ready to be retried based on:
+     * - Attempt count less than max attempts
+     * - Sufficient time has passed since last attempt (exponential backoff)
      *
      * @param int $limit Maximum number to fetch
      * @param int $maxAttempts Maximum retry attempts before giving up
+     * @param int $retryDelayMinutes Base delay in minutes (exponential backoff applied)
      * @return array
      */
-    public function selectPendingNotifications($limit = 50, $maxAttempts = 3)
+    public function selectPendingNotifications($limit = 50, $maxAttempts = 3, $retryDelayMinutes = 5)
     {
         $data = [
             'limit' => (int) $limit,
             'maxAttempts' => (int) $maxAttempts,
         ];
+
+        // Build SQL with exponential backoff logic
+        // For first attempt (attempts = 0): no delay needed
+        // For retries (attempts > 0): require delay based on 2^(attempts-1) * retryDelayMinutes
         $sql = "SELECT q.*,
                        p.preferredName AS recipientPreferredName,
                        p.surname AS recipientSurname,
@@ -107,6 +154,19 @@ class NotificationGateway extends QueryableGateway
                 INNER JOIN gibbonPerson AS p ON p.gibbonPersonID = q.gibbonPersonID
                 WHERE q.status = 'pending'
                 AND q.attempts < :maxAttempts
+                AND (
+                    -- First attempt: no delay
+                    q.attempts = 0
+                    OR
+                    -- Retry with exponential backoff
+                    -- Delay = retryDelayMinutes * 2^(attempts-1) minutes
+                    -- Attempt 1: " . $retryDelayMinutes . " min
+                    -- Attempt 2: " . ($retryDelayMinutes * 2) . " min
+                    -- Attempt 3: " . ($retryDelayMinutes * 4) . " min
+                    q.lastAttemptAt <= DATE_SUB(NOW(), INTERVAL (
+                        " . $retryDelayMinutes . " * POW(2, q.attempts - 1)
+                    ) MINUTE)
+                )
                 ORDER BY q.timestampCreated ASC
                 LIMIT :limit";
 
@@ -235,6 +295,8 @@ class NotificationGateway extends QueryableGateway
     /**
      * Mark notification as failed with error message.
      *
+     * Uses DeliveryRulesService to determine if retries are exhausted.
+     *
      * @param int $gibbonNotificationQueueID
      * @param string $errorMessage
      * @param int $maxAttempts Maximum retry attempts
@@ -248,8 +310,17 @@ class NotificationGateway extends QueryableGateway
             return false;
         }
 
+        // Determine if retries are exhausted (use service if available)
+        $retriesExhausted = false;
+        if ($this->deliveryRulesService) {
+            $retriesExhausted = $this->deliveryRulesService->hasExhaustedRetries($notification, $maxAttempts);
+        } else {
+            // Fallback logic for backward compatibility
+            $retriesExhausted = ($notification['attempts'] >= $maxAttempts);
+        }
+
         // If we've exhausted retries, mark as permanently failed
-        $newStatus = ($notification['attempts'] >= $maxAttempts) ? 'failed' : 'pending';
+        $newStatus = $retriesExhausted ? 'failed' : 'pending';
 
         $data = [
             'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
@@ -505,12 +576,19 @@ class NotificationGateway extends QueryableGateway
     /**
      * Check if a user has email notifications enabled for a type.
      *
+     * @deprecated Use PreferenceService::isEmailEnabled() instead
      * @param int $gibbonPersonID
      * @param string $type
      * @return bool
      */
     public function isEmailEnabled($gibbonPersonID, $type)
     {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->preferenceService) {
+            return $this->preferenceService->isEmailEnabled($gibbonPersonID, $type);
+        }
+
+        // Fallback logic for backward compatibility
         $preference = $this->getPreference($gibbonPersonID, $type);
 
         // Default to enabled if no preference exists
@@ -524,12 +602,19 @@ class NotificationGateway extends QueryableGateway
     /**
      * Check if a user has push notifications enabled for a type.
      *
+     * @deprecated Use PreferenceService::isPushEnabled() instead
      * @param int $gibbonPersonID
      * @param string $type
      * @return bool
      */
     public function isPushEnabled($gibbonPersonID, $type)
     {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->preferenceService) {
+            return $this->preferenceService->isPushEnabled($gibbonPersonID, $type);
+        }
+
+        // Fallback logic for backward compatibility
         $preference = $this->getPreference($gibbonPersonID, $type);
 
         // Default to enabled if no preference exists
@@ -729,5 +814,254 @@ class NotificationGateway extends QueryableGateway
                 OR (lastUsedAt IS NULL AND timestampCreated < :cutoffDate)";
 
         return $this->db()->delete($sql, $data);
+    }
+
+    // =========================================================================
+    // RETRY MECHANISM HELPERS
+    // =========================================================================
+
+    /**
+     * Calculate next retry time for a notification based on exponential backoff.
+     *
+     * Formula: retryDelayMinutes * 2^(attempts-1) minutes
+     * - Attempt 1: retryDelayMinutes (e.g., 5 minutes)
+     * - Attempt 2: retryDelayMinutes * 2 (e.g., 10 minutes)
+     * - Attempt 3: retryDelayMinutes * 4 (e.g., 20 minutes)
+     *
+     * @deprecated Use DeliveryRulesService::calculateRetryDelay() instead
+     * @param int $attemptNumber Current attempt number (1-based)
+     * @param int $retryDelayMinutes Base delay in minutes
+     * @return int Delay in minutes
+     */
+    public function calculateRetryDelay($attemptNumber, $retryDelayMinutes = 5)
+    {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->deliveryRulesService) {
+            return $this->deliveryRulesService->calculateRetryDelay($attemptNumber, $retryDelayMinutes);
+        }
+
+        // Fallback logic for backward compatibility
+        if ($attemptNumber <= 0) {
+            return 0; // No delay for first attempt
+        }
+
+        // Exponential backoff: 2^(attempts-1) * base delay
+        return (int) ($retryDelayMinutes * pow(2, $attemptNumber - 1));
+    }
+
+    /**
+     * Get the next retry timestamp for a notification.
+     *
+     * @deprecated Use DeliveryRulesService::getNextRetryTime() instead
+     * @param array $notification Notification data with 'attempts' and 'lastAttemptAt'
+     * @param int $retryDelayMinutes Base delay in minutes
+     * @return string|null ISO 8601 timestamp when retry should occur, or null if ready now
+     */
+    public function getNextRetryTime($notification, $retryDelayMinutes = 5)
+    {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->deliveryRulesService) {
+            return $this->deliveryRulesService->getNextRetryTime($notification, $retryDelayMinutes);
+        }
+
+        // Fallback logic for backward compatibility
+        $attempts = (int) ($notification['attempts'] ?? 0);
+
+        // If never attempted or no delay needed
+        if ($attempts === 0 || empty($notification['lastAttemptAt'])) {
+            return null; // Ready immediately
+        }
+
+        $delayMinutes = $this->calculateRetryDelay($attempts, $retryDelayMinutes);
+        $lastAttempt = strtotime($notification['lastAttemptAt']);
+        $nextRetry = $lastAttempt + ($delayMinutes * 60);
+
+        return date('Y-m-d H:i:s', $nextRetry);
+    }
+
+    /**
+     * Check if a notification is ready for retry.
+     *
+     * @deprecated Use DeliveryRulesService::isReadyForRetry() instead
+     * @param array $notification Notification data
+     * @param int $retryDelayMinutes Base delay in minutes
+     * @return bool True if ready for retry
+     */
+    public function isReadyForRetry($notification, $retryDelayMinutes = 5)
+    {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->deliveryRulesService) {
+            return $this->deliveryRulesService->isReadyForRetry($notification, $retryDelayMinutes);
+        }
+
+        // Fallback logic for backward compatibility
+        $nextRetryTime = $this->getNextRetryTime($notification, $retryDelayMinutes);
+
+        // If null, ready immediately
+        if ($nextRetryTime === null) {
+            return true;
+        }
+
+        // Compare with current time
+        return strtotime($nextRetryTime) <= time();
+    }
+
+    /**
+     * Get retry statistics for failed notifications.
+     *
+     * Returns counts grouped by attempt number.
+     *
+     * @return array
+     */
+    public function getRetryStatistics()
+    {
+        $sql = "SELECT
+                    attempts,
+                    COUNT(*) as count,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count
+                FROM gibbonNotificationQueue
+                WHERE attempts > 0
+                GROUP BY attempts
+                ORDER BY attempts ASC";
+
+        return $this->db()->select($sql)->fetchAll();
+    }
+
+    /**
+     * Get notifications pending retry (waiting for backoff delay).
+     *
+     * These are pending notifications that aren't ready yet due to exponential backoff.
+     *
+     * @param int $retryDelayMinutes Base delay in minutes
+     * @return array
+     */
+    public function selectNotificationsPendingRetry($retryDelayMinutes = 5)
+    {
+        $sql = "SELECT q.*,
+                       p.preferredName AS recipientPreferredName,
+                       p.surname AS recipientSurname,
+                       p.email AS recipientEmail,
+                       TIMESTAMPADD(MINUTE,
+                           " . $retryDelayMinutes . " * POW(2, q.attempts - 1),
+                           q.lastAttemptAt
+                       ) as nextRetryAt
+                FROM gibbonNotificationQueue q
+                INNER JOIN gibbonPerson AS p ON p.gibbonPersonID = q.gibbonPersonID
+                WHERE q.status = 'pending'
+                AND q.attempts > 0
+                AND q.lastAttemptAt > DATE_SUB(NOW(), INTERVAL (
+                    " . $retryDelayMinutes . " * POW(2, q.attempts - 1)
+                ) MINUTE)
+                ORDER BY nextRetryAt ASC";
+
+        return $this->db()->select($sql)->fetchAll();
+    }
+
+    /**
+     * Get detailed retry information for a notification.
+     *
+     * @deprecated Use DeliveryRulesService::getRetryInfo() instead
+     * @param int $gibbonNotificationQueueID
+     * @param int $maxAttempts Maximum retry attempts
+     * @param int $retryDelayMinutes Base delay in minutes
+     * @return array|null Retry information or null if not found
+     */
+    public function getRetryInfo($gibbonNotificationQueueID, $maxAttempts = 3, $retryDelayMinutes = 5)
+    {
+        // Delegate to service if available, otherwise fallback to inline logic
+        if ($this->deliveryRulesService) {
+            return $this->deliveryRulesService->getRetryInfo($gibbonNotificationQueueID, $maxAttempts, $retryDelayMinutes);
+        }
+
+        // Fallback logic for backward compatibility
+        $notification = $this->getNotificationByID($gibbonNotificationQueueID);
+
+        if (!$notification) {
+            return null;
+        }
+
+        $attempts = (int) $notification['attempts'];
+        $nextRetryTime = $this->getNextRetryTime($notification, $retryDelayMinutes);
+        $isReady = $this->isReadyForRetry($notification, $retryDelayMinutes);
+        $hasMoreRetries = $attempts < $maxAttempts;
+
+        return [
+            'gibbonNotificationQueueID' => $gibbonNotificationQueueID,
+            'currentAttempts' => $attempts,
+            'maxAttempts' => $maxAttempts,
+            'retriesRemaining' => max(0, $maxAttempts - $attempts),
+            'hasMoreRetries' => $hasMoreRetries,
+            'lastAttemptAt' => $notification['lastAttemptAt'],
+            'nextRetryAt' => $nextRetryTime,
+            'isReadyForRetry' => $isReady,
+            'status' => $notification['status'],
+            'errorMessage' => $notification['errorMessage'],
+            'currentDelayMinutes' => $attempts > 0 ? $this->calculateRetryDelay($attempts, $retryDelayMinutes) : 0,
+            'nextDelayMinutes' => $hasMoreRetries ? $this->calculateRetryDelay($attempts + 1, $retryDelayMinutes) : null,
+        ];
+    }
+
+    /**
+     * Get retry queue health metrics.
+     *
+     * Returns overall health status of the retry mechanism including:
+     * - Total notifications in retry
+     * - Average attempts
+     * - Oldest pending retry
+     * - Success/failure rates
+     *
+     * @return array
+     */
+    public function getRetryHealthMetrics()
+    {
+        // Get retry queue stats
+        $sql = "SELECT
+                    COUNT(*) as total_retrying,
+                    AVG(attempts) as avg_attempts,
+                    MAX(attempts) as max_attempts,
+                    MIN(lastAttemptAt) as oldest_retry,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_retry_count,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as permanently_failed_count
+                FROM gibbonNotificationQueue
+                WHERE attempts > 0";
+
+        $retryStats = $this->db()->selectOne($sql);
+
+        // Get overall success/failure rates
+        $sql = "SELECT
+                    COUNT(*) as total_notifications,
+                    SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent_count,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+                    SUM(CASE WHEN status = 'sent' AND attempts > 0 THEN 1 ELSE 0 END) as recovered_by_retry_count
+                FROM gibbonNotificationQueue";
+
+        $overallStats = $this->db()->selectOne($sql);
+
+        // Calculate rates
+        $totalNotifications = (int) $overallStats['total_notifications'];
+        $sentCount = (int) $overallStats['sent_count'];
+        $failedCount = (int) $overallStats['failed_count'];
+        $recoveredByRetry = (int) $overallStats['recovered_by_retry_count'];
+
+        $successRate = $totalNotifications > 0 ? ($sentCount / $totalNotifications) * 100 : 0;
+        $failureRate = $totalNotifications > 0 ? ($failedCount / $totalNotifications) * 100 : 0;
+        $retryRecoveryRate = $sentCount > 0 ? ($recoveredByRetry / $sentCount) * 100 : 0;
+
+        return [
+            'total_retrying' => (int) $retryStats['total_retrying'],
+            'avg_attempts' => round((float) $retryStats['avg_attempts'], 2),
+            'max_attempts' => (int) $retryStats['max_attempts'],
+            'oldest_retry' => $retryStats['oldest_retry'],
+            'pending_retry_count' => (int) $retryStats['pending_retry_count'],
+            'permanently_failed_count' => (int) $retryStats['permanently_failed_count'],
+            'total_notifications' => $totalNotifications,
+            'sent_count' => $sentCount,
+            'failed_count' => $failedCount,
+            'recovered_by_retry_count' => $recoveredByRetry,
+            'success_rate' => round($successRate, 2),
+            'failure_rate' => round($failureRate, 2),
+            'retry_recovery_rate' => round($retryRecoveryRate, 2),
+        ];
     }
 }

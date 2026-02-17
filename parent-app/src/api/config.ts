@@ -5,8 +5,8 @@
  * Configuration is set at build time via react-native-config or similar.
  */
 
-// Development configuration - can be overridden at build time
-const DEFAULT_API_BASE_URL = 'http://localhost/gibbon';
+// Shared production backend configuration (Hetzner + Caddy path routing)
+const DEFAULT_API_BASE_URL = 'https://ai.46-225-139-110.sslip.io/gibbon';
 
 // In production, this would be replaced by environment configuration
 // For now, use default development URL
@@ -20,7 +20,9 @@ export const API_CONFIG = {
     auth: {
       login: '/modules/ParentPortal/api/auth/login',
       logout: '/modules/ParentPortal/api/auth/logout',
+      refresh: '/modules/ParentPortal/api/auth/refresh',
       refreshToken: '/modules/ParentPortal/api/auth/refresh',
+      me: '/modules/ParentPortal/api/auth/me',
     },
     // Daily feed endpoints
     feed: {

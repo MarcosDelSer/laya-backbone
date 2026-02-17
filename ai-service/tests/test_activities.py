@@ -913,8 +913,9 @@ class TestListActivitiesEndpoint:
         data = response.json()
         assert "items" in data
         assert "total" in data
-        assert "skip" in data
-        assert "limit" in data
+        assert "page" in data
+        assert "per_page" in data
+        assert "total_pages" in data
         assert isinstance(data["items"], list)
 
     @pytest.mark.asyncio
@@ -938,14 +939,14 @@ class TestListActivitiesEndpoint:
         response = await client.get(
             "/api/v1/activities",
             headers=auth_headers,
-            params={"skip": 0, "limit": 3},
+            params={"page": 1, "per_page": 3},
         )
 
         assert response.status_code == 200
         data = response.json()
         assert len(data["items"]) <= 3
-        assert data["skip"] == 0
-        assert data["limit"] == 3
+        assert data["page"] == 1
+        assert data["per_page"] == 3
 
     @pytest.mark.asyncio
     async def test_list_activities_type_filter(

@@ -23,6 +23,10 @@ from app.schemas.activity import (
     ActivityResponse,
     AgeRange,
 )
+from app.utils.query_optimization import (
+    eager_load_activity_participation_relationships,
+    eager_load_activity_relationships,
+)
 
 
 class ActivityService:
@@ -108,11 +112,15 @@ class ActivityService:
         result = await self.db.execute(query)
         activities = result.scalars().all()
 
-        # Get participation history for the child
+        # Get participation history for the child with eager loading
+        # Use eager loading to prevent N+1 queries when accessing participation.activity
         participation_query = (
             select(ActivityParticipation)
             .where(ActivityParticipation.child_id == child_id)
             .order_by(ActivityParticipation.started_at.desc())
+        )
+        participation_query = eager_load_activity_participation_relationships(
+            participation_query
         )
         participation_result = await self.db.execute(participation_query)
         participations = participation_result.scalars().all()
@@ -372,11 +380,16 @@ class ActivityService:
         Returns:
             Activity if found, None otherwise.
         """
-        # Use cast for SQLite compatibility (TEXT storage) while maintaining PostgreSQL compatibility
-        from sqlalchemy import cast, String
-        query = select(Activity).where(
-            cast(Activity.id, String) == str(activity_id)
-        )
+        # Use direct UUID comparison for PostgreSQL (performant with indexes)
+        # Use cast() for SQLite test compatibility (stores UUIDs as TEXT)
+        dialect_name = self.db.bind.dialect.name if self.db.bind else 'postgresql'
+
+        if dialect_name == 'sqlite':
+            from sqlalchemy import cast, String
+            query = select(Activity).where(cast(Activity.id, String) == str(activity_id))
+        else:
+            query = select(Activity).where(Activity.id == activity_id)
+
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
@@ -386,6 +399,7 @@ class ActivityService:
         limit: int = 100,
         activity_type: Optional[str] = None,
         is_active: Optional[bool] = True,
+        include_relationships: bool = False,
     ) -> tuple[list[Activity], int]:
         """List activities with optional filtering and pagination.
 
@@ -394,6 +408,7 @@ class ActivityService:
             limit: Maximum number of records to return.
             activity_type: Optional filter by activity type.
             is_active: Optional filter by active status.
+            include_relationships: Whether to eager load relationships (prevents N+1).
 
         Returns:
             Tuple of (list of activities, total count).
@@ -414,6 +429,11 @@ class ActivityService:
 
         # Apply pagination
         query = query.offset(skip).limit(limit).order_by(Activity.created_at.desc())
+
+        # Apply eager loading if relationships will be accessed
+        # This prevents N+1 queries when accessing activity.recommendations or activity.participations
+        if include_relationships:
+            query = eager_load_activity_relationships(query)
 
         result = await self.db.execute(query)
         activities = list(result.scalars().all())
@@ -483,3 +503,66 @@ class ActivityService:
         await self.db.commit()
         await self.db.refresh(recommendation)
         return recommendation
+
+    async def get_participations_for_child(
+        self,
+        child_id: UUID,
+        limit: int = 20,
+        skip: int = 0,
+    ) -> list[ActivityParticipation]:
+        """Retrieve activity participations for a child with eager loading.
+
+        Prevents N+1 queries by loading participation.activity relationship upfront.
+
+        Args:
+            child_id: ID of the child to get participations for
+            limit: Maximum number of participations to return
+            skip: Number of participations to skip (for pagination)
+
+        Returns:
+            List of ActivityParticipation objects with activity relationship loaded
+        """
+        query = (
+            select(ActivityParticipation)
+            .where(ActivityParticipation.child_id == child_id)
+            .order_by(ActivityParticipation.started_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        # Apply eager loading to prevent N+1 queries when accessing participation.activity
+        query = eager_load_activity_participation_relationships(query)
+
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def get_activity_with_stats(self, activity_id: UUID) -> Optional[Activity]:
+        """Retrieve an activity with all related statistics loaded.
+
+        Prevents N+1 queries by loading recommendations and participations upfront.
+
+        Args:
+            activity_id: Unique identifier of the activity
+
+        Returns:
+            Activity if found with relationships loaded, None otherwise
+        """
+        # Ensure activity_id is UUID type for proper index usage
+        if isinstance(activity_id, str):
+            activity_id = UUID(activity_id)
+
+        # Use direct UUID comparison for PostgreSQL (performant with indexes)
+        # Use cast() for SQLite test compatibility (stores UUIDs as TEXT)
+        dialect_name = self.db.bind.dialect.name if self.db.bind else 'postgresql'
+
+        if dialect_name == 'sqlite':
+            from sqlalchemy import cast, String
+            query = select(Activity).where(cast(Activity.id, String) == str(activity_id))
+        else:
+            query = select(Activity).where(Activity.id == activity_id)
+
+        # Apply eager loading to prevent N+1 queries
+        query = eager_load_activity_relationships(query)
+
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()

@@ -1,0 +1,36 @@
+{
+  "browser": {
+    "enabled": true,
+    "defaultProfile": "browserless",
+    "profiles": {
+      "browserless": {
+        "cdpUrl": "https://production-sfo.browserless.io?token=${BROWSERLESS_TOKEN}",
+        "color": "#00AA00",
+        "tags": [
+          "cloud",
+          "playwright",
+          "agent"
+        ]
+      },
+      "browserbase": {
+        "cdpUrl": "wss://connect.browserbase.com?apiKey=${BROWSERBASE_API_KEY}&projectId=${BROWSERBASE_PROJECT_ID}",
+        "color": "#0055CC",
+        "tags": [
+          "cloud",
+          "playwright",
+          "agent"
+        ]
+      }
+    },
+    "timeouts": {
+      "connect_ms": 2000,
+      "handshake_ms": 4000
+    },
+    "recommendations": {
+      "headless": true,
+      "trace": "on-first-retry",
+      "video": "retain-on-failure",
+      "screenshot": "only-on-failure"
+    }
+  }
+}

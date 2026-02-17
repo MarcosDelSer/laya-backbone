@@ -1,7 +1,9 @@
 'use client';
 
 import { useRef, useEffect } from 'react';
-import { MessageBubble, formatDate } from './MessageBubble';
+import { useTranslations } from 'next-intl';
+import { MessageBubble } from './MessageBubble';
+import { useFormatting } from '@/lib/hooks/useFormatting';
 
 interface Message {
   id: string;
@@ -35,11 +37,34 @@ function groupMessagesByDate(messages: Message[]): Map<string, Message[]> {
 
 export function MessageThread({ messages, currentUserId }: MessageThreadProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const t = useTranslations();
+  const { formatDate, isToday } = useFormatting();
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  /**
+   * Format the date for thread dividers with locale-aware formatting.
+   * Returns "Today", "Yesterday", or a formatted date.
+   */
+  const formatThreadDate = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return t('common.today');
+    }
+
+    if (date.toDateString() === yesterday.toDateString()) {
+      return t('common.yesterday');
+    }
+
+    return formatDate(date, 'medium');
+  };
 
   if (messages.length === 0) {
     return (
@@ -61,10 +86,10 @@ export function MessageThread({ messages, currentUserId }: MessageThreadProps) {
             </svg>
           </div>
           <h3 className="text-lg font-medium text-gray-900">
-            No messages yet
+            {t('messages.noMessagesInThread')}
           </h3>
           <p className="mt-2 text-sm text-gray-500">
-            Start the conversation by sending a message below.
+            {t('messages.startConversation')}
           </p>
         </div>
       </div>
@@ -81,7 +106,7 @@ export function MessageThread({ messages, currentUserId }: MessageThreadProps) {
           <div className="flex items-center justify-center my-6">
             <div className="border-t border-gray-200 flex-1" />
             <span className="px-4 text-xs font-medium text-gray-500 bg-white">
-              {formatDate(dayMessages[0].timestamp)}
+              {formatThreadDate(dayMessages[0].timestamp)}
             </span>
             <div className="border-t border-gray-200 flex-1" />
           </div>
@@ -115,6 +140,13 @@ interface ThreadPreviewProps {
 }
 
 export function ThreadPreview({ thread, isSelected, onClick }: ThreadPreviewProps) {
+  const t = useTranslations();
+  const { formatTime, formatDate } = useFormatting();
+
+  /**
+   * Format the preview time with locale-aware formatting.
+   * Shows relative time for recent messages, time for today, weekday for this week, or date.
+   */
   const formatPreviewTime = (timestamp: string): string => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -124,20 +156,15 @@ export function ThreadPreview({ thread, isSelected, onClick }: ThreadPreviewProp
 
     if (diffHours < 1) {
       const diffMins = Math.floor(diffMs / (1000 * 60));
-      return diffMins < 1 ? 'Just now' : `${diffMins}m ago`;
+      return diffMins < 1
+        ? t('common.justNow')
+        : t('common.minutesAgo', { count: diffMins });
     } else if (diffHours < 24) {
-      return date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      });
+      return formatTime(timestamp, 'short');
     } else if (diffDays < 7) {
-      return date.toLocaleDateString('en-US', { weekday: 'short' });
+      return formatDate(timestamp, 'short');
     } else {
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      });
+      return formatDate(timestamp, 'short');
     }
   };
 

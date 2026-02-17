@@ -105,6 +105,26 @@ $actionRows[] = [
 ];
 
 $actionRows[] = [
+    'name'                      => 'Webhook Health Monitoring',
+    'precedence'                => 0,
+    'category'                  => 'Integration',
+    'description'               => 'Monitor webhook health, performance metrics, and system status.',
+    'URLList'                   => 'aiSync_health.php',
+    'entryURL'                  => 'aiSync_health.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'Y',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'N',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[] = [
     'name'                      => 'View Sync Logs',
     'precedence'                => 0,
     'category'                  => 'Integration',

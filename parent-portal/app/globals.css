@@ -9,7 +9,19 @@
     --muted: 107 114 128;
   }
 
+  /**
+   * Responsive Text Scaling - WCAG 2.1 AA Compliance
+   * Success Criterion 1.4.4: Resize Text (Level AA)
+   *
+   * Setting font-size: 100% on html element enables proper text scaling
+   * when users adjust their browser's font size settings or zoom level.
+   * This allows text to scale up to 200% without loss of content or functionality.
+   *
+   * All text sizing throughout the application uses rem/em units (not px)
+   * to ensure proportional scaling relative to this root font size.
+   */
   html {
+    font-size: 100%; /* 16px default, but respects user browser settings */
     scroll-behavior: smooth;
   }
 
@@ -111,5 +123,111 @@
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
     @apply bg-gray-300 rounded hover:bg-gray-400;
+  }
+
+  /* Screen reader only - visually hidden but accessible */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .sr-only-focusable:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+}
+
+/**
+ * Accessibility Enhancements
+ * WCAG 2.1 AA Compliant Keyboard Navigation
+ */
+
+/* Focus visible - only show focus ring for keyboard navigation */
+:focus-visible {
+  outline: 2px solid theme('colors.primary.500');
+  outline-offset: 2px;
+}
+
+/* Remove default outline when :focus-visible is supported */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Fallback for browsers without :focus-visible support */
+@supports not selector(:focus-visible) {
+  :focus {
+    outline: 2px solid theme('colors.primary.500');
+    outline-offset: 2px;
+  }
+}
+
+/* Enhanced focus for interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid theme('colors.primary.500');
+  outline-offset: 2px;
+}
+
+/* Skip to main content link */
+.skip-to-main {
+  position: fixed;
+  left: -9999px;
+  z-index: 9999;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  transition: left 0.2s;
+}
+
+.skip-to-main:focus {
+  left: 1rem;
+  top: 1rem;
+}
+
+/* Modal open - prevent body scroll */
+body.modal-open {
+  overflow: hidden;
+}
+
+/* Keyboard navigation for listboxes and menus */
+[role="listbox"] [role="option"]:focus,
+[role="menu"] [role="menuitem"]:focus {
+  outline: 2px solid theme('colors.primary.500');
+  outline-offset: -2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :focus-visible {
+    outline-width: 3px;
+    outline-color: currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  html {
+    scroll-behavior: auto;
   }
 }

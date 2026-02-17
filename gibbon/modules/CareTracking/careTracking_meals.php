@@ -24,6 +24,9 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\MealGateway;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\CareTracking\Service\MealService;
+use Gibbon\Module\AISync\AISyncService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -49,22 +52,20 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     $mealGateway = $container->get(MealGateway::class);
     $attendanceGateway = $container->get(AttendanceGateway::class);
 
-    // Meal types and quantity options
-    $mealTypes = [
-        'Breakfast'        => __('Breakfast'),
-        'Morning Snack'    => __('Morning Snack'),
-        'Lunch'            => __('Lunch'),
-        'Afternoon Snack'  => __('Afternoon Snack'),
-        'Dinner'           => __('Dinner'),
-    ];
+    // Initialize MealService
+    $mealService = new MealService($mealGateway);
 
-    $quantityOptions = [
-        'None'   => __('None'),
-        'Little' => __('Little'),
-        'Some'   => __('Some'),
-        'Most'   => __('Most'),
-        'All'    => __('All'),
-    ];
+    // Get AI Sync service for webhook notifications
+    try {
+        $settingGateway = $container->get(SettingGateway::class);
+        $aiSyncService = new AISyncService($settingGateway, $pdo);
+    } catch (Exception $e) {
+        $aiSyncService = null;
+    }
+
+    // Get meal types and quantity options from service
+    $mealTypes = $mealService->getMealTypes();
+    $quantityOptions = $mealService->getQuantityOptions();
 
     // Handle meal logging action
     $action = $_POST['action'] ?? '';
@@ -77,7 +78,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         $notes = $_POST['notes'] ?? null;
 
         if (!empty($mealType)) {
-            $result = $mealGateway->logMeal(
+            $result = $mealService->logMeal(
                 $childID,
                 $gibbonSchoolYearID,
                 $date,
@@ -90,6 +91,25 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
 
             if ($result !== false) {
                 $page->addSuccess(__('Meal has been logged successfully.'));
+
+                // Trigger webhook for AI sync
+                if ($aiSyncService !== null) {
+                    try {
+                        $mealData = [
+                            'gibbonCareMealID' => $result,
+                            'gibbonPersonID' => $childID,
+                            'date' => $date,
+                            'mealType' => $mealType,
+                            'quantity' => $quantity,
+                            'allergyAlert' => $allergyAlert,
+                            'notes' => $notes,
+                            'recordedByID' => $gibbonPersonID,
+                        ];
+                        $aiSyncService->syncMealEvent($result, $mealData);
+                    } catch (Exception $e) {
+                        // Silently fail - don't break UX if webhook fails
+                    }
+                }
             } else {
                 $page->addError(__('Failed to log meal.'));
             }
@@ -109,7 +129,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         if (!empty($mealType) && !empty($childIDs)) {
             $successCount = 0;
             foreach ($childIDs as $childID) {
-                $result = $mealGateway->logMeal(
+                $result = $mealService->logMeal(
                     $childID,
                     $gibbonSchoolYearID,
                     $date,
@@ -121,6 +141,25 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
                 );
                 if ($result !== false) {
                     $successCount++;
+
+                    // Trigger webhook for AI sync
+                    if ($aiSyncService !== null) {
+                        try {
+                            $mealData = [
+                                'gibbonCareMealID' => $result,
+                                'gibbonPersonID' => $childID,
+                                'date' => $date,
+                                'mealType' => $mealType,
+                                'quantity' => $quantity,
+                                'allergyAlert' => $allergyAlert,
+                                'notes' => $notes,
+                                'recordedByID' => $gibbonPersonID,
+                            ];
+                            $aiSyncService->syncMealEvent($result, $mealData);
+                        } catch (Exception $e) {
+                            // Silently fail - don't break UX if webhook fails
+                        }
+                    }
                 }
             }
             if ($successCount > 0) {
@@ -151,8 +190,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Display formatted date
     echo '<p class="text-lg mb-4">' . __('Showing meals for') . ': <strong>' . Format::date($date) . '</strong></p>';
 
-    // Get summary statistics
-    $summary = $mealGateway->getMealSummaryByDate($gibbonSchoolYearID, $date);
+    // Get summary statistics using service
+    $summary = $mealService->getMealSummaryByDate($gibbonSchoolYearID, $date);
 
     // Display summary
     echo '<div class="bg-white rounded-lg shadow p-4 mb-4">';
@@ -236,7 +275,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
             $image = !empty($child['image_240']) ? $child['image_240'] : 'themes/Default/img/anonymous_240.jpg';
 
             // Check what meals this child has already had today
-            $childMeals = $mealGateway->selectMealsByPersonAndDate($child['gibbonPersonID'], $date);
+            $childMeals = $mealService->getMealsByPersonAndDate($child['gibbonPersonID'], $date);
             $mealsLogged = [];
             foreach ($childMeals as $meal) {
                 $mealsLogged[] = $meal['mealType'];
@@ -362,8 +401,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         ->sortBy(['mealType', 'surname', 'preferredName'])
         ->fromPOST();
 
-    // Get meal data for the date
-    $meals = $mealGateway->queryMealsByDate($criteria, $gibbonSchoolYearID, $date);
+    // Get meal data for the date using service
+    $meals = $mealService->queryMealsByDate($criteria, $gibbonSchoolYearID, $date);
 
     // Build DataTable
     $table = DataTable::createPaginated('meals', $criteria);

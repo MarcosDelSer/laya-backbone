@@ -9,6 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
+    child: Child profile schemas
 """
 
 from app.schemas.activity import (
@@ -72,6 +73,12 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
+from app.schemas.child import (
+    ChildProfileSchema,
+    EmergencyContact,
+    Gender,
+    SpecialNeedInfo,
+)
 
 __all__ = [
     # Base schemas
@@ -130,4 +137,9 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
+    # Child schemas
+    "Gender",
+    "SpecialNeedInfo",
+    "EmergencyContact",
+    "ChildProfileSchema",
 ]

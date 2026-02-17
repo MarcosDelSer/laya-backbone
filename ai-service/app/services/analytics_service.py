@@ -16,6 +16,7 @@ from sqlalchemy import and_, desc, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache, invalidate_cache
 from app.models.analytics import (
     AnalyticsMetric,
     ComplianceCheck,
@@ -66,6 +67,7 @@ class AnalyticsService:
         """
         self.db = db
 
+    @cache(ttl=900, key_prefix="analytics_dashboard")
     async def get_dashboard(
         self,
         facility_id: Optional[UUID] = None,
@@ -74,6 +76,9 @@ class AnalyticsService:
 
         Combines KPIs, enrollment forecast summary, and compliance status
         into a single dashboard view for facility directors.
+
+        Results are cached in Redis with a 15-minute (900 seconds) TTL.
+        Subsequent requests within 15 minutes will be served from cache.
 
         Args:
             facility_id: Optional facility to filter by
@@ -880,6 +885,45 @@ class AnalyticsService:
             alerts.append("No data available - please configure data sources")
 
         return alerts
+
+    async def invalidate_analytics_dashboard_cache(
+        self,
+        facility_id: Optional[UUID] = None,
+    ) -> int:
+        """Invalidate cached analytics dashboard data.
+
+        Args:
+            facility_id: Specific facility ID to invalidate, or None to invalidate all
+
+        Returns:
+            int: Number of cache entries deleted
+        """
+        if facility_id:
+            # Invalidate specific facility dashboard cache
+            pattern = f"*{facility_id}*"
+        else:
+            # Invalidate all dashboard caches
+            pattern = "*"
+
+        return await invalidate_cache("analytics_dashboard", pattern)
+
+    async def refresh_analytics_dashboard_cache(
+        self,
+        facility_id: Optional[UUID] = None,
+    ) -> DashboardResponse:
+        """Refresh analytics dashboard cache by invalidating and refetching.
+
+        Args:
+            facility_id: Optional facility identifier
+
+        Returns:
+            DashboardResponse: Fresh dashboard data
+        """
+        # Invalidate existing cache
+        await self.invalidate_analytics_dashboard_cache(facility_id)
+
+        # Fetch fresh data (which will be cached)
+        return await self.get_dashboard(facility_id)
 
     @staticmethod
     def check_staff_ratio_compliance(

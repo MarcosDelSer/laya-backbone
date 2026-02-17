@@ -285,6 +285,87 @@ $actionRows[] = [
     'categoryPermissionOther'   => 'N',
 ];
 
+// Menu Management Actions
+$actionRows[] = [
+    'name'                      => 'Menu Items Management',
+    'precedence'                => 0,
+    'category'                  => 'Menu',
+    'description'               => 'Manage menu items with allergens and nutritional information.',
+    'URLList'                   => 'menu_items.php,menu_items_add.php,menu_items_edit.php',
+    'entryURL'                  => 'menu_items.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'Y',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'N',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[] = [
+    'name'                      => 'Weekly Menu Editor',
+    'precedence'                => 0,
+    'category'                  => 'Menu',
+    'description'               => 'Plan and schedule weekly menus for each meal type.',
+    'URLList'                   => 'menu_weekly.php,menu_weekly_edit.php',
+    'entryURL'                  => 'menu_weekly.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'Y',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'Y',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[] = [
+    'name'                      => 'Child Dietary Profiles',
+    'precedence'                => 0,
+    'category'                  => 'Menu',
+    'description'               => 'View and manage dietary profiles and allergies for children.',
+    'URLList'                   => 'child_dietary.php,child_dietary_edit.php',
+    'entryURL'                  => 'child_dietary.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'Y',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'Y',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
+$actionRows[] = [
+    'name'                      => 'Menu Reports',
+    'precedence'                => 0,
+    'category'                  => 'Menu',
+    'description'               => 'View nutritional summaries and allergen exposure reports.',
+    'URLList'                   => 'menu_reports.php',
+    'entryURL'                  => 'menu_reports.php',
+    'entrySidebar'              => 'Y',
+    'menuShow'                  => 'Y',
+    'defaultPermissionAdmin'    => 'Y',
+    'defaultPermissionTeacher'  => 'Y',
+    'defaultPermissionStudent'  => 'N',
+    'defaultPermissionParent'   => 'N',
+    'defaultPermissionSupport'  => 'Y',
+    'categoryPermissionStaff'   => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent'  => 'N',
+    'categoryPermissionOther'   => 'N',
+];
+
 // Note: Daily Report and Settings actions will be added in a future phase
 // when report_daily.php and settings.php are implemented
 

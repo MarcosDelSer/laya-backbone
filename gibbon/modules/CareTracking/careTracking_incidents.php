@@ -24,6 +24,7 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\IncidentGateway;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\CareTracking\Service\IncidentService;
 
 // Module setup - breadcrumbs
 $page->breadcrumbs->add(__('Care Tracking'), 'careTracking.php');
@@ -48,6 +49,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateways via DI container
     $incidentGateway = $container->get(IncidentGateway::class);
     $attendanceGateway = $container->get(AttendanceGateway::class);
+
+    // Initialize IncidentService
+    $incidentService = new IncidentService($incidentGateway);
 
     // Incident type options
     $incidentTypes = [
@@ -78,7 +82,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         $actionTaken = $_POST['actionTaken'] ?? null;
 
         if (!empty($incidentType) && !empty($description)) {
-            $result = $incidentGateway->logIncident(
+            $result = $incidentService->logIncident(
                 $childID,
                 $gibbonSchoolYearID,
                 $date,
@@ -104,7 +108,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     if ($action === 'notifyParent') {
         $incidentID = $_POST['gibbonCareIncidentID'] ?? null;
         if (!empty($incidentID)) {
-            $result = $incidentGateway->markParentNotified($incidentID);
+            $result = $incidentService->markParentNotified($incidentID);
             if ($result) {
                 $page->addSuccess(__('Parent has been marked as notified.'));
             } else {
@@ -133,8 +137,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Display formatted date
     echo '<p class="text-lg mb-4">' . __('Showing incidents for') . ': <strong>' . Format::date($date) . '</strong></p>';
 
-    // Get summary statistics
-    $summary = $incidentGateway->getIncidentSummaryByDate($gibbonSchoolYearID, $date);
+    // Get summary statistics using service
+    $summary = $incidentService->getIncidentSummaryByDate($gibbonSchoolYearID, $date);
 
     // Display summary
     echo '<div class="bg-white rounded-lg shadow p-4 mb-4">';
@@ -194,7 +198,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     echo '</div>';
 
     // Section: Pending Parent Notifications (high severity incidents not yet notified)
-    $pendingNotifications = $incidentGateway->selectIncidentsPendingNotification($gibbonSchoolYearID);
+    $pendingNotifications = $incidentService->getIncidentsPendingNotification($gibbonSchoolYearID);
 
     if ($pendingNotifications->rowCount() > 0) {
         echo '<h3 class="text-lg font-semibold mt-6 mb-3">' . __('Pending Parent Notifications') . '</h3>';
@@ -308,8 +312,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         ->sortBy(['time', 'severity'])
         ->fromPOST();
 
-    // Get incident data for the date
-    $incidents = $incidentGateway->queryIncidentsByDate($criteria, $gibbonSchoolYearID, $date);
+    // Get incident data for the date using service
+    $incidents = $incidentService->queryIncidentsByDate($criteria, $gibbonSchoolYearID, $date);
 
     // Build DataTable
     $table = DataTable::createPaginated('incidents', $criteria);

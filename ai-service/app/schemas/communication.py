@@ -13,6 +13,7 @@ from uuid import UUID
 from pydantic import Field
 
 from app.schemas.base import BaseResponse, BaseSchema
+from app.schemas.pagination import PaginatedResponse
 
 
 class Language(str, Enum):
@@ -366,22 +367,17 @@ class CommunicationPreferenceResponse(BaseResponse):
     )
 
 
-class ParentReportListResponse(BaseSchema):
-    """Response schema for a list of parent reports.
+class ParentReportListResponse(PaginatedResponse[ParentReportResponse]):
+    """Response schema for a paginated list of parent reports.
 
-    Contains paginated list of reports and total count.
+    Provides standardized pagination metadata with parent report items.
 
     Attributes:
-        reports: List of parent reports
+        items: List of parent reports (renamed from 'reports')
         total: Total number of reports matching the query
+        page: Current page number (1-indexed)
+        per_page: Number of items per page
+        total_pages: Total number of pages
     """
 
-    reports: list[ParentReportResponse] = Field(
-        default_factory=list,
-        description="List of parent reports",
-    )
-    total: int = Field(
-        ...,
-        ge=0,
-        description="Total number of reports matching the query",
-    )
+    pass

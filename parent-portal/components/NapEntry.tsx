@@ -1,3 +1,7 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 interface NapEntryProps {
   nap: {
     id: string;
@@ -7,10 +11,10 @@ interface NapEntryProps {
   };
 }
 
-const qualityConfig: Record<NapEntryProps['nap']['quality'], { label: string; badgeClass: string }> = {
-  good: { label: 'Good sleep', badgeClass: 'badge-success' },
-  fair: { label: 'Fair sleep', badgeClass: 'badge-warning' },
-  poor: { label: 'Poor sleep', badgeClass: 'badge-neutral' },
+const qualityBadgeClasses: Record<NapEntryProps['nap']['quality'], string> = {
+  good: 'badge-success',
+  fair: 'badge-warning',
+  poor: 'badge-neutral',
 };
 
 function calculateDuration(startTime: string, endTime: string): string {
@@ -54,12 +58,15 @@ function calculateDuration(startTime: string, endTime: string): string {
 }
 
 export function NapEntry({ nap }: NapEntryProps) {
-  const qualityInfo = qualityConfig[nap.quality];
+  const t = useTranslations();
+
+  const qualityLabel = t(`dashboard.napQuality.${nap.quality}`);
+  const badgeClass = qualityBadgeClasses[nap.quality];
   const duration = calculateDuration(nap.startTime, nap.endTime);
 
   return (
-    <div className="flex items-start space-x-3">
-      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
+    <div className="flex items-start space-x-3" role="listitem" aria-label={`Nap from ${nap.startTime} to ${nap.endTime}, duration ${duration}`}>
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100" aria-hidden="true">
         <svg
           className="h-5 w-5 text-blue-600"
           fill="none"
@@ -77,11 +84,11 @@ export function NapEntry({ nap }: NapEntryProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
           <p className="font-medium text-gray-900">{duration}</p>
-          <span className="text-sm text-gray-500">
+          <time className="text-sm text-gray-500">
             {nap.startTime} - {nap.endTime}
-          </span>
+          </time>
         </div>
-        <span className={`badge mt-1 ${qualityInfo.badgeClass}`}>
+        <span className={`badge mt-1 ${qualityInfo.badgeClass}`} role="status" aria-label={`Sleep quality: ${qualityInfo.label}`}>
           {qualityInfo.label}
         </span>
       </div>

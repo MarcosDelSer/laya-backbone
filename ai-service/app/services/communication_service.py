@@ -364,6 +364,12 @@ class NoActivitiesError(CommunicationServiceError):
     pass
 
 
+class UnauthorizedAccessError(CommunicationServiceError):
+    """Raised when the user does not have permission to access a resource."""
+
+    pass
+
+
 # =============================================================================
 # Communication Service
 # =============================================================================
@@ -981,3 +987,46 @@ class CommunicationService:
         )
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
+
+    async def _verify_child_access(
+        self,
+        child_id: UUID,
+        user_id: UUID,
+        user_role: str,
+        allow_educators: bool = True,
+    ) -> bool:
+        """Verify user has permission to access a child's data.
+
+        This method verifies that a user (parent, educator, or admin) has
+        permission to access data associated with a specific child. Access rules:
+        - Admins: Always have access
+        - Educators/Teachers: Have access if allow_educators=True
+        - Parents: Have access only to their own children (verified through relationships)
+
+        Args:
+            child_id: UUID of the child
+            user_id: UUID of the user requesting access
+            user_role: Role of the user (from JWT token)
+            allow_educators: Whether educators/teachers should have access (default: True)
+
+        Returns:
+            bool: True if user has access
+
+        Raises:
+            UnauthorizedAccessError: When user lacks permission to access the child
+        """
+        from app.auth.dependencies import verify_child_access
+
+        try:
+            return await verify_child_access(
+                db=self.db,
+                child_id=child_id,
+                user_id=user_id,
+                user_role=user_role,
+                allow_educators=allow_educators,
+            )
+        except Exception as e:
+            # Re-raise as our service's UnauthorizedAccessError
+            if "does not have permission" in str(e):
+                raise UnauthorizedAccessError(str(e))
+            raise

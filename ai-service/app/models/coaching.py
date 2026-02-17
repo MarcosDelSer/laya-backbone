@@ -7,10 +7,10 @@ provides personalized, evidence-based guidance for educators and parents.
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -41,17 +41,17 @@ class CoachingSession(Base):
     __tablename__ = "coaching_sessions"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     child_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
     user_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         nullable=False,
         index=True,
     )
@@ -122,12 +122,12 @@ class CoachingRecommendation(Base):
     __tablename__ = "coaching_recommendations"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     session_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("coaching_sessions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -212,12 +212,12 @@ class EvidenceSource(Base):
     __tablename__ = "evidence_sources"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
     recommendation_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
+        PGUUID(as_uuid=True),
         ForeignKey("coaching_recommendations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

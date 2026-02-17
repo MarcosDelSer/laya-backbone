@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { SignatureCanvas } from './SignatureCanvas';
+import { useFocusTrap } from '../hooks';
 
 interface DocumentData {
   id: string;
@@ -27,10 +29,14 @@ export function DocumentSignature({
   onClose,
   onSubmit,
 }: DocumentSignatureProps) {
+  const t = useTranslations();
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  // Focus trap for modal
+  const modalRef = useFocusTrap<HTMLDivElement>(isOpen && !isSubmitting);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -96,21 +102,22 @@ export function DocumentSignature({
   const canSubmit = hasSignature && agreedToTerms && !isSubmitting;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="signature-modal-title">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={!isSubmitting ? onClose : undefined}
+        aria-hidden="true"
       />
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-lg transform rounded-xl bg-white shadow-2xl transition-all">
+        <div ref={modalRef} className="relative w-full max-w-lg transform rounded-xl bg-white shadow-2xl transition-all">
           {/* Header */}
           <div className="border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 id="signature-modal-title" className="text-lg font-semibold text-gray-900">
                   Sign Document
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">{documentToSign.title}</p>
@@ -119,6 +126,7 @@ export function DocumentSignature({
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
+                aria-label="Close signature dialog"
                 className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
               >
                 <svg
@@ -126,6 +134,7 @@ export function DocumentSignature({
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -145,7 +154,7 @@ export function DocumentSignature({
               <div className="mb-6 rounded-lg bg-gray-50 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100" aria-hidden="true">
                       <svg
                         className="h-5 w-5 text-red-600"
                         fill="none"
@@ -171,16 +180,17 @@ export function DocumentSignature({
                     href={documentToSign.pdfUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={`View PDF of ${documentToSign.title} in new window`}
                     className="text-sm font-medium text-primary-600 hover:text-primary-700"
                   >
-                    View PDF
+                    {t('documents.signature.viewPdf')}
                   </a>
                 </div>
               </div>
 
               {/* Signature canvas */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label id="signature-label" className="block text-sm font-medium text-gray-700 mb-3">
                   Your Signature
                 </label>
                 <SignatureCanvas
@@ -198,20 +208,18 @@ export function DocumentSignature({
                     checked={agreedToTerms}
                     onChange={(e) => setAgreedToTerms(e.target.checked)}
                     disabled={isSubmitting}
+                    aria-label="I acknowledge that I have read and understand this document"
                     className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="text-sm text-gray-600">
-                    I acknowledge that I have read and understand this document.
-                    By signing below, I agree to be legally bound by its terms
-                    and conditions.
+                    {t('documents.signature.agreement')}
                   </span>
                 </label>
               </div>
 
               {/* Timestamp notice */}
               <p className="text-xs text-gray-400">
-                Your signature will be timestamped with the current date and
-                time for verification purposes.
+                {t('documents.signature.timestampNotice')}
               </p>
             </div>
 
@@ -222,13 +230,16 @@ export function DocumentSignature({
                   type="button"
                   onClick={onClose}
                   disabled={isSubmitting}
+                  aria-label="Cancel signature"
                   className="btn btn-outline"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={!canSubmit}
+                  aria-label={isSubmitting ? 'Submitting signature' : 'Submit signature'}
+                  aria-busy={isSubmitting}
                   className="btn btn-primary"
                 >
                   {isSubmitting ? (
@@ -237,6 +248,7 @@ export function DocumentSignature({
                         className="mr-2 h-4 w-4 animate-spin"
                         fill="none"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <circle
                           className="opacity-25"
@@ -252,7 +264,7 @@ export function DocumentSignature({
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         />
                       </svg>
-                      Submitting...
+                      {t('documents.signature.submitting')}
                     </>
                   ) : (
                     <>
@@ -261,6 +273,7 @@ export function DocumentSignature({
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -269,7 +282,7 @@ export function DocumentSignature({
                           d="M5 13l4 4L19 7"
                         />
                       </svg>
-                      Submit Signature
+                      {t('documents.signature.submitSignature')}
                     </>
                   )}
                 </button>

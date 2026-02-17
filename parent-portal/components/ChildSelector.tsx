@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useEscapeKey, useArrowNavigation, useClickOutside } from '../hooks';
 
 interface Child {
   id: string;
@@ -24,22 +25,42 @@ const mockChildren: Child[] = [
 ];
 
 export function ChildSelector() {
+  const t = useTranslations();
   const [selectedChild, setSelectedChild] = useState<Child>(mockChildren[0]);
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleSelect = (child: Child) => {
     setSelectedChild(child);
     setIsOpen(false);
   };
 
+  const handleClose = () => {
+    setIsOpen(false);
+  };
+
+  // Keyboard navigation hooks
+  useEscapeKey(handleClose, isOpen);
+  useClickOutside(containerRef, handleClose, isOpen);
+
+  const { focusedIndex } = useArrowNavigation({
+    itemCount: mockChildren.length,
+    isActive: isOpen,
+    onSelect: (index) => handleSelect(mockChildren[index]),
+    loop: true,
+  });
+
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-label={`Selected child: ${selectedChild.name}. Click to change.`}
         className="flex items-center space-x-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
       >
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-primary-700">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-primary-700" aria-hidden="true">
           {selectedChild.name.charAt(0)}
         </div>
         <div className="hidden text-left sm:block">
@@ -55,6 +76,7 @@ export function ChildSelector() {
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -66,18 +88,27 @@ export function ChildSelector() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-10 mt-2 w-64 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+        <div
+          role="listbox"
+          aria-label="Select child"
+          className="absolute right-0 z-10 mt-2 w-64 origin-top-right rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+        >
           <div className="p-2">
-            <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500" id="child-selector-label">
               Select Child
             </p>
-            {mockChildren.map((child) => (
+            {mockChildren.map((child, index) => (
               <button
                 key={child.id}
+                role="option"
+                aria-selected={selectedChild.id === child.id}
                 onClick={() => handleSelect(child)}
-                className={`flex w-full items-center space-x-3 rounded-md px-3 py-2 text-sm ${
+                tabIndex={focusedIndex === index ? 0 : -1}
+                className={`flex w-full items-center space-x-3 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-inset ${
                   selectedChild.id === child.id
                     ? 'bg-primary-50 text-primary-700'
+                    : focusedIndex === index
+                    ? 'bg-gray-100 text-gray-900'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
@@ -87,6 +118,7 @@ export function ChildSelector() {
                       ? 'bg-primary-200 text-primary-800'
                       : 'bg-gray-100 text-gray-600'
                   }`}
+                  aria-hidden="true"
                 >
                   {child.name.charAt(0)}
                 </div>
@@ -99,6 +131,7 @@ export function ChildSelector() {
                     className="ml-auto h-5 w-5 text-primary-600"
                     fill="currentColor"
                     viewBox="0 0 20 20"
+                    aria-hidden="true"
                   >
                     <path
                       fillRule="evenodd"

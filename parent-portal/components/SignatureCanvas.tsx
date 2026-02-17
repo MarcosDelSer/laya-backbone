@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 
 interface SignatureCanvasProps {
   onSignatureChange: (hasSignature: boolean, dataUrl: string | null) => void;
@@ -17,6 +18,7 @@ export function SignatureCanvas({
   penColor = '#1f2937',
   penWidth = 2,
 }: SignatureCanvasProps) {
+  const t = useTranslations();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -154,7 +156,7 @@ export function SignatureCanvas({
   return (
     <div className="signature-canvas-container">
       {/* Canvas */}
-      <div className="relative border-2 border-dashed border-gray-300 rounded-lg bg-white overflow-hidden">
+      <div className="relative border-2 border-dashed border-gray-300 rounded-lg bg-white overflow-hidden" role="application" aria-label="Signature drawing canvas">
         <canvas
           ref={canvasRef}
           className="touch-none cursor-crosshair"
@@ -166,27 +168,28 @@ export function SignatureCanvas({
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
           onTouchCancel={stopDrawing}
+          aria-label="Draw your signature with mouse or touch"
         />
 
         {/* Signature line indicator */}
-        <div className="absolute bottom-8 left-4 right-4 border-b border-gray-300" />
+        <div className="absolute bottom-8 left-4 right-4 border-b border-gray-300" aria-hidden="true" />
 
         {/* Placeholder text */}
         {!hasSignature && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
             <p className="text-gray-400 text-sm">Sign here</p>
           </div>
         )}
 
         {/* X mark for signature start point */}
-        <div className="absolute bottom-9 left-4 text-gray-400 text-xs pointer-events-none">
+        <div className="absolute bottom-9 left-4 text-gray-400 text-xs pointer-events-none" aria-hidden="true">
           ×
         </div>
       </div>
 
       {/* Controls */}
       <div className="mt-3 flex items-center justify-between">
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-500" role="status" aria-live="polite">
           {hasSignature ? 'Signature captured' : 'Draw your signature above'}
         </p>
         <button
@@ -194,8 +197,9 @@ export function SignatureCanvas({
           onClick={clearCanvas}
           className="text-sm text-gray-600 hover:text-gray-800 underline"
           disabled={!hasSignature}
+          aria-label="Clear signature"
         >
-          Clear
+          {t('documents.signature.clear')}
         </button>
       </div>
     </div>

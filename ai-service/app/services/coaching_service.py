@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache, invalidate_cache
 from app.models.coaching import (
     CoachingRecommendation,
     CoachingSession,
@@ -26,6 +27,10 @@ from app.schemas.coaching import (
     CoachingResponse,
     EvidenceSourceSchema,
     SpecialNeedType,
+)
+from app.utils.query_optimization import (
+    eager_load_coaching_recommendation_relationships,
+    eager_load_coaching_session_relationships,
 )
 
 # Safety disclaimer that must be included in all responses
@@ -244,6 +249,7 @@ class CoachingService:
             disclaimer=SAFETY_DISCLAIMER,
         )
 
+    @cache(ttl=86400, key_prefix="llm_response")
     async def _retrieve_evidence_based_guidance(
         self,
         special_need_types: list[SpecialNeedType],
@@ -256,6 +262,9 @@ class CoachingService:
         Queries the RAG database for relevant coaching guidance based on
         the specified special needs and situation. Returns guidance items
         with their supporting evidence sources.
+
+        This method is cached with a 24-hour TTL (86400 seconds) to improve
+        performance for repeated queries with the same parameters.
 
         Args:
             special_need_types: Types of special needs to address
@@ -791,3 +800,68 @@ class CoachingService:
 
         await self.db.commit()
         return session
+
+    async def invalidate_llm_response_cache(
+        self,
+        pattern: str = "*",
+    ) -> int:
+        """Invalidate cached LLM responses.
+
+        Invalidates LLM response cache entries matching the specified pattern.
+        This is useful when the underlying knowledge base is updated or when
+        you need to force fresh guidance generation.
+
+        Args:
+            pattern: Pattern to match for cache invalidation (default: "*" for all)
+
+        Returns:
+            int: Number of cache entries deleted
+
+        Example:
+            # Invalidate all LLM response caches
+            await service.invalidate_llm_response_cache()
+
+            # Invalidate specific pattern
+            await service.invalidate_llm_response_cache("*autism*")
+        """
+        return await invalidate_cache("llm_response", pattern)
+
+    async def refresh_llm_response_cache(
+        self,
+        special_need_types: list[SpecialNeedType],
+        situation_description: Optional[str] = None,
+        category: Optional[CoachingCategory] = None,
+        max_recommendations: int = 3,
+    ) -> tuple[list[CoachingGuidance], list[EvidenceSourceSchema]]:
+        """Refresh LLM response cache by invalidating and refetching.
+
+        Invalidates the cache for the given parameters and fetches fresh
+        guidance, which will then be cached with a new 24-hour TTL.
+
+        Args:
+            special_need_types: Types of special needs to address
+            situation_description: Description of the situation or challenge
+            category: Optional category filter
+            max_recommendations: Maximum number of recommendations to return
+
+        Returns:
+            Tuple of (guidance_items, citations) with fresh data
+
+        Example:
+            # Refresh cache for specific query
+            guidance, citations = await service.refresh_llm_response_cache(
+                special_need_types=[SpecialNeedType.AUTISM],
+                situation_description="transition strategies",
+                category=CoachingCategory.ACTIVITY_ADAPTATION,
+            )
+        """
+        # Invalidate existing cache for these parameters
+        await self.invalidate_llm_response_cache()
+
+        # Fetch fresh data (which will be cached)
+        return await self._retrieve_evidence_based_guidance(
+            special_need_types=special_need_types,
+            situation_description=situation_description,
+            category=category,
+            max_recommendations=max_recommendations,
+        )

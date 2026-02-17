@@ -1,0 +1,224 @@
+{
+  "common": {
+    "appName": "LAYA",
+    "loading": "Chargement...",
+    "back": "Retour",
+    "backToDashboard": "Retour au tableau de bord",
+    "viewAll": "Tout voir",
+    "filter": "Filtrer",
+    "export": "Exporter",
+    "cancel": "Annuler",
+    "submit": "Soumettre",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "close": "Fermer",
+    "all": "Tous",
+    "clear": "Effacer",
+    "loadMore": "Charger plus",
+    "selectChild": "Sélectionner un enfant",
+    "today": "Aujourd'hui",
+    "yesterday": "Hier",
+    "justNow": "À l'instant",
+    "minutesAgo": "Il y a {count} min",
+    "status": {
+      "checkedIn": "Arrivé",
+      "checkedOut": "Parti",
+      "absent": "Absent",
+      "pending": "En attente",
+      "signed": "Signé",
+      "paid": "Payé",
+      "overdue": "En retard"
+    },
+    "time": {
+      "since": "Depuis {time}",
+      "daysOverdue": "{count, plural, one {# jour} other {# jours}} de retard",
+      "daysRemaining": "{count, plural, one {# jour} other {# jours}} restant",
+      "dueToday": "Dû aujourd'hui"
+    },
+    "entry": "{count, plural, one {# entrée} other {# entrées}}",
+    "photo": "Photo",
+    "photos": "Photos",
+    "viewPhotoNumber": "Voir la photo {number}"
+  },
+  "navigation": {
+    "dashboard": "Tableau de bord",
+    "dailyReports": "Rapports quotidiens",
+    "invoices": "Factures",
+    "messages": "Messages",
+    "documents": "Documents"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Bonjour!",
+      "afternoon": "Bon après-midi!",
+      "evening": "Bonsoir!"
+    },
+    "viewFullReport": "Voir le rapport complet",
+    "childStatus": "Statut de l'enfant",
+    "quickStats": {
+      "mealsToday": "Repas aujourd'hui",
+      "napTime": "Sieste",
+      "activities": "Activités",
+      "photos": "Photos",
+      "new": "{count} nouveau"
+    },
+    "sections": {
+      "todaysActivities": "Activités du jour",
+      "meals": "Repas",
+      "napTime": "Sieste",
+      "recentPhotos": "Photos récentes",
+      "quickLinks": "Liens rapides"
+    },
+    "quickLinks": {
+      "viewInvoices": "Voir les factures",
+      "pendingPayment": "{count} paiement en attente",
+      "messages": "Messages",
+      "unreadMessages": "{count} messages non lus",
+      "documents": "Documents",
+      "awaitingSignature": "{count} en attente de signature"
+    },
+    "mealAmount": {
+      "all": "A tout mangé",
+      "most": "A presque tout mangé",
+      "some": "A mangé un peu",
+      "none": "N'a pas mangé"
+    },
+    "napQuality": {
+      "good": "Bon sommeil",
+      "fair": "Sommeil moyen",
+      "poor": "Sommeil difficile"
+    }
+  },
+  "dailyReports": {
+    "title": "Rapports quotidiens",
+    "description": "Consultez les activités quotidiennes, les repas et les photos de votre enfant",
+    "showingRecentReports": "Affichage des rapports récents",
+    "dailyReport": "Rapport quotidien",
+    "loadMoreReports": "Charger plus de rapports",
+    "noReportsTitle": "Aucun rapport disponible",
+    "noReportsDescription": "Les rapports quotidiens apparaîtront ici une fois qu'ils auront été créés par l'éducateur de votre enfant.",
+    "sections": {
+      "photos": "Photos",
+      "meals": "Repas",
+      "napTime": "Sieste",
+      "activities": "Activités"
+    },
+    "emptyStates": {
+      "noMealsRecorded": "Aucun repas enregistré",
+      "noNapsRecorded": "Aucune sieste enregistrée",
+      "noActivitiesRecorded": "Aucune activité enregistrée",
+      "noPhotosForThisDay": "Aucune photo pour cette journée"
+    },
+    "mealTypes": {
+      "breakfast": "Déjeuner",
+      "lunch": "Dîner",
+      "snack": "Collation"
+    },
+    "badges": {
+      "meal": "{count} {count, plural, one {repas} other {repas}}",
+      "nap": "{count} {count, plural, one {sieste} other {siestes}}",
+      "activity": "{count} {count, plural, one {activité} other {activités}}"
+    }
+  },
+  "invoices": {
+    "title": "Factures",
+    "description": "Consultez et gérez votre historique de facturation",
+    "invoiceNumber": "Facture #{number}",
+    "issued": "Émise le : {date}",
+    "summary": {
+      "pending": "En attente",
+      "overdue": "En retard",
+      "paidThisYear": "Payé (cette année)"
+    },
+    "invoiceCount": "{count} {count, plural, one {facture} other {factures}}",
+    "paymentHistory": "Historique des paiements",
+    "totalAmount": "Montant total",
+    "dueDate": "Date d'échéance",
+    "invoiceDetails": "Détails de la facture",
+    "table": {
+      "description": "Description",
+      "qty": "Qté",
+      "unitPrice": "Prix unitaire",
+      "total": "Total"
+    },
+    "actions": {
+      "downloadPdf": "Télécharger le PDF",
+      "payNow": "Payer maintenant"
+    },
+    "loadMoreInvoices": "Charger plus de factures",
+    "noInvoicesTitle": "Aucune facture",
+    "noInvoicesDescription": "Vos factures apparaîtront ici une fois qu'elles seront générées."
+  },
+  "messages": {
+    "title": "Messages",
+    "unreadCount": "{count} {count, plural, one {message non lu} other {messages non lus}}",
+    "allCaughtUp": "Tout est à jour",
+    "newMessage": "Nouveau message",
+    "noMessagesTitle": "Aucun message",
+    "noMessagesDescription": "Commencez une conversation avec l'éducateur de votre enfant.",
+    "selectConversation": "Sélectionnez une conversation",
+    "selectConversationDescription": "Choisissez une conversation dans la liste pour voir les messages.",
+    "noMessagesInThread": "Aucun message",
+    "startConversation": "Commencez la conversation en envoyant un message ci-dessous.",
+    "composer": {
+      "placeholder": "Écrivez un message...",
+      "placeholderTeacher": "Écrivez un message à l'éducateur...",
+      "attachFile": "Joindre un fichier (bientôt disponible)",
+      "sendHint": "Appuyez sur Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne"
+    },
+    "moreOptions": "Plus d'options"
+  },
+  "documents": {
+    "title": "Documents",
+    "description": "Consultez et signez les documents requis pour votre enfant",
+    "summary": {
+      "totalDocuments": "Total des documents",
+      "pendingSignatures": "Signatures en attente",
+      "signedDocuments": "Documents signés"
+    },
+    "documentLibrary": "Bibliothèque de documents",
+    "filters": {
+      "all": "Tous",
+      "pending": "En attente",
+      "signed": "Signés"
+    },
+    "actionRequired": {
+      "title": "Action requise",
+      "description": "Vous avez {count} {count, plural, one {document} other {documents}} nécessitant votre signature. Veuillez les consulter et les signer dès que possible."
+    },
+    "card": {
+      "uploaded": "Téléversé le : {date}",
+      "signedOn": "Signé le {date}",
+      "viewDocument": "Voir le document",
+      "signDocument": "Signer le document",
+      "viewSignature": "Voir la signature"
+    },
+    "noDocumentsTitle": "Aucun document trouvé",
+    "noDocumentsDescription": {
+      "pending": "Bravo! Vous avez signé tous les documents requis.",
+      "signed": "Vous n'avez pas encore signé de documents.",
+      "all": "Aucun document n'est disponible pour le moment."
+    },
+    "viewAllDocuments": "Voir tous les documents",
+    "signature": {
+      "title": "Signer le document",
+      "viewPdf": "Voir le PDF",
+      "yourSignature": "Votre signature",
+      "signHere": "Signez ici",
+      "signatureCaptured": "Signature enregistrée",
+      "drawSignature": "Dessinez votre signature ci-dessus",
+      "clear": "Effacer",
+      "agreement": "Je reconnais avoir lu et compris ce document. En signant ci-dessous, j'accepte d'être légalement lié par ses termes et conditions.",
+      "timestampNotice": "Votre signature sera horodatée avec la date et l'heure actuelles à des fins de vérification.",
+      "submitting": "Soumission en cours...",
+      "submitSignature": "Soumettre la signature"
+    }
+  },
+  "errors": {
+    "title": "Une erreur s'est produite!",
+    "description": "Nous nous excusons pour cet inconvénient. Une erreur inattendue s'est produite. Veuillez réessayer ou contacter le support si le problème persiste.",
+    "tryAgain": "Réessayer",
+    "errorId": "ID d'erreur : {id}"
+  }
+}

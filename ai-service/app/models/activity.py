@@ -15,13 +15,14 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PGUUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR, UUID as PGUUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, deferred
 
 
 class Base(DeclarativeBase):
@@ -85,6 +86,7 @@ class Activity(Base):
         max_age_months: Maximum target age in months
         special_needs_adaptations: Adaptations for children with special needs
         is_active: Whether the activity is currently active
+        search_vector: Full-text search tsvector (auto-maintained by trigger)
         created_at: Timestamp when the record was created
         updated_at: Timestamp when the record was last updated
     """
@@ -142,6 +144,15 @@ class Activity(Base):
         nullable=False,
         default=True,
         index=True,
+    )
+    search_vector: Mapped[Optional[str]] = deferred(
+        mapped_column(
+            TSVECTOR,
+            nullable=True,
+            # This column is automatically maintained by a database trigger
+            # It combines name, description, and special_needs_adaptations
+            # for full-text search with weighted ranking
+        )
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -244,6 +255,16 @@ class ActivityRecommendation(Base):
         back_populates="recommendations",
     )
 
+    # Table-level indexes for common query patterns
+    __table_args__ = (
+        # Composite index for filtering recommendations by child and time
+        Index("ix_activity_recommendations_child_generated", "child_id", "generated_at"),
+        # Composite index for getting active recommendations per child
+        Index("ix_activity_recommendations_child_dismissed", "child_id", "is_dismissed"),
+        # Index for time-based queries
+        Index("ix_activity_recommendations_generated_at", "generated_at"),
+    )
+
     def __repr__(self) -> str:
         """Return string representation of the ActivityRecommendation."""
         return (
@@ -332,6 +353,16 @@ class ActivityParticipation(Base):
     activity: Mapped["Activity"] = relationship(
         "Activity",
         back_populates="participations",
+    )
+
+    # Table-level indexes for common query patterns
+    __table_args__ = (
+        # Composite index for filtering participation by child and time
+        Index("ix_activity_participations_child_started", "child_id", "started_at"),
+        # Index for time-based queries
+        Index("ix_activity_participations_started_at", "started_at"),
+        # Index for filtering by completion status
+        Index("ix_activity_participations_status", "completion_status"),
     )
 
     def __repr__(self) -> str:

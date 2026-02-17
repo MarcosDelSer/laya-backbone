@@ -1,0 +1,180 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: laya-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: laya_db
+      POSTGRES_USER: laya_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laya_user -d laya_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - laya-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: laya-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - laya-network
+
+  # AI Service (FastAPI/Python)
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: laya-ai-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://laya_user:${POSTGRES_PASSWORD:-changeme}@postgres:5432/laya_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./ai-service:/app
+      - ai_service_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - laya-network
+
+  # Gibbon CMS (PHP/MySQL)
+  gibbon:
+    build:
+      context: ./gibbon
+      dockerfile: Dockerfile
+    container_name: laya-gibbon
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_DATABASE: gibbon
+      MYSQL_USER: gibbon_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
+      PHP_MEMORY_LIMIT: 256M
+      PHP_UPLOAD_MAX_FILESIZE: 50M
+      PHP_POST_MAX_SIZE: 50M
+    ports:
+      - "8080:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./gibbon:/var/www/html
+      - gibbon_uploads:/var/www/html/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/modules/System/health.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - laya-network
+
+  # MySQL Database for Gibbon
+  mysql:
+    image: mysql:8.0
+    container_name: laya-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: gibbon
+      MYSQL_USER: gibbon_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - laya-network
+
+  # Parent Portal (Next.js)
+  parent-portal:
+    build:
+      context: ./parent-portal
+      dockerfile: Dockerfile
+    container_name: laya-parent-portal
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://ai-service:8000
+      NEXT_PUBLIC_GIBBON_URL: http://gibbon:80/gibbon
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      ai-service:
+        condition: service_healthy
+      gibbon:
+        condition: service_healthy
+    volumes:
+      - ./parent-portal:/app
+      - /app/node_modules
+      - /app/.next
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - laya-network
+
+networks:
+  laya-network:
+    driver: bridge
+    name: laya-network
+
+volumes:
+  postgres_data:
+    name: laya-postgres-data
+  redis_data:
+    name: laya-redis-data
+  mysql_data:
+    name: laya-mysql-data
+  ai_service_uploads:
+    name: laya-ai-service-uploads
+  gibbon_uploads:
+    name: laya-gibbon-uploads
