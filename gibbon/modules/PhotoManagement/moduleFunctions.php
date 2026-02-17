@@ -49,32 +49,29 @@ function formatPhotoFileSize($bytes, $precision = 2)
 /**
  * Validate image file type.
  *
+ * @deprecated Use PhotoAccessService::isValidPhotoType() instead
  * @param string $mimeType MIME type of the file
  * @param string $allowedTypes Comma-separated list of allowed extensions
  * @return bool True if valid
  */
 function isValidPhotoType($mimeType, $allowedTypes = 'jpg,jpeg,png,gif')
 {
-    $mimeMap = [
-        'image/jpeg' => ['jpg', 'jpeg'],
-        'image/png' => ['png'],
-        'image/gif' => ['gif'],
-        'image/webp' => ['webp'],
-    ];
+    // This function is deprecated. Use PhotoAccessService::isValidPhotoType() instead.
+    // Delegating to service method for backward compatibility.
+    $container = \Gibbon\Core::getContainer();
+    $photoGateway = $container->get(\Gibbon\Module\PhotoManagement\Domain\PhotoGateway::class);
+    $photoTagGateway = $container->get(\Gibbon\Module\PhotoManagement\Domain\PhotoTagGateway::class);
+    $familyGateway = $container->get(\Gibbon\Domain\User\FamilyGateway::class);
+    $settingGateway = $container->get(\Gibbon\Domain\System\SettingGateway::class);
 
-    $allowedArray = array_map('trim', explode(',', strtolower($allowedTypes)));
+    $photoAccessService = new \Gibbon\Module\PhotoManagement\Service\PhotoAccessService(
+        $photoGateway,
+        $photoTagGateway,
+        $familyGateway,
+        $settingGateway
+    );
 
-    if (!isset($mimeMap[$mimeType])) {
-        return false;
-    }
-
-    foreach ($mimeMap[$mimeType] as $ext) {
-        if (in_array($ext, $allowedArray)) {
-            return true;
-        }
-    }
-
-    return false;
+    return $photoAccessService->isValidPhotoType($mimeType, $allowedTypes);
 }
 
 /**
@@ -93,28 +90,57 @@ function getPhotoThumbnailPath($filePath, $suffix = '_thumb')
 /**
  * Get retention expiry date based on deleted date.
  *
+ * @deprecated Use PhotoAccessService::getRetentionExpiry() instead
  * @param string $deletedAt Deletion timestamp
  * @param int $retentionYears Retention period in years
  * @return string Expiry date
  */
 function getPhotoRetentionExpiry($deletedAt, $retentionYears = 5)
 {
-    $deletedTime = strtotime($deletedAt);
-    $expiryTime = strtotime("+{$retentionYears} years", $deletedTime);
-    return date('Y-m-d H:i:s', $expiryTime);
+    // This function is deprecated. Use PhotoAccessService::getRetentionExpiry() instead.
+    // Delegating to service method for backward compatibility.
+    $container = \Gibbon\Core::getContainer();
+    $photoGateway = $container->get(\Gibbon\Module\PhotoManagement\Domain\PhotoGateway::class);
+    $photoTagGateway = $container->get(\Gibbon\Module\PhotoManagement\Domain\PhotoTagGateway::class);
+    $familyGateway = $container->get(\Gibbon\Domain\User\FamilyGateway::class);
+    $settingGateway = $container->get(\Gibbon\Domain\System\SettingGateway::class);
+
+    $photoAccessService = new \Gibbon\Module\PhotoManagement\Service\PhotoAccessService(
+        $photoGateway,
+        $photoTagGateway,
+        $familyGateway,
+        $settingGateway
+    );
+
+    return $photoAccessService->getRetentionExpiry($deletedAt, $retentionYears);
 }
 
 /**
  * Check if a photo has expired past retention period.
  *
+ * @deprecated Use PhotoAccessService::isRetentionExpired() instead
  * @param string $deletedAt Deletion timestamp
  * @param int $retentionYears Retention period in years
  * @return bool True if expired
  */
 function isPhotoRetentionExpired($deletedAt, $retentionYears = 5)
 {
-    $expiryDate = getPhotoRetentionExpiry($deletedAt, $retentionYears);
-    return strtotime($expiryDate) < time();
+    // This function is deprecated. Use PhotoAccessService::isRetentionExpired() instead.
+    // Delegating to service method for backward compatibility.
+    $container = \Gibbon\Core::getContainer();
+    $photoGateway = $container->get(\Gibbon\Module\PhotoManagement\Domain\PhotoGateway::class);
+    $photoTagGateway = $container->get(\Gibbon\Module\PhotoManagement\Domain\PhotoTagGateway::class);
+    $familyGateway = $container->get(\Gibbon\Domain\User\FamilyGateway::class);
+    $settingGateway = $container->get(\Gibbon\Domain\System\SettingGateway::class);
+
+    $photoAccessService = new \Gibbon\Module\PhotoManagement\Service\PhotoAccessService(
+        $photoGateway,
+        $photoTagGateway,
+        $familyGateway,
+        $settingGateway
+    );
+
+    return $photoAccessService->isRetentionExpired($deletedAt, $retentionYears);
 }
 
 /**
@@ -139,15 +165,27 @@ function getPhotoStatusLabel($photo)
 /**
  * Calculate remaining retention days for a deleted photo.
  *
+ * @deprecated Use PhotoAccessService::getRetentionDaysRemaining() instead
  * @param string $deletedAt Deletion timestamp
  * @param int $retentionYears Retention period in years
  * @return int Remaining days (negative if expired)
  */
 function getPhotoRetentionDaysRemaining($deletedAt, $retentionYears = 5)
 {
-    $expiryDate = getPhotoRetentionExpiry($deletedAt, $retentionYears);
-    $expiryTime = strtotime($expiryDate);
-    $now = time();
+    // This function is deprecated. Use PhotoAccessService::getRetentionDaysRemaining() instead.
+    // Delegating to service method for backward compatibility.
+    $container = \Gibbon\Core::getContainer();
+    $photoGateway = $container->get(\Gibbon\Module\PhotoManagement\Domain\PhotoGateway::class);
+    $photoTagGateway = $container->get(\Gibbon\Module\PhotoManagement\Domain\PhotoTagGateway::class);
+    $familyGateway = $container->get(\Gibbon\Domain\User\FamilyGateway::class);
+    $settingGateway = $container->get(\Gibbon\Domain\System\SettingGateway::class);
 
-    return (int) floor(($expiryTime - $now) / (60 * 60 * 24));
+    $photoAccessService = new \Gibbon\Module\PhotoManagement\Service\PhotoAccessService(
+        $photoGateway,
+        $photoTagGateway,
+        $familyGateway,
+        $settingGateway
+    );
+
+    return $photoAccessService->getRetentionDaysRemaining($deletedAt, $retentionYears);
 }

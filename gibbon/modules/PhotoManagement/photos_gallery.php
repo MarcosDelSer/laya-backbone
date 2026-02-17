@@ -24,6 +24,9 @@ use Gibbon\Services\Format;
 use Gibbon\Domain\User\FamilyGateway;
 use Gibbon\Module\PhotoManagement\Domain\PhotoGateway;
 use Gibbon\Module\PhotoManagement\Domain\PhotoTagGateway;
+use Gibbon\Module\PhotoManagement\Service\PhotoAccessService;
+use Gibbon\Module\PhotoManagement\Service\PhotoTagService;
+use Gibbon\Domain\System\SettingGateway;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -39,41 +42,33 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_gal
     $gibbonPersonID = $session->get('gibbonPersonID');
 
     // Get gateways
+    $photoGateway = $container->get(PhotoGateway::class);
     $photoTagGateway = $container->get(PhotoTagGateway::class);
     $familyGateway = $container->get(FamilyGateway::class);
+    $settingGateway = $container->get(SettingGateway::class);
+
+    // Initialize services
+    $photoAccessService = new PhotoAccessService($photoGateway, $photoTagGateway, $familyGateway, $settingGateway);
+    $photoTagService = new PhotoTagService($photoTagGateway, $photoGateway);
 
     // Determine user role and get accessible children
     $roleCategory = $session->get('gibbonRoleIDCurrentCategory');
-    $childrenIDs = [];
+
+    // Use service to get accessible children based on role
+    $accessibleData = $photoAccessService->getAccessibleChildren($gibbonPersonID, $roleCategory, $gibbonSchoolYearID);
+    $childrenIDs = $accessibleData['childIDs'];
     $childrenInfo = [];
 
-    if ($roleCategory === 'Parent') {
-        // Parent: Get their children
-        $familyQuery = "SELECT gibbonFamilyChild.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname, gibbonPerson.image_240
-                        FROM gibbonFamilyChild
-                        INNER JOIN gibbonFamilyAdult ON gibbonFamilyAdult.gibbonFamilyID = gibbonFamilyChild.gibbonFamilyID
-                        INNER JOIN gibbonPerson ON gibbonPerson.gibbonPersonID = gibbonFamilyChild.gibbonPersonID
-                        INNER JOIN gibbonStudentEnrolment ON gibbonStudentEnrolment.gibbonPersonID = gibbonFamilyChild.gibbonPersonID
-                        WHERE gibbonFamilyAdult.gibbonPersonID = :gibbonPersonID
-                        AND gibbonStudentEnrolment.gibbonSchoolYearID = :gibbonSchoolYearID
-                        AND gibbonPerson.status = 'Full'
-                        ORDER BY gibbonPerson.surname, gibbonPerson.preferredName";
+    // Format child info for display (service returns preferredName/surname separately)
+    foreach ($accessibleData['childInfo'] as $childID => $info) {
+        $childrenInfo[$childID] = [
+            'name' => Format::name('', $info['preferredName'], $info['surname'], 'Student'),
+            'image' => $info['image'],
+        ];
+    }
 
-        $result = $connection2->prepare($familyQuery);
-        $result->execute([
-            'gibbonPersonID' => $gibbonPersonID,
-            'gibbonSchoolYearID' => $gibbonSchoolYearID,
-        ]);
-        $children = $result->fetchAll(\PDO::FETCH_ASSOC);
-
-        foreach ($children as $child) {
-            $childrenIDs[] = $child['gibbonPersonID'];
-            $childrenInfo[$child['gibbonPersonID']] = [
-                'name' => Format::name('', $child['preferredName'], $child['surname'], 'Student'),
-                'image' => $child['image_240'],
-            ];
-        }
-    } else {
+    // For staff/admin, we still need to get all students (service doesn't implement this yet)
+    if ($roleCategory !== 'Parent') {
         // Staff/Admin: Get all enrolled students
         $studentQuery = "SELECT gibbonPerson.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname, gibbonPerson.image_240
                          FROM gibbonPerson
@@ -86,6 +81,8 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_gal
         $result->execute(['gibbonSchoolYearID' => $gibbonSchoolYearID]);
         $students = $result->fetchAll(\PDO::FETCH_ASSOC);
 
+        $childrenIDs = [];
+        $childrenInfo = [];
         foreach ($students as $student) {
             $childrenIDs[] = $student['gibbonPersonID'];
             $childrenInfo[$student['gibbonPersonID']] = [
@@ -131,12 +128,13 @@ if (isActionAccessible($guid, $connection2, '/modules/PhotoManagement/photos_gal
         echo $form->getOutput();
     }
 
-    // Get photos for selected children
+    // Get photos for selected children using PhotoAccessService
     $photos = [];
     $childIDsToQuery = !empty($selectedChild) ? [$selectedChild] : $childrenIDs;
 
     foreach ($childIDsToQuery as $childID) {
-        $childPhotos = $photoTagGateway->selectPhotosForParentByChild($childID, $gibbonSchoolYearID);
+        // Use PhotoAccessService to get photos for each child (handles access control)
+        $childPhotos = $photoAccessService->getPhotosForParentByChild($gibbonPersonID, $childID, $gibbonSchoolYearID);
         foreach ($childPhotos as $photo) {
             // Avoid duplicates if a photo has multiple tagged children
             $photoKey = $photo['gibbonPhotoUploadID'];
