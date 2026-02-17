@@ -129,10 +129,30 @@ final class AuthViewModel: ObservableObject {
         isFormValid && !isLoading
     }
 
+    // MARK: - Biometric Authentication
+
+    /// Whether biometric authentication is available
+    @Published private(set) var isBiometricAvailable = false
+
+    /// Type of biometric authentication available
+    @Published private(set) var biometricType: BiometricType = .none
+
+    /// Whether biometric authentication is enabled for this user
+    @Published private(set) var isBiometricEnabled = false
+
+    /// Current biometric error, if any
+    @Published private(set) var biometricError: BiometricAuthError?
+
+    /// Whether biometric authentication is in progress
+    @Published private(set) var isBiometricAuthenticating = false
+
     // MARK: - Private Properties
 
     /// The authentication service
     private let authService: AuthServiceProtocol
+
+    /// The biometric authentication service
+    private let biometricService: BiometricAuthServiceProtocol
 
     /// Combine cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
@@ -140,12 +160,23 @@ final class AuthViewModel: ObservableObject {
     // MARK: - Initialization
 
     /// Creates a new AuthViewModel
-    /// - Parameter authService: The authentication service to use (defaults to shared instance)
-    init(authService: AuthServiceProtocol? = nil) {
+    /// - Parameters:
+    ///   - authService: The authentication service to use (defaults to shared instance)
+    ///   - biometricService: The biometric authentication service to use (defaults to shared instance)
+    init(authService: AuthServiceProtocol? = nil, biometricService: BiometricAuthServiceProtocol? = nil) {
         self.authService = authService ?? AuthService.shared
+        self.biometricService = biometricService ?? BiometricAuthService.shared
 
         // Subscribe to auth state changes from the service
         setupAuthStateSubscription()
+
+        // Subscribe to biometric availability changes
+        setupBiometricSubscriptions()
+
+        // Check biometric availability on initialization
+        Task {
+            await checkBiometricAvailability()
+        }
     }
 
     // MARK: - Public Methods
@@ -271,6 +302,115 @@ final class AuthViewModel: ObservableObject {
         resetSuccessMessage = nil
     }
 
+    // MARK: - Biometric Authentication Methods
+
+    /// Checks if biometric authentication is available on this device
+    @discardableResult
+    func checkBiometricAvailability() async -> Bool {
+        let result = await biometricService.checkBiometricAvailability()
+
+        switch result {
+        case .success(let type):
+            biometricType = type
+            isBiometricAvailable = true
+            biometricError = nil
+            return true
+
+        case .failure(let error):
+            biometricType = .none
+            isBiometricAvailable = false
+            biometricError = error
+            return false
+        }
+    }
+
+    /// Attempts to log in using biometric authentication
+    func loginWithBiometrics() async {
+        guard isBiometricAvailable else {
+            error = .unknown(String(localized: "Biometric authentication is not available"))
+            showError = true
+            return
+        }
+
+        guard isAuthenticated else {
+            error = .unknown(String(localized: "Please log in with your credentials first to enable biometric authentication"))
+            showError = true
+            return
+        }
+
+        isBiometricAuthenticating = true
+        biometricError = nil
+
+        let result = await biometricService.authenticateWithBiometrics(
+            reason: String(localized: "Authenticate to access LAYA Admin")
+        )
+
+        switch result {
+        case .success:
+            // Biometric authentication successful
+            // Refresh the token to maintain session
+            do {
+                try await refreshToken()
+            } catch {
+                self.error = .unknown(String(localized: "Failed to refresh session after biometric authentication"))
+                self.showError = true
+            }
+
+        case .failure(let bioError):
+            biometricError = bioError
+
+            // Only show error alert for unexpected failures (not user cancellation)
+            if bioError != .userCancelled && bioError != .userFallback {
+                error = .unknown(bioError.localizedDescription)
+                showError = true
+            }
+        }
+
+        isBiometricAuthenticating = false
+    }
+
+    /// Enables biometric authentication for quick login
+    func enableBiometricLogin() async {
+        guard isBiometricAvailable else {
+            error = .unknown(String(localized: "Biometric authentication is not available on this device"))
+            showError = true
+            return
+        }
+
+        guard isAuthenticated else {
+            error = .unknown(String(localized: "Please log in first to enable biometric authentication"))
+            showError = true
+            return
+        }
+
+        // Verify biometric capability by prompting user
+        let result = await biometricService.authenticateWithBiometrics(
+            reason: String(localized: "Verify your identity to enable biometric login")
+        )
+
+        switch result {
+        case .success:
+            isBiometricEnabled = true
+            // TODO: Persist biometric preference in UserDefaults or Keychain
+
+        case .failure(let bioError):
+            biometricError = bioError
+            error = .unknown(bioError.localizedDescription)
+            showError = true
+        }
+    }
+
+    /// Disables biometric authentication for this user
+    func disableBiometricLogin() {
+        isBiometricEnabled = false
+        // TODO: Remove biometric preference from UserDefaults or Keychain
+    }
+
+    /// Clears the current biometric error
+    func clearBiometricError() {
+        biometricError = nil
+    }
+
     // MARK: - Private Methods
 
     /// Sets up subscription to auth state changes from the service
@@ -285,6 +425,25 @@ final class AuthViewModel: ObservableObject {
                     self?.error = authError
                     self?.showError = true
                 }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Sets up subscriptions to biometric service state changes
+    private func setupBiometricSubscriptions() {
+        // Subscribe to biometric availability changes
+        biometricService.publisher(for: \.isBiometricAvailable)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isAvailable in
+                self?.isBiometricAvailable = isAvailable
+            }
+            .store(in: &cancellables)
+
+        // Subscribe to biometric type changes
+        biometricService.publisher(for: \.biometricType)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] type in
+                self?.biometricType = type
             }
             .store(in: &cancellables)
     }
@@ -332,6 +491,26 @@ extension AuthViewModel {
         viewModel.email = "director@laya.ca"
         viewModel.password = "password123"
         viewModel.rememberMe = true
+        return viewModel
+    }
+
+    /// Creates a ViewModel with biometric authentication available for previews
+    static var previewWithBiometrics: AuthViewModel {
+        let viewModel = AuthViewModel()
+        viewModel.authState = .authenticated(.preview)
+        viewModel.isBiometricAvailable = true
+        viewModel.biometricType = .touchID
+        viewModel.isBiometricEnabled = true
+        return viewModel
+    }
+
+    /// Creates a ViewModel with Face ID available for previews
+    static var previewWithFaceID: AuthViewModel {
+        let viewModel = AuthViewModel()
+        viewModel.authState = .authenticated(.preview)
+        viewModel.isBiometricAvailable = true
+        viewModel.biometricType = .faceID
+        viewModel.isBiometricEnabled = true
         return viewModel
     }
 }

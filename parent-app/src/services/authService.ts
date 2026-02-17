@@ -10,6 +10,7 @@
  */
 
 import {Platform} from 'react-native';
+import ReactNativeBiometrics, {BiometryTypes} from 'react-native-biometrics';
 import {api, setSessionToken, getSessionToken} from '../api/client';
 import {API_CONFIG} from '../api/config';
 import type {ApiResponse, Parent} from '../types';
@@ -107,43 +108,89 @@ export function getCurrentUser(): Parent | null {
 
 /**
  * Check biometric availability on the device
- *
- * Note: This is a mock implementation. In production, use
- * react-native-biometrics or expo-local-authentication.
  */
 export async function checkBiometricAvailability(): Promise<BiometricStatus> {
-  // Mock implementation - in production, use react-native-biometrics
-  // For Android, this would check for fingerprint, face unlock, or iris
-  // For iOS, this would check for Touch ID or Face ID
+  // In development, allow bypassing biometric checks for simulator testing
+  if (__DEV__) {
+    try {
+      const rnBiometrics = new ReactNativeBiometrics();
+      const {available, biometryType} = await rnBiometrics.isSensorAvailable();
 
-  if (Platform.OS === 'android') {
-    // Android typically has fingerprint support on most modern devices
-    return {
-      isAvailable: true,
-      biometricType: 'fingerprint',
-      isEnrolled: true,
-    };
-  } else if (Platform.OS === 'ios') {
-    // iOS devices have Touch ID or Face ID
-    return {
-      isAvailable: true,
-      biometricType: 'face',
-      isEnrolled: true,
-    };
+      if (!available) {
+        // In dev mode, return mock availability for simulator testing
+        return {
+          isAvailable: true,
+          biometricType: 'fingerprint',
+          isEnrolled: true,
+        };
+      }
+
+      // Map react-native-biometrics types to our BiometricType
+      let mappedType: BiometricType = 'none';
+      if (biometryType === BiometryTypes.TouchID) {
+        mappedType = 'fingerprint';
+      } else if (biometryType === BiometryTypes.FaceID) {
+        mappedType = 'face';
+      } else if (biometryType === BiometryTypes.Biometrics) {
+        // Android biometrics (could be fingerprint, face, or iris)
+        mappedType = 'fingerprint';
+      }
+
+      return {
+        isAvailable: true,
+        biometricType: mappedType,
+        isEnrolled: true,
+      };
+    } catch (error) {
+      // In dev mode, return mock availability on error
+      return {
+        isAvailable: true,
+        biometricType: 'fingerprint',
+        isEnrolled: true,
+      };
+    }
   }
 
-  return {
-    isAvailable: false,
-    biometricType: 'none',
-    isEnrolled: false,
-  };
+  // Production: strict biometric checks only
+  try {
+    const rnBiometrics = new ReactNativeBiometrics();
+    const {available, biometryType} = await rnBiometrics.isSensorAvailable();
+
+    if (!available) {
+      return {
+        isAvailable: false,
+        biometricType: 'none',
+        isEnrolled: false,
+      };
+    }
+
+    // Map react-native-biometrics types to our BiometricType
+    let mappedType: BiometricType = 'none';
+    if (biometryType === BiometryTypes.TouchID) {
+      mappedType = 'fingerprint';
+    } else if (biometryType === BiometryTypes.FaceID) {
+      mappedType = 'face';
+    } else if (biometryType === BiometryTypes.Biometrics) {
+      // Android biometrics (could be fingerprint, face, or iris)
+      mappedType = 'fingerprint';
+    }
+
+    return {
+      isAvailable: true,
+      biometricType: mappedType,
+      isEnrolled: true,
+    };
+  } catch (error) {
+    return {
+      isAvailable: false,
+      biometricType: 'none',
+      isEnrolled: false,
+    };
+  }
 }
 
 /**
  * Authenticate using biometrics
- *
- * Note: This is a mock implementation. In production, use
- * react-native-biometrics for proper biometric authentication.
  */
 export async function authenticateWithBiometrics(
   promptMessage = 'Authenticate to access your account',
@@ -170,15 +217,61 @@ export async function authenticateWithBiometrics(
     };
   }
 
-  // Mock implementation - in production, this would show the system biometric prompt
-  // Using react-native-biometrics:
-  // const { success } = await ReactNativeBiometrics.simplePrompt({ promptMessage });
+  // Development: Allow mock biometric authentication for simulator testing
+  if (__DEV__) {
+    try {
+      const rnBiometrics = new ReactNativeBiometrics();
+      const {success} = await rnBiometrics.simplePrompt({
+        promptMessage: promptMessage,
+      });
 
-  // For development, always succeed
-  return {
-    success: true,
-    data: true,
-  };
+      // In dev mode, always succeed if prompt doesn't throw
+      return {
+        success: true,
+        data: true,
+      };
+    } catch (error) {
+      // In dev mode, only fail if user explicitly cancels
+      return {
+        success: false,
+        error: {
+          code: 'BIOMETRIC_CANCELED',
+          message: 'Biometric authentication was canceled',
+        },
+      };
+    }
+  }
+
+  // Production: Require actual biometric authentication
+  try {
+    const rnBiometrics = new ReactNativeBiometrics();
+    const {success} = await rnBiometrics.simplePrompt({
+      promptMessage: promptMessage,
+    });
+
+    if (success) {
+      return {
+        success: true,
+        data: true,
+      };
+    }
+
+    return {
+      success: false,
+      error: {
+        code: 'BIOMETRIC_FAILED',
+        message: 'Biometric authentication failed',
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        code: 'BIOMETRIC_CANCELED',
+        message: 'Biometric authentication was canceled',
+      },
+    };
+  }
 }
 
 /**
@@ -441,30 +534,51 @@ export async function refreshSession(): Promise<AuthResult<string>> {
   }
 }
 
-// Mock data for development when API is unavailable
-const MOCK_USER: Parent = {
-  id: 'parent-1',
-  firstName: 'Sarah',
-  lastName: 'Johnson',
-  email: 'sarah.johnson@example.com',
-  phone: '+1 (555) 123-4567',
-  childIds: ['child-1', 'child-2'],
-};
+// ============================================================================
+// Mock Data (Development Only)
+// ============================================================================
 
-const MOCK_LOGIN_RESPONSE: LoginResponse = {
-  token: 'mock-jwt-token-12345',
-  refreshToken: 'mock-refresh-token-67890',
-  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-  user: MOCK_USER,
-};
+// Mock data for development when API is unavailable
+// SECURITY: These constants are only defined in development builds
+const MOCK_USER: Parent = __DEV__
+  ? {
+      id: 'parent-1',
+      firstName: 'Sarah',
+      lastName: 'Johnson',
+      email: 'sarah.johnson@example.com',
+      phone: '+1 (555) 123-4567',
+      childIds: ['child-1', 'child-2'],
+    }
+  : ({} as Parent);
+
+const MOCK_LOGIN_RESPONSE: LoginResponse = __DEV__
+  ? {
+      token: 'mock-jwt-token-12345',
+      refreshToken: 'mock-refresh-token-67890',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      user: MOCK_USER,
+    }
+  : ({} as LoginResponse);
 
 /**
  * Development-only: Login with mock credentials
+ * SECURITY: This function is ONLY available in development mode
  */
 export async function loginWithMockCredentials(
   email: string,
   password: string,
 ): Promise<AuthResult<LoginResponse>> {
+  // CRITICAL: Prevent mock authentication in production
+  if (!__DEV__) {
+    return {
+      success: false,
+      error: {
+        code: 'UNKNOWN_ERROR',
+        message: 'Mock authentication is not available in production',
+      },
+    };
+  }
+
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 1000));
 
