@@ -17,6 +17,8 @@ class Settings(BaseSettings):
         postgres_password: PostgreSQL database password
         jwt_secret_key: Secret key for JWT token signing
         jwt_algorithm: Algorithm for JWT token signing
+        redis_host: Redis server host
+        redis_port: Redis server port
     """
 
     # Database configuration
@@ -29,6 +31,10 @@ class Settings(BaseSettings):
     # JWT configuration
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
+
+    # Redis configuration
+    redis_host: str = "localhost"
+    redis_port: int = 6379
 
     # Database connection pool configuration
     db_pool_size: int = 10
