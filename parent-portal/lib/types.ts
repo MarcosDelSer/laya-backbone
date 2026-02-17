@@ -391,303 +391,6 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
-// Enrollment Form Types
-// ============================================================================
-
-/**
- * Enrollment form status.
- */
-export type EnrollmentFormStatus =
-  | 'Draft'
-  | 'Submitted'
-  | 'Approved'
-  | 'Rejected'
-  | 'Expired';
-
-/**
- * Parent/Guardian number identifier.
- */
-export type ParentNumber = '1' | '2';
-
-/**
- * E-signature type identifier.
- */
-export type SignatureType = 'Parent1' | 'Parent2' | 'Director';
-
-/**
- * Parent/Guardian information for enrollment form.
- */
-export interface EnrollmentParent {
-  id?: string;
-  formId: string;
-  parentNumber: ParentNumber;
-  name: string;
-  relationship: string;
-  address?: string;
-  city?: string;
-  postalCode?: string;
-  homePhone?: string;
-  cellPhone?: string;
-  workPhone?: string;
-  email?: string;
-  employer?: string;
-  workAddress?: string;
-  workHours?: string;
-  isPrimaryContact: boolean;
-}
-
-/**
- * Authorized pickup person for enrollment form.
- */
-export interface AuthorizedPickup {
-  id?: string;
-  formId: string;
-  name: string;
-  relationship: string;
-  phone: string;
-  photoPath?: string;
-  photoUrl?: string;
-  priority: number;
-  notes?: string;
-}
-
-/**
- * Emergency contact for enrollment form.
- */
-export interface EmergencyContact {
-  id?: string;
-  formId: string;
-  name: string;
-  relationship: string;
-  phone: string;
-  alternatePhone?: string;
-  priority: number;
-  notes?: string;
-}
-
-/**
- * Allergy information with details.
- */
-export interface AllergyInfo {
-  allergen: string;
-  severity?: 'mild' | 'moderate' | 'severe';
-  reaction?: string;
-  treatment?: string;
-}
-
-/**
- * Medication information with dosage and schedule.
- */
-export interface MedicationInfo {
-  name: string;
-  dosage: string;
-  schedule: string;
-  instructions?: string;
-}
-
-/**
- * Health information for enrollment form.
- */
-export interface HealthInfo {
-  id?: string;
-  formId: string;
-  allergies?: AllergyInfo[];
-  medicalConditions?: string;
-  hasEpiPen: boolean;
-  epiPenInstructions?: string;
-  medications?: MedicationInfo[];
-  doctorName?: string;
-  doctorPhone?: string;
-  doctorAddress?: string;
-  healthInsuranceNumber?: string;
-  healthInsuranceExpiry?: string;
-  specialNeeds?: string;
-  developmentalNotes?: string;
-}
-
-/**
- * Nutrition and dietary information for enrollment form.
- */
-export interface NutritionInfo {
-  id?: string;
-  formId: string;
-  dietaryRestrictions?: string;
-  foodAllergies?: string;
-  feedingInstructions?: string;
-  isBottleFeeding: boolean;
-  bottleFeedingInfo?: string;
-  foodPreferences?: string;
-  foodDislikes?: string;
-  mealPlanNotes?: string;
-}
-
-/**
- * Weekly attendance pattern for enrollment form.
- */
-export interface AttendancePattern {
-  id?: string;
-  formId: string;
-  mondayAm: boolean;
-  mondayPm: boolean;
-  tuesdayAm: boolean;
-  tuesdayPm: boolean;
-  wednesdayAm: boolean;
-  wednesdayPm: boolean;
-  thursdayAm: boolean;
-  thursdayPm: boolean;
-  fridayAm: boolean;
-  fridayPm: boolean;
-  saturdayAm: boolean;
-  saturdayPm: boolean;
-  sundayAm: boolean;
-  sundayPm: boolean;
-  expectedHoursPerWeek?: number;
-  expectedArrivalTime?: string;
-  expectedDepartureTime?: string;
-  notes?: string;
-}
-
-/**
- * E-signature for enrollment form.
- */
-export interface EnrollmentSignature {
-  id?: string;
-  formId: string;
-  signatureType: SignatureType;
-  signatureData: string;
-  signerName: string;
-  signedAt: string;
-  ipAddress?: string;
-  userAgent?: string;
-}
-
-/**
- * Complete enrollment form with all related data.
- */
-export interface EnrollmentForm {
-  id: string;
-  personId: string;
-  familyId: string;
-  schoolYearId: string;
-  formNumber: string;
-  status: EnrollmentFormStatus;
-  version: number;
-  admissionDate?: string;
-  childFirstName: string;
-  childLastName: string;
-  childDateOfBirth: string;
-  childAddress?: string;
-  childCity?: string;
-  childPostalCode?: string;
-  languagesSpoken?: string;
-  notes?: string;
-  submittedAt?: string;
-  approvedAt?: string;
-  approvedById?: string;
-  rejectedAt?: string;
-  rejectedById?: string;
-  rejectionReason?: string;
-  createdById: string;
-  createdAt?: string;
-  updatedAt?: string;
-  // Related data (populated when fetched with relations)
-  parents?: EnrollmentParent[];
-  authorizedPickups?: AuthorizedPickup[];
-  emergencyContacts?: EmergencyContact[];
-  healthInfo?: HealthInfo;
-  nutritionInfo?: NutritionInfo;
-  attendancePattern?: AttendancePattern;
-  signatures?: EnrollmentSignature[];
-}
-
-/**
- * Enrollment form summary for list display.
- */
-export interface EnrollmentFormSummary {
-  id: string;
-  formNumber: string;
-  status: EnrollmentFormStatus;
-  version: number;
-  admissionDate?: string;
-  childFirstName: string;
-  childLastName: string;
-  childDateOfBirth: string;
-  createdAt?: string;
-  updatedAt?: string;
-  createdByName?: string;
-}
-
-/**
- * Request payload for creating an enrollment form.
- */
-export interface CreateEnrollmentFormRequest {
-  personId: string;
-  familyId: string;
-  admissionDate?: string;
-  childFirstName: string;
-  childLastName: string;
-  childDateOfBirth: string;
-  childAddress?: string;
-  childCity?: string;
-  childPostalCode?: string;
-  languagesSpoken?: string;
-  notes?: string;
-  parents: Omit<EnrollmentParent, 'id' | 'formId'>[];
-  authorizedPickups?: Omit<AuthorizedPickup, 'id' | 'formId'>[];
-  emergencyContacts: Omit<EmergencyContact, 'id' | 'formId'>[];
-  healthInfo?: Omit<HealthInfo, 'id' | 'formId'>;
-  nutritionInfo?: Omit<NutritionInfo, 'id' | 'formId'>;
-  attendancePattern?: Omit<AttendancePattern, 'id' | 'formId'>;
-}
-
-/**
- * Request payload for updating an enrollment form.
- */
-export interface UpdateEnrollmentFormRequest {
-  admissionDate?: string;
-  childFirstName?: string;
-  childLastName?: string;
-  childDateOfBirth?: string;
-  childAddress?: string;
-  childCity?: string;
-  childPostalCode?: string;
-  languagesSpoken?: string;
-  notes?: string;
-  parents?: Omit<EnrollmentParent, 'formId'>[];
-  authorizedPickups?: Omit<AuthorizedPickup, 'formId'>[];
-  emergencyContacts?: Omit<EmergencyContact, 'formId'>[];
-  healthInfo?: Omit<HealthInfo, 'formId'>;
-  nutritionInfo?: Omit<NutritionInfo, 'formId'>;
-  attendancePattern?: Omit<AttendancePattern, 'formId'>;
-}
-
-/**
- * Request payload for signing an enrollment form.
- */
-export interface SignEnrollmentFormRequest {
-  formId: string;
-  signatureType: SignatureType;
-  signatureData: string;
-  signerName: string;
-}
-
-/**
- * Request payload for submitting an enrollment form for approval.
- */
-export interface SubmitEnrollmentFormRequest {
-  formId: string;
-}
-
-/**
- * Request payload for approving or rejecting an enrollment form.
- */
-export interface ReviewEnrollmentFormRequest {
-  formId: string;
-  action: 'approve' | 'reject';
-  reason?: string;
-}
-
-// ============================================================================
 // API Response Types
 // ============================================================================
 
@@ -709,225 +412,369 @@ export interface ApiErrorResponse {
 }
 
 // ============================================================================
-// Portfolio Types
+// Service Agreement Types (Quebec FO-0659)
 // ============================================================================
 
 /**
- * Portfolio item type categories.
+ * Service agreement status.
  */
-export type PortfolioItemType = 'photo' | 'video' | 'document' | 'artwork';
+export type ServiceAgreementStatus =
+  | 'draft'
+  | 'pending_signature'
+  | 'active'
+  | 'expired'
+  | 'terminated'
+  | 'cancelled';
 
 /**
- * Observation type categories.
+ * Annex status for optional service agreement annexes.
  */
-export type ObservationType =
-  | 'anecdotal'
-  | 'running_record'
-  | 'learning_story'
-  | 'checklist'
-  | 'time_sample';
+export type AnnexStatus =
+  | 'pending'
+  | 'signed'
+  | 'declined'
+  | 'not_applicable';
 
 /**
- * Milestone status.
+ * Annex type identifier for Quebec FO-0659 form.
  */
-export type MilestoneStatus = 'not_started' | 'in_progress' | 'achieved';
+export type AnnexType = 'A' | 'B' | 'C' | 'D';
 
 /**
- * Developmental domain categories.
+ * Contribution type for Quebec childcare subsidies.
  */
-export type DevelopmentalDomain =
-  | 'cognitive'
-  | 'physical'
-  | 'social_emotional'
-  | 'language'
-  | 'creative';
+export type ContributionType =
+  | 'reduced'       // $9.35/day Quebec reduced contribution
+  | 'full_rate'     // Full market rate
+  | 'mixed';        // Combination
 
 /**
- * Work sample type categories.
+ * Signer role in the agreement.
  */
-export type WorkSampleType =
-  | 'drawing'
-  | 'writing'
-  | 'craft'
-  | 'photo'
-  | 'recording'
-  | 'other';
+export type SignerRole = 'parent' | 'provider' | 'witness';
 
 /**
- * Individual portfolio item (photo/video/document).
+ * Signature verification status.
  */
-export interface PortfolioItem {
-  id: string;
-  childId: string;
-  type: PortfolioItemType;
-  title: string;
-  caption: string;
-  mediaUrl: string;
-  thumbnailUrl?: string;
-  date: string;
-  uploadedBy: string;
-  tags: string[];
-  isPrivate: boolean;
-  createdAt: string;
-  updatedAt?: string;
+export type SignatureVerificationStatus =
+  | 'pending'
+  | 'verified'
+  | 'failed';
+
+/**
+ * Operating days of the week.
+ */
+export type DayOfWeek =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday';
+
+/**
+ * Payment terms for service agreement (Article 5).
+ */
+export interface ServiceAgreementPaymentTerms {
+  contributionType: ContributionType;
+  dailyRate: number;
+  monthlyAmount: number;
+  paymentDueDay: number;
+  paymentMethod: string;
+  lateFeePercentage?: number;
+  lateFeeGraceDays?: number;
+  nsfFee?: number;
+  depositAmount?: number;
+  depositRefundable?: boolean;
 }
 
 /**
- * Observation note for a child.
+ * Operating hours for service agreement (Article 3).
  */
-export interface Observation {
-  id: string;
-  childId: string;
-  type: ObservationType;
-  title: string;
-  content: string;
-  date: string;
-  observedBy: string;
-  domains: DevelopmentalDomain[];
-  linkedMilestones: string[];
-  linkedWorkSamples: string[];
-  isPrivate: boolean;
-  createdAt: string;
-  updatedAt?: string;
+export interface ServiceAgreementOperatingHours {
+  openTime: string;
+  closeTime: string;
+  operatingDays: DayOfWeek[];
+  maxDailyHours: number;
 }
 
 /**
- * Developmental milestone for tracking progress.
+ * Attendance pattern for service agreement (Article 4).
  */
-export interface Milestone {
+export interface ServiceAgreementAttendancePattern {
+  scheduledDays: DayOfWeek[];
+  arrivalTime: string;
+  departureTime: string;
+  isFullTime: boolean;
+  daysPerWeek: number;
+}
+
+/**
+ * Late pickup fee configuration (Article 6).
+ */
+export interface LatePickupFeeConfig {
+  gracePeriodMinutes: number;
+  feePerInterval: number;
+  intervalMinutes: number;
+  maxDailyFee: number;
+}
+
+/**
+ * Termination conditions (Article 10).
+ */
+export interface TerminationConditions {
+  noticePeriodDays: number;
+  immediateTerminationReasons: string[];
+  refundPolicy: string;
+}
+
+/**
+ * Annex A - Field trips authorization (optional).
+ */
+export interface ServiceAgreementAnnexA {
   id: string;
+  agreementId: string;
+  type: 'A';
+  status: AnnexStatus;
+  authorizeFieldTrips: boolean;
+  fieldTripConditions?: string;
+  transportationAuthorized?: boolean;
+  walkingDistanceAuthorized?: boolean;
+  signedAt?: string;
+  signedBy?: string;
+}
+
+/**
+ * Annex B - Hygiene items (optional).
+ */
+export interface ServiceAgreementAnnexB {
+  id: string;
+  agreementId: string;
+  type: 'B';
+  status: AnnexStatus;
+  hygieneItemsIncluded: boolean;
+  itemsList?: string[];
+  monthlyFee?: number;
+  parentProvides?: string[];
+  signedAt?: string;
+  signedBy?: string;
+}
+
+/**
+ * Annex C - Supplementary meals (optional).
+ */
+export interface ServiceAgreementAnnexC {
+  id: string;
+  agreementId: string;
+  type: 'C';
+  status: AnnexStatus;
+  supplementaryMealsIncluded: boolean;
+  mealsIncluded?: string[];
+  dietaryRestrictions?: string;
+  allergyInfo?: string;
+  monthlyFee?: number;
+  signedAt?: string;
+  signedBy?: string;
+}
+
+/**
+ * Annex D - Extended hours beyond 10h/day (optional).
+ */
+export interface ServiceAgreementAnnexD {
+  id: string;
+  agreementId: string;
+  type: 'D';
+  status: AnnexStatus;
+  extendedHoursRequired: boolean;
+  requestedStartTime?: string;
+  requestedEndTime?: string;
+  additionalHoursPerDay?: number;
+  hourlyRate?: number;
+  monthlyEstimate?: number;
+  reason?: string;
+  signedAt?: string;
+  signedBy?: string;
+}
+
+/**
+ * Union type for all annex types.
+ */
+export type ServiceAgreementAnnex =
+  | ServiceAgreementAnnexA
+  | ServiceAgreementAnnexB
+  | ServiceAgreementAnnexC
+  | ServiceAgreementAnnexD;
+
+/**
+ * Electronic signature with full audit trail.
+ */
+export interface ServiceAgreementSignature {
+  id: string;
+  agreementId: string;
+  signerRole: SignerRole;
+  signerName: string;
+  signerPersonId: string;
+  signatureData: string;
+  signatureType: 'typed' | 'drawn';
+  signedAt: string;
+  ipAddress: string;
+  userAgent?: string;
+  geoLocation?: string;
+  deviceFingerprint?: string;
+  verificationHash: string;
+  verificationStatus: SignatureVerificationStatus;
+  consumerProtectionAcknowledged: boolean;
+  termsAccepted: boolean;
+  legalAcknowledged: boolean;
+}
+
+/**
+ * Consumer Protection Act acknowledgment (Quebec law).
+ */
+export interface ConsumerProtectionAcknowledgment {
+  acknowledged: boolean;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  coolingOffPeriodEndDate?: string;
+  coolingOffDaysRemaining?: number;
+}
+
+/**
+ * Complete Quebec FO-0659 Service Agreement.
+ * Contains all 13 articles as per Quebec regulations.
+ */
+export interface ServiceAgreement {
+  id: string;
+  agreementNumber: string;
+  status: ServiceAgreementStatus;
+  schoolYearId: string;
+
+  // Article 1: Identification of Parties
   childId: string;
-  domain: DevelopmentalDomain;
-  title: string;
-  description: string;
-  expectedAgeMonths?: number;
-  status: MilestoneStatus;
-  achievedDate?: string;
+  childName: string;
+  childDateOfBirth: string;
+  parentId: string;
+  parentName: string;
+  parentAddress: string;
+  parentPhone: string;
+  parentEmail: string;
+  providerId: string;
+  providerName: string;
+  providerAddress: string;
+  providerPhone: string;
+  providerPermitNumber?: string;
+
+  // Article 2: Description of Services
+  serviceDescription: string;
+  programType: string;
+  ageGroup: string;
+  classroomId?: string;
+  classroomName?: string;
+
+  // Article 3: Operating Hours
+  operatingHours: ServiceAgreementOperatingHours;
+
+  // Article 4: Attendance Pattern
+  attendancePattern: ServiceAgreementAttendancePattern;
+
+  // Article 5: Payment Terms
+  paymentTerms: ServiceAgreementPaymentTerms;
+
+  // Article 6: Late Pickup Fees
+  latePickupFees: LatePickupFeeConfig;
+
+  // Article 7: Closure Days
+  closureDays: string[];
+  holidaySchedule?: string;
+  vacationWeeks?: number;
+
+  // Article 8: Absence Policy
+  absencePolicy: string;
+  absenceNotificationRequired: boolean;
+  absenceNotificationMethod?: string;
+  sickDayPolicy?: string;
+
+  // Article 9: Agreement Duration
+  startDate: string;
+  endDate: string;
+  autoRenewal: boolean;
+  renewalNoticeRequired?: boolean;
+  renewalNoticeDays?: number;
+
+  // Article 10: Termination Conditions
+  terminationConditions: TerminationConditions;
+
+  // Article 11: Special Conditions
+  specialConditions?: string;
+  specialNeedsAccommodations?: string;
+  medicalConditions?: string;
+  allergies?: string;
+  emergencyContacts?: string;
+
+  // Article 12: Consumer Protection Act Notice
+  consumerProtectionAcknowledgment: ConsumerProtectionAcknowledgment;
+
+  // Article 13: Signatures
+  signatures: ServiceAgreementSignature[];
+  parentSignedAt?: string;
+  providerSignedAt?: string;
+  allSignaturesComplete: boolean;
+
+  // Annexes A-D (optional)
+  annexes: ServiceAgreementAnnex[];
+
+  // Metadata
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  pdfUrl?: string;
   notes?: string;
-  evidenceIds: string[];
-  createdAt: string;
-  updatedAt?: string;
 }
 
 /**
- * Work sample documentation.
+ * Summary view of service agreement for list display.
  */
-export interface WorkSample {
+export interface ServiceAgreementSummary {
   id: string;
+  agreementNumber: string;
+  status: ServiceAgreementStatus;
   childId: string;
-  type: WorkSampleType;
-  title: string;
-  description: string;
-  mediaUrl: string;
-  thumbnailUrl?: string;
-  date: string;
-  domains: DevelopmentalDomain[];
-  teacherNotes?: string;
-  familyContribution?: string;
-  isPrivate: boolean;
+  childName: string;
+  parentName: string;
+  startDate: string;
+  endDate: string;
+  allSignaturesComplete: boolean;
+  parentSignedAt?: string;
+  providerSignedAt?: string;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
 }
 
 /**
- * Request payload for creating a portfolio item.
+ * Request payload for signing a service agreement.
  */
-export interface CreatePortfolioItemRequest {
-  childId: string;
-  type: PortfolioItemType;
-  title: string;
-  caption: string;
-  mediaUrl: string;
-  thumbnailUrl?: string;
-  date: string;
-  tags?: string[];
-  isPrivate?: boolean;
+export interface SignServiceAgreementRequest {
+  agreementId: string;
+  signatureData: string;
+  signatureType: 'typed' | 'drawn';
+  consumerProtectionAcknowledged: boolean;
+  termsAccepted: boolean;
+  legalAcknowledged: boolean;
+  annexSignatures?: {
+    annexId: string;
+    signed: boolean;
+  }[];
 }
 
 /**
- * Request payload for creating an observation.
+ * Response from signing a service agreement.
  */
-export interface CreateObservationRequest {
-  childId: string;
-  type: ObservationType;
-  title: string;
-  content: string;
-  date: string;
-  domains?: DevelopmentalDomain[];
-  linkedMilestones?: string[];
-  linkedWorkSamples?: string[];
-  isPrivate?: boolean;
-}
-
-/**
- * Request payload for creating a milestone.
- */
-export interface CreateMilestoneRequest {
-  childId: string;
-  domain: DevelopmentalDomain;
-  title: string;
-  description: string;
-  expectedAgeMonths?: number;
-  status?: MilestoneStatus;
-  notes?: string;
-}
-
-/**
- * Request payload for creating a work sample.
- */
-export interface CreateWorkSampleRequest {
-  childId: string;
-  type: WorkSampleType;
-  title: string;
-  description: string;
-  mediaUrl: string;
-  thumbnailUrl?: string;
-  date: string;
-  domains?: DevelopmentalDomain[];
-  teacherNotes?: string;
-  isPrivate?: boolean;
-}
-
-/**
- * Portfolio summary for a child.
- */
-export interface PortfolioSummary {
-  childId: string;
-  totalItems: number;
-  totalObservations: number;
-  totalMilestones: number;
-  milestonesAchieved: number;
-  totalWorkSamples: number;
-  recentActivity: string;
-}
-
-// ============================================================================
-// Medical Protocol Types (Quebec FO-0647)
-// ============================================================================
-
-/**
- * Acetaminophen concentration types per Quebec FO-0647 protocol.
- *
- * Approved concentrations:
- * - 80mg/mL: Infant oral drops (0+ months, 4.3-15.9kg)
- * - 160mg/5mL: Children's suspension (3+ months, 5.5-35kg)
- * - 325mg: Adult tablet (72+ months, 21.8-35kg)
- * - 500mg: Adult tablet (72+ months, 32+kg)
- */
-export type AcetaminophenConcentration = '80mg/mL' | '160mg/5mL' | '325mg' | '500mg';
-
-/**
- * Dosing information for a specific concentration and weight range.
- * Used by DosingChart component to display medication dosing options.
- */
-export interface DosingInfo {
-  protocolId: string;
-  concentration: AcetaminophenConcentration;
-  minWeightKg: number;
-  maxWeightKg: number;
-  minDoseMg: number;
-  maxDoseMg: number;
-  minDoseMl: number;
-  maxDoseMl: number;
-  displayLabel: string;
+export interface SignServiceAgreementResponse {
+  success: boolean;
+  signatureId: string;
+  agreementStatus: ServiceAgreementStatus;
+  allSignaturesComplete: boolean;
+  pdfUrl?: string;
+  message?: string;
 }

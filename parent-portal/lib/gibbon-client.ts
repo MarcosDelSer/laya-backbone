@@ -8,33 +8,21 @@
 import { gibbonClient, ApiError } from './api';
 import type {
   Child,
-  ChildProtocolOverview,
-  CreateProtocolAuthorizationRequest,
   DailyReport,
-  DietaryProfile,
   Document,
-  DosingCalculationRequest,
-  DosingCalculationResponse,
   Invoice,
-  MenuItem,
   Message,
   MessageThread,
-  NutritionalReport,
   PaginatedResponse,
   PaginationParams,
-  ProtocolAdministration,
-  ProtocolAuthorization,
-  ProtocolAuthorizationStatus,
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
-  EnrollmentForm,
-  EnrollmentFormSummary,
-  EnrollmentFormStatus,
-  CreateEnrollmentFormRequest,
-  UpdateEnrollmentFormRequest,
-  SignEnrollmentFormRequest,
-  SubmitEnrollmentFormRequest,
+  ServiceAgreement,
+  ServiceAgreementSummary,
+  ServiceAgreementStatus,
+  SignServiceAgreementRequest,
+  SignServiceAgreementResponse,
 } from './types';
 
 // ============================================================================
@@ -68,12 +56,11 @@ const ENDPOINTS = {
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
 
-  // Enrollment Forms
-  ENROLLMENT_FORMS: '/api/v1/enrollment-forms',
-  ENROLLMENT_FORM: (id: string) => `/api/v1/enrollment-forms/${id}`,
-  ENROLLMENT_FORM_SIGN: (id: string) => `/api/v1/enrollment-forms/${id}/sign`,
-  ENROLLMENT_FORM_SUBMIT: (id: string) => `/api/v1/enrollment-forms/${id}/submit`,
-  ENROLLMENT_FORM_PDF: (id: string) => `/api/v1/enrollment-forms/${id}/pdf`,
+  // Service Agreements
+  SERVICE_AGREEMENTS: '/api/v1/service-agreements',
+  SERVICE_AGREEMENT: (id: string) => `/api/v1/service-agreements/${id}`,
+  SIGN_SERVICE_AGREEMENT: (id: string) => `/api/v1/service-agreements/${id}/sign`,
+  SERVICE_AGREEMENT_PDF: (id: string) => `/api/v1/service-agreements/${id}/pdf`,
 } as const;
 
 // ============================================================================
@@ -353,124 +340,95 @@ export async function getPendingDocumentsCount(): Promise<number> {
 }
 
 // ============================================================================
-// Enrollment Forms API
+// Service Agreements API
 // ============================================================================
 
 /**
- * Parameters for fetching enrollment forms.
+ * Parameters for fetching service agreements.
  */
-export interface EnrollmentFormParams extends PaginationParams {
-  status?: EnrollmentFormStatus;
-  familyId?: string;
-  personId?: string;
+export interface ServiceAgreementParams extends PaginationParams {
+  status?: ServiceAgreementStatus;
+  childId?: string;
+  schoolYearId?: string;
 }
 
 /**
- * Fetch enrollment forms with optional filters.
+ * Fetch service agreements with optional filters.
  */
-export async function getEnrollmentForms(
-  params?: EnrollmentFormParams
-): Promise<PaginatedResponse<EnrollmentFormSummary>> {
-  return gibbonClient.get<PaginatedResponse<EnrollmentFormSummary>>(ENDPOINTS.ENROLLMENT_FORMS, {
+export async function getServiceAgreements(
+  params?: ServiceAgreementParams
+): Promise<PaginatedResponse<ServiceAgreementSummary>> {
+  return gibbonClient.get<PaginatedResponse<ServiceAgreementSummary>>(ENDPOINTS.SERVICE_AGREEMENTS, {
     params: {
       skip: params?.skip,
       limit: params?.limit,
       status: params?.status,
-      family_id: params?.familyId,
-      person_id: params?.personId,
+      child_id: params?.childId,
+      school_year_id: params?.schoolYearId,
     },
   });
 }
 
 /**
- * Fetch a specific enrollment form by ID with all related data.
+ * Fetch a specific service agreement by ID.
  */
-export async function getEnrollmentForm(formId: string): Promise<EnrollmentForm> {
-  return gibbonClient.get<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM(formId));
+export async function getServiceAgreement(agreementId: string): Promise<ServiceAgreement> {
+  return gibbonClient.get<ServiceAgreement>(ENDPOINTS.SERVICE_AGREEMENT(agreementId));
 }
 
 /**
- * Create a new enrollment form.
+ * Sign a service agreement electronically.
  */
-export async function createEnrollmentForm(
-  request: CreateEnrollmentFormRequest
-): Promise<EnrollmentForm> {
-  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORMS, request);
+export async function signServiceAgreement(
+  request: SignServiceAgreementRequest
+): Promise<SignServiceAgreementResponse> {
+  return gibbonClient.post<SignServiceAgreementResponse>(
+    ENDPOINTS.SIGN_SERVICE_AGREEMENT(request.agreementId),
+    {
+      signature_data: request.signatureData,
+      signature_type: request.signatureType,
+      consumer_protection_acknowledged: request.consumerProtectionAcknowledged,
+      terms_accepted: request.termsAccepted,
+      legal_acknowledged: request.legalAcknowledged,
+      annex_signatures: request.annexSignatures?.map((a) => ({
+        annex_id: a.annexId,
+        signed: a.signed,
+      })),
+    }
+  );
 }
 
 /**
- * Update an existing enrollment form.
+ * Get the PDF download URL for a service agreement.
  */
-export async function updateEnrollmentForm(
-  formId: string,
-  request: UpdateEnrollmentFormRequest
-): Promise<EnrollmentForm> {
-  return gibbonClient.put<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM(formId), request);
+export function getServiceAgreementPdfUrl(agreementId: string): string {
+  return `${process.env.NEXT_PUBLIC_GIBBON_URL || 'http://localhost:8080/gibbon'}${ENDPOINTS.SERVICE_AGREEMENT_PDF(agreementId)}`;
 }
 
 /**
- * Delete an enrollment form (only draft forms can be deleted).
+ * Get pending service agreements count.
  */
-export async function deleteEnrollmentForm(formId: string): Promise<void> {
-  return gibbonClient.delete<void>(ENDPOINTS.ENROLLMENT_FORM(formId));
-}
-
-/**
- * Sign an enrollment form with e-signature.
- */
-export async function signEnrollmentForm(
-  request: SignEnrollmentFormRequest
-): Promise<EnrollmentForm> {
-  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM_SIGN(request.formId), {
-    signature_type: request.signatureType,
-    signature_data: request.signatureData,
-    signer_name: request.signerName,
-  });
-}
-
-/**
- * Submit an enrollment form for approval.
- */
-export async function submitEnrollmentForm(
-  request: SubmitEnrollmentFormRequest
-): Promise<EnrollmentForm> {
-  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM_SUBMIT(request.formId));
-}
-
-/**
- * Get the PDF download URL for an enrollment form.
- */
-export function getEnrollmentFormPdfUrl(formId: string): string {
-  return `${process.env.NEXT_PUBLIC_GIBBON_URL || 'http://localhost:8080/gibbon'}${ENDPOINTS.ENROLLMENT_FORM_PDF(formId)}`;
-}
-
-/**
- * Get enrollment forms for a specific family.
- */
-export async function getFamilyEnrollmentForms(
-  familyId: string,
-  params?: Omit<EnrollmentFormParams, 'familyId'>
-): Promise<PaginatedResponse<EnrollmentFormSummary>> {
-  return getEnrollmentForms({
-    ...params,
-    familyId,
-  });
-}
-
-/**
- * Get draft enrollment forms count.
- */
-export async function getDraftEnrollmentFormsCount(): Promise<number> {
-  const response = await getEnrollmentForms({ status: 'Draft', limit: 1 });
+export async function getPendingServiceAgreementsCount(): Promise<number> {
+  const response = await getServiceAgreements({ status: 'pending_signature', limit: 1 });
   return response.total;
 }
 
 /**
- * Get pending submission enrollment forms count.
+ * Fetch service agreements that require parent signature.
  */
-export async function getSubmittedEnrollmentFormsCount(): Promise<number> {
-  const response = await getEnrollmentForms({ status: 'Submitted', limit: 1 });
-  return response.total;
+export async function getServiceAgreementsRequiringSignature(): Promise<ServiceAgreementSummary[]> {
+  const response = await getServiceAgreements({ status: 'pending_signature' });
+  return response.items.filter((agreement) => !agreement.parentSignedAt);
+}
+
+/**
+ * Fetch active service agreements for a child.
+ */
+export async function getActiveServiceAgreementsForChild(
+  childId: string
+): Promise<ServiceAgreementSummary[]> {
+  const response = await getServiceAgreements({ childId, status: 'active' });
+  return response.items;
 }
 
 // ============================================================================
