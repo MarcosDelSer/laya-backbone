@@ -112,6 +112,26 @@ class Settings(BaseSettings):
         """
         return self.environment == "development"
 
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse CORS origins string into a list.
+
+        Returns:
+            list[str]: List of allowed CORS origins, empty list if not configured
+        """
+        if not self.cors_origins:
+            return []
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def redis_url(self) -> str:
+        """Construct Redis connection URL.
+
+        Returns:
+            str: Redis connection URL
+        """
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
