@@ -8,6 +8,7 @@ Modules:
     activity_service: Service for activity intelligence and recommendations
     analytics_service: Service for business intelligence and analytics
     rbac_service: Service for role-based access control
+    audit_service: Service for audit logging and tracking
 """
 
 from app.services.coaching_service import (
@@ -26,6 +27,11 @@ from app.services.rbac_service import (
     UserRoleNotFoundError,
     PermissionDeniedError,
     InvalidAssignmentError,
+)
+from app.services.audit_service import (
+    AuditService,
+    AuditServiceError,
+    AuditLogNotFoundError,
 )
 
 __all__: list[str] = [
@@ -46,4 +52,8 @@ __all__: list[str] = [
     "UserRoleNotFoundError",
     "PermissionDeniedError",
     "InvalidAssignmentError",
+    # Audit
+    "AuditService",
+    "AuditServiceError",
+    "AuditLogNotFoundError",
 ]
