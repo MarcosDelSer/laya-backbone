@@ -1857,6 +1857,96 @@ class MockStorageQuota:
         )
 
 
+class MockMFASettings:
+    """Mock MFASettings object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        user_id,
+        is_enabled,
+        method,
+        secret_key,
+        recovery_email,
+        last_verified_at,
+        failed_attempts,
+        locked_until,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.user_id = user_id
+        self.is_enabled = is_enabled
+        self.method = method
+        self.secret_key = secret_key
+        self.recovery_email = recovery_email
+        self.last_verified_at = last_verified_at
+        self.failed_attempts = failed_attempts
+        self.locked_until = locked_until
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<MFASettings(id={self.id}, user_id={self.user_id}, "
+            f"enabled={self.is_enabled}, method={self.method})>"
+        )
+
+
+class MockMFABackupCode:
+    """Mock MFABackupCode object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        mfa_settings_id,
+        code_hash,
+        is_used,
+        used_at,
+        created_at,
+    ):
+        self.id = id
+        self.mfa_settings_id = mfa_settings_id
+        self.code_hash = code_hash
+        self.is_used = is_used
+        self.used_at = used_at
+        self.created_at = created_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<MFABackupCode(id={self.id}, mfa_settings_id={self.mfa_settings_id}, "
+            f"used={self.is_used})>"
+        )
+
+
+class MockMFAIPWhitelist:
+    """Mock MFAIPWhitelist object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        mfa_settings_id,
+        ip_address,
+        description,
+        is_active,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.mfa_settings_id = mfa_settings_id
+        self.ip_address = ip_address
+        self.description = description
+        self.is_active = is_active
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<MFAIPWhitelist(id={self.id}, ip={self.ip_address}, "
+            f"active={self.is_active})>"
+        )
+
+
 async def create_file_in_db(
     session: AsyncSession,
     owner_id: UUID,
@@ -2006,6 +2096,62 @@ async def create_storage_quota_in_db(
         quota_bytes=quota_bytes,
         used_bytes=used_bytes,
         file_count=file_count,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_mfa_settings_in_db(
+    session: AsyncSession,
+    user_id: UUID,
+    is_enabled: bool = False,
+    method: str = "totp",
+    secret_key: Optional[str] = None,
+    recovery_email: Optional[str] = None,
+    last_verified_at: Optional[datetime] = None,
+    failed_attempts: int = 0,
+    locked_until: Optional[datetime] = None,
+) -> MockMFASettings:
+    """Helper function to create MFA settings directly in SQLite database."""
+    settings_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO mfa_settings (
+                id, user_id, is_enabled, method, secret_key, recovery_email,
+                last_verified_at, failed_attempts, locked_until, created_at, updated_at
+            ) VALUES (
+                :id, :user_id, :is_enabled, :method, :secret_key, :recovery_email,
+                :last_verified_at, :failed_attempts, :locked_until, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": settings_id,
+            "user_id": str(user_id),
+            "is_enabled": 1 if is_enabled else 0,
+            "method": method,
+            "secret_key": secret_key,
+            "recovery_email": recovery_email,
+            "last_verified_at": last_verified_at.isoformat() if last_verified_at else None,
+            "failed_attempts": failed_attempts,
+            "locked_until": locked_until.isoformat() if locked_until else None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockMFASettings(
+        id=UUID(settings_id),
+        user_id=user_id,
+        is_enabled=is_enabled,
+        method=method,
+        secret_key=secret_key,
+        recovery_email=recovery_email,
+        last_verified_at=last_verified_at,
+        failed_attempts=failed_attempts,
+        locked_until=locked_until,
         created_at=now,
         updated_at=now,
     )
