@@ -285,6 +285,53 @@ CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_email ON password_reset_tok
 """
 
 
+# SQLite-compatible storage tables (for file upload testing)
+SQLITE_CREATE_STORAGE_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS files (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    filename VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    storage_backend VARCHAR(20) NOT NULL,
+    storage_path VARCHAR(500) NOT NULL,
+    checksum VARCHAR(64),
+    is_public INTEGER NOT NULL DEFAULT 0,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS file_thumbnails (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    size VARCHAR(20) NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    storage_path VARCHAR(500) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS storage_quotas (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL UNIQUE,
+    quota_bytes INTEGER NOT NULL DEFAULT 104857600,
+    used_bytes INTEGER NOT NULL DEFAULT 0,
+    file_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_id);
+CREATE INDEX IF NOT EXISTS idx_files_content_type ON files(content_type);
+CREATE INDEX IF NOT EXISTS idx_files_is_public ON files(is_public);
+CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
+CREATE INDEX IF NOT EXISTS idx_file_thumbnails_file ON file_thumbnails(file_id);
+CREATE INDEX IF NOT EXISTS idx_storage_quotas_owner ON storage_quotas(owner_id);
+"""
+
+
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -380,6 +427,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
+    # Create storage tables via raw SQL (SQLite compatibility)
+    async with test_engine.begin() as conn:
+        for statement in SQLITE_CREATE_STORAGE_TABLES_SQL.strip().split(';'):
+            statement = statement.strip()
+            if statement:
+                await conn.execute(text(statement))
+
     async with TestAsyncSessionLocal() as session:
         try:
             yield session
@@ -388,6 +442,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
     # Drop all tables after test
     async with test_engine.begin() as conn:
+        # Drop storage tables (foreign keys first)
+        await conn.execute(text("DROP TABLE IF EXISTS file_thumbnails"))
+        await conn.execute(text("DROP TABLE IF EXISTS files"))
+        await conn.execute(text("DROP TABLE IF EXISTS storage_quotas"))
         # Drop auth tables (foreign keys first)
         await conn.execute(text("DROP TABLE IF EXISTS password_reset_tokens"))
         await conn.execute(text("DROP TABLE IF EXISTS token_blacklist"))
@@ -1596,3 +1654,507 @@ async def sample_home_activities(
         activities.append(activity)
 
     return activities
+
+
+# ============================================================================
+# Storage fixtures
+# ============================================================================
+
+
+class MockFile:
+    """Mock File object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        owner_id,
+        filename,
+        original_filename,
+        content_type,
+        size_bytes,
+        storage_backend,
+        storage_path,
+        checksum,
+        is_public,
+        description,
+        created_at,
+        updated_at,
+        thumbnails=None,
+    ):
+        self.id = id
+        self.owner_id = owner_id
+        self.filename = filename
+        self.original_filename = original_filename
+        self.content_type = content_type
+        self.size_bytes = size_bytes
+        self.storage_backend = storage_backend
+        self.storage_path = storage_path
+        self.checksum = checksum
+        self.is_public = is_public
+        self.description = description
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.thumbnails = thumbnails or []
+
+    def __repr__(self) -> str:
+        return (
+            f"<File(id={self.id}, filename='{self.original_filename}', "
+            f"size={self.size_bytes}, backend={self.storage_backend})>"
+        )
+
+
+class MockFileThumbnail:
+    """Mock FileThumbnail object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        file_id,
+        size,
+        width,
+        height,
+        storage_path,
+        created_at,
+    ):
+        self.id = id
+        self.file_id = file_id
+        self.size = size
+        self.width = width
+        self.height = height
+        self.storage_path = storage_path
+        self.created_at = created_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<FileThumbnail(id={self.id}, file_id={self.file_id}, "
+            f"size={self.size}, {self.width}x{self.height})>"
+        )
+
+
+class MockStorageQuota:
+    """Mock StorageQuota object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        owner_id,
+        quota_bytes,
+        used_bytes,
+        file_count,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.owner_id = owner_id
+        self.quota_bytes = quota_bytes
+        self.used_bytes = used_bytes
+        self.file_count = file_count
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    @property
+    def available_bytes(self) -> int:
+        """Calculate available storage space in bytes."""
+        return max(0, self.quota_bytes - self.used_bytes)
+
+    @property
+    def usage_percentage(self) -> float:
+        """Calculate storage usage as a percentage."""
+        if self.quota_bytes <= 0:
+            return 0.0
+        return (self.used_bytes / self.quota_bytes) * 100
+
+    def __repr__(self) -> str:
+        usage_percent = self.usage_percentage
+        return (
+            f"<StorageQuota(id={self.id}, owner_id={self.owner_id}, "
+            f"usage={usage_percent:.1f}%, files={self.file_count})>"
+        )
+
+
+async def create_file_in_db(
+    session: AsyncSession,
+    owner_id: UUID,
+    filename: str,
+    original_filename: str,
+    content_type: str,
+    size_bytes: int,
+    storage_backend: str = "local",
+    storage_path: Optional[str] = None,
+    checksum: Optional[str] = None,
+    is_public: bool = False,
+    description: Optional[str] = None,
+) -> MockFile:
+    """Helper function to create a file directly in SQLite database."""
+    file_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+    if storage_path is None:
+        storage_path = f"/storage/{file_id}/{filename}"
+
+    await session.execute(
+        text("""
+            INSERT INTO files (
+                id, owner_id, filename, original_filename, content_type,
+                size_bytes, storage_backend, storage_path, checksum,
+                is_public, description, created_at, updated_at
+            ) VALUES (
+                :id, :owner_id, :filename, :original_filename, :content_type,
+                :size_bytes, :storage_backend, :storage_path, :checksum,
+                :is_public, :description, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": file_id,
+            "owner_id": str(owner_id),
+            "filename": filename,
+            "original_filename": original_filename,
+            "content_type": content_type,
+            "size_bytes": size_bytes,
+            "storage_backend": storage_backend,
+            "storage_path": storage_path,
+            "checksum": checksum,
+            "is_public": 1 if is_public else 0,
+            "description": description,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockFile(
+        id=UUID(file_id),
+        owner_id=owner_id,
+        filename=filename,
+        original_filename=original_filename,
+        content_type=content_type,
+        size_bytes=size_bytes,
+        storage_backend=storage_backend,
+        storage_path=storage_path,
+        checksum=checksum,
+        is_public=is_public,
+        description=description,
+        created_at=now,
+        updated_at=now,
+        thumbnails=[],
+    )
+
+
+async def create_file_thumbnail_in_db(
+    session: AsyncSession,
+    file_id: UUID,
+    size: str,
+    width: int,
+    height: int,
+    storage_path: Optional[str] = None,
+) -> MockFileThumbnail:
+    """Helper function to create a file thumbnail directly in SQLite database."""
+    thumbnail_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+    if storage_path is None:
+        storage_path = f"/storage/thumbnails/{thumbnail_id}_{size}.jpg"
+
+    await session.execute(
+        text("""
+            INSERT INTO file_thumbnails (
+                id, file_id, size, width, height, storage_path, created_at
+            ) VALUES (
+                :id, :file_id, :size, :width, :height, :storage_path, :created_at
+            )
+        """),
+        {
+            "id": thumbnail_id,
+            "file_id": str(file_id),
+            "size": size,
+            "width": width,
+            "height": height,
+            "storage_path": storage_path,
+            "created_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockFileThumbnail(
+        id=UUID(thumbnail_id),
+        file_id=file_id,
+        size=size,
+        width=width,
+        height=height,
+        storage_path=storage_path,
+        created_at=now,
+    )
+
+
+async def create_storage_quota_in_db(
+    session: AsyncSession,
+    owner_id: UUID,
+    quota_bytes: int = 104857600,  # 100 MB default
+    used_bytes: int = 0,
+    file_count: int = 0,
+) -> MockStorageQuota:
+    """Helper function to create a storage quota directly in SQLite database."""
+    quota_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO storage_quotas (
+                id, owner_id, quota_bytes, used_bytes, file_count, created_at, updated_at
+            ) VALUES (
+                :id, :owner_id, :quota_bytes, :used_bytes, :file_count, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": quota_id,
+            "owner_id": str(owner_id),
+            "quota_bytes": quota_bytes,
+            "used_bytes": used_bytes,
+            "file_count": file_count,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockStorageQuota(
+        id=UUID(quota_id),
+        owner_id=owner_id,
+        quota_bytes=quota_bytes,
+        used_bytes=used_bytes,
+        file_count=file_count,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def sample_file_data(test_user_id: UUID) -> Dict[str, Any]:
+    """Create sample file data for testing."""
+    return {
+        "owner_id": test_user_id,
+        "filename": f"{uuid4()}_test_image.jpg",
+        "original_filename": "test_image.jpg",
+        "content_type": "image/jpeg",
+        "size_bytes": 1024 * 100,  # 100 KB
+        "storage_backend": "local",
+        "storage_path": None,
+        "checksum": "abc123def456",
+        "is_public": False,
+        "description": "A test image file",
+    }
+
+
+@pytest_asyncio.fixture
+async def sample_file(
+    db_session: AsyncSession,
+    test_user_id: UUID,
+) -> MockFile:
+    """Create a sample file in the database."""
+    return await create_file_in_db(
+        db_session,
+        owner_id=test_user_id,
+        filename=f"{uuid4()}_test_image.jpg",
+        original_filename="test_image.jpg",
+        content_type="image/jpeg",
+        size_bytes=1024 * 100,  # 100 KB
+        storage_backend="local",
+        checksum="abc123def456",
+        is_public=False,
+        description="A test image file",
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_public_file(
+    db_session: AsyncSession,
+    test_user_id: UUID,
+) -> MockFile:
+    """Create a sample public file in the database."""
+    return await create_file_in_db(
+        db_session,
+        owner_id=test_user_id,
+        filename=f"{uuid4()}_public_document.pdf",
+        original_filename="public_document.pdf",
+        content_type="application/pdf",
+        size_bytes=1024 * 500,  # 500 KB
+        storage_backend="s3",
+        checksum="pdf123hash456",
+        is_public=True,
+        description="A public PDF document",
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_file_with_thumbnails(
+    db_session: AsyncSession,
+    test_user_id: UUID,
+) -> MockFile:
+    """Create a sample file with thumbnails in the database."""
+    file = await create_file_in_db(
+        db_session,
+        owner_id=test_user_id,
+        filename=f"{uuid4()}_image_with_thumbs.jpg",
+        original_filename="image_with_thumbs.jpg",
+        content_type="image/jpeg",
+        size_bytes=1024 * 200,  # 200 KB
+        storage_backend="local",
+        checksum="thumb123hash456",
+        is_public=False,
+        description="An image with thumbnails",
+    )
+
+    # Create thumbnails
+    thumbnails = []
+    for size, (width, height) in [("small", (100, 100)), ("medium", (300, 300)), ("large", (600, 600))]:
+        thumb = await create_file_thumbnail_in_db(
+            db_session,
+            file_id=file.id,
+            size=size,
+            width=width,
+            height=height,
+        )
+        thumbnails.append(thumb)
+
+    file.thumbnails = thumbnails
+    return file
+
+
+@pytest_asyncio.fixture
+async def sample_files(
+    db_session: AsyncSession,
+    test_user_id: UUID,
+) -> List[MockFile]:
+    """Create multiple sample files with varied properties."""
+    files_data = [
+        {
+            "filename": f"{uuid4()}_image1.jpg",
+            "original_filename": "photo1.jpg",
+            "content_type": "image/jpeg",
+            "size_bytes": 1024 * 50,
+            "storage_backend": "local",
+            "is_public": False,
+        },
+        {
+            "filename": f"{uuid4()}_image2.png",
+            "original_filename": "screenshot.png",
+            "content_type": "image/png",
+            "size_bytes": 1024 * 100,
+            "storage_backend": "local",
+            "is_public": False,
+        },
+        {
+            "filename": f"{uuid4()}_doc.pdf",
+            "original_filename": "document.pdf",
+            "content_type": "application/pdf",
+            "size_bytes": 1024 * 200,
+            "storage_backend": "s3",
+            "is_public": True,
+        },
+        {
+            "filename": f"{uuid4()}_image3.gif",
+            "original_filename": "animation.gif",
+            "content_type": "image/gif",
+            "size_bytes": 1024 * 150,
+            "storage_backend": "local",
+            "is_public": False,
+        },
+        {
+            "filename": f"{uuid4()}_image4.webp",
+            "original_filename": "modern.webp",
+            "content_type": "image/webp",
+            "size_bytes": 1024 * 80,
+            "storage_backend": "s3",
+            "is_public": True,
+        },
+    ]
+
+    files = []
+    for data in files_data:
+        file = await create_file_in_db(
+            db_session,
+            owner_id=test_user_id,
+            **data,
+        )
+        files.append(file)
+
+    return files
+
+
+@pytest_asyncio.fixture
+async def sample_storage_quota(
+    db_session: AsyncSession,
+    test_user_id: UUID,
+) -> MockStorageQuota:
+    """Create a sample storage quota in the database."""
+    return await create_storage_quota_in_db(
+        db_session,
+        owner_id=test_user_id,
+        quota_bytes=104857600,  # 100 MB
+        used_bytes=10485760,  # 10 MB
+        file_count=5,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_storage_quota_near_limit(
+    db_session: AsyncSession,
+) -> MockStorageQuota:
+    """Create a sample storage quota near its limit."""
+    quota_owner_id = uuid4()  # Use different owner to avoid conflict
+    return await create_storage_quota_in_db(
+        db_session,
+        owner_id=quota_owner_id,
+        quota_bytes=104857600,  # 100 MB
+        used_bytes=104457600,  # ~99.6 MB (~400KB remaining)
+        file_count=50,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_empty_storage_quota(
+    db_session: AsyncSession,
+) -> MockStorageQuota:
+    """Create a sample empty storage quota."""
+    quota_owner_id = uuid4()  # Use different owner to avoid conflict
+    return await create_storage_quota_in_db(
+        db_session,
+        owner_id=quota_owner_id,
+        quota_bytes=104857600,  # 100 MB
+        used_bytes=0,
+        file_count=0,
+    )
+
+
+@pytest.fixture
+def sample_thumbnail_sizes() -> Dict[str, Dict[str, int]]:
+    """Return standard thumbnail size configurations."""
+    return {
+        "small": {"width": 100, "height": 100},
+        "medium": {"width": 300, "height": 300},
+        "large": {"width": 600, "height": 600},
+    }
+
+
+@pytest.fixture
+def image_content_types() -> List[str]:
+    """Return list of supported image content types."""
+    return [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+    ]
+
+
+@pytest.fixture
+def allowed_content_types() -> List[str]:
+    """Return list of all allowed content types for upload."""
+    return [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain",
+    ]
