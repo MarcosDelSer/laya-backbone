@@ -305,6 +305,35 @@ class MessageTemplateRequest(BaseSchema):
     )
 
 
+class MessageRewriteRequest(BaseSchema):
+    """Request schema for message rewrite suggestions.
+
+    Provides a simplified endpoint focused solely on rewrite suggestions
+    using 'I' language and sandwich method.
+
+    Attributes:
+        message_text: The message text to rewrite
+        language: Language of the message
+        child_name: Optional child's name for personalization
+    """
+
+    message_text: str = Field(
+        ...,
+        min_length=1,
+        max_length=5000,
+        description="The message text to rewrite",
+    )
+    language: Language = Field(
+        default=Language.EN,
+        description="Language of the message",
+    )
+    child_name: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Optional child's name for personalization",
+    )
+
+
 class TrainingExampleRequest(BaseSchema):
     """Request schema for creating a training example.
 
@@ -495,6 +524,21 @@ class TrainingExampleResponse(BaseResponse):
     difficulty_level: str = Field(
         default="beginner",
         description="Difficulty level for training purposes",
+    )
+
+
+class MessageRewriteResponse(BaseResponse):
+    """Response schema for message rewrite suggestions.
+
+    Contains a single rewrite suggestion using 'I' language and sandwich method.
+
+    Attributes:
+        rewrite: The suggested rewrite with explanation
+    """
+
+    rewrite: RewriteSuggestion = Field(
+        ...,
+        description="The suggested rewrite with explanation",
     )
 
 

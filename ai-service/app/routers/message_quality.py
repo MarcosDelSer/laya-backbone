@@ -18,6 +18,8 @@ from app.schemas.message_quality import (
     Language,
     MessageAnalysisRequest,
     MessageAnalysisResponse,
+    MessageRewriteRequest,
+    MessageRewriteResponse,
     MessageTemplateListResponse,
     MessageTemplateRequest,
     MessageTemplateResponse,
@@ -89,6 +91,85 @@ async def analyze_message(
 
     try:
         return await service.analyze_message(request, current_user)
+    except InvalidMessageError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except AnalysisError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Analysis error: {str(e)}",
+        )
+    except MessageQualityServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Message quality service error: {str(e)}",
+        )
+
+
+@router.post("/rewrite", response_model=MessageRewriteResponse)
+async def rewrite_message(
+    request: MessageRewriteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
+) -> MessageRewriteResponse:
+    """Generate rewrite suggestions for a message using 'I' language and sandwich method.
+
+    Provides AI-powered rewrite suggestions that transform problematic messages
+    into positive, constructive communication following Quebec 'Bonne Message' standards.
+    The rewrite uses two key techniques:
+    1. 'I' language transformation - replaces accusatory 'you' statements with 'I' observations
+    2. Sandwich method - structures message with positive opening, factual concern, solution closing
+
+    This endpoint first analyzes the message to detect quality issues, then generates
+    a rewrite suggestion addressing those issues. The suggestion includes an explanation
+    of why the rewrite is better and confidence scores.
+
+    Args:
+        request: The message rewrite request containing:
+            - message_text: The message to rewrite
+            - language: Language of the message (en or fr)
+            - child_name: Optional child's name for personalization
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        MessageRewriteResponse containing:
+        - rewrite: A RewriteSuggestion with:
+            - original_text: The original message
+            - suggested_text: The improved message using 'I' language and sandwich method
+            - explanation: Why this rewrite is better
+            - uses_i_language: Whether it uses 'I' language (always true)
+            - has_sandwich_structure: Whether it follows sandwich method (always true)
+            - confidence_score: Confidence score for the suggestion (0-1)
+
+    Raises:
+        HTTPException 400: When the message text is invalid or empty
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user doesn't have required role (ADMIN or TEACHER)
+        HTTPException 500: When an unexpected error occurs during rewriting
+    """
+    service = MessageQualityService(db)
+
+    try:
+        # First analyze the message to detect quality issues
+        analysis_request = MessageAnalysisRequest(
+            message_text=request.message_text,
+            language=request.language,
+            include_rewrites=False,  # We'll generate our own rewrite
+        )
+        analysis = await service.analyze_message(analysis_request, current_user)
+
+        # Generate rewrite suggestion based on detected issues
+        rewrite = service.suggest_rewrite(
+            message_text=request.message_text,
+            issues=analysis.issues,
+            language=request.language,
+            child_name=request.child_name,
+        )
+
+        return MessageRewriteResponse(rewrite=rewrite)
     except InvalidMessageError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
