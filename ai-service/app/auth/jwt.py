@@ -58,7 +58,12 @@ def create_token(
     }
 
     if additional_claims:
-        payload.update(additional_claims)
+        # Filter out standard claims to prevent override vulnerability
+        standard_claims = {"sub", "iat", "exp", "iss", "aud"}
+        filtered_claims = {
+            k: v for k, v in additional_claims.items() if k not in standard_claims
+        }
+        payload.update(filtered_claims)
 
     return jwt.encode(
         payload,

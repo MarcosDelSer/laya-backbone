@@ -119,6 +119,8 @@ class TestCreateToken:
 
     def test_create_token_additional_claims_do_not_override_standard(self):
         """Test additional claims cannot override sub, iat, exp."""
+        # Get current timestamp for comparison
+        before = datetime.now(timezone.utc)
         token = create_token(
             subject="user123",
             expires_delta_seconds=3600,
@@ -126,16 +128,32 @@ class TestCreateToken:
                 "sub": "hacker",
                 "iat": 0,
                 "exp": 9999999999,
+                "iss": "evil.com",
+                "aud": "hackers",
             },
         )
+        after = datetime.now(timezone.utc)
+
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
         )
-        # Additional claims update AFTER standard claims, so they override
-        # This documents current behavior - may want to change
-        assert payload["sub"] == "hacker"  # Currently overrides
+        # Standard claims should NOT be overridden by additional_claims
+        assert payload["sub"] == "user123"  # Should be original subject
+        assert payload["iss"] == settings.jwt_issuer  # Should be original issuer
+        assert payload["aud"] == settings.jwt_audience  # Should be original audience
+
+        # Verify iat is current time (not 0 from additional_claims)
+        iat = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
+        assert before.replace(microsecond=0) <= iat <= after.replace(microsecond=0) + timedelta(seconds=1)
+
+        # Verify exp is ~1 hour from now (not 9999999999 from additional_claims)
+        exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        delta = (exp - datetime.now(timezone.utc)).total_seconds()
+        assert 3500 < delta < 3700  # Allow small tolerance
 
     def test_create_token_empty_additional_claims(self):
         """Test create_token with empty additional claims dict."""
