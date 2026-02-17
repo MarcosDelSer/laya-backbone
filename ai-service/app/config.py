@@ -3,8 +3,6 @@
 Loads environment variables with sensible defaults for local development.
 """
 
-from typing import Literal, Optional
-
 from pydantic_settings import BaseSettings
 
 
@@ -19,24 +17,6 @@ class Settings(BaseSettings):
         postgres_password: PostgreSQL database password
         jwt_secret_key: Secret key for JWT token signing
         jwt_algorithm: Algorithm for JWT token signing
-        storage_backend: Storage backend type ('local' or 's3')
-        s3_bucket_name: S3 bucket name for file storage
-        s3_region: AWS region for S3 bucket
-        s3_access_key_id: AWS access key ID for S3
-        s3_secret_access_key: AWS secret access key for S3
-        s3_endpoint_url: Custom S3 endpoint URL (for S3-compatible services)
-        local_storage_path: Local filesystem path for file storage
-        max_file_size_mb: Maximum file size in megabytes
-        allowed_file_types: Comma-separated list of allowed MIME types
-        thumbnail_sizes: Comma-separated thumbnail sizes (e.g., '64,128,256')
-        storage_quota_mb: Default storage quota per user in megabytes
-        openai_api_key: OpenAI API key for GPT models
-        anthropic_api_key: Anthropic API key for Claude models
-        llm_default_provider: Default LLM provider (openai or anthropic)
-        llm_default_model: Default model to use for completions
-        llm_temperature: Default temperature for LLM responses (0.0-2.0)
-        llm_max_tokens: Default maximum tokens for LLM responses
-        llm_timeout: Default timeout in seconds for LLM API calls
     """
 
     # Database configuration
@@ -50,34 +30,13 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
 
-    # Storage configuration
-    storage_backend: Literal["local", "s3"] = "local"
-    s3_bucket_name: str = ""
-    s3_region: str = "us-east-1"
-    s3_access_key_id: str = ""
-    s3_secret_access_key: str = ""
-    s3_endpoint_url: Optional[str] = None
-    local_storage_path: str = "./storage"
-    max_file_size_mb: int = 50
-    allowed_file_types: str = (
-        "image/jpeg,image/png,image/gif,image/webp,"
-        "application/pdf,"
-        "video/mp4,video/webm,"
-        "audio/mpeg,audio/wav"
-    )
-    thumbnail_sizes: str = "64,128,256"
-    storage_quota_mb: int = 1024
-
-    # LLM API Keys
-    openai_api_key: Optional[str] = None
-    anthropic_api_key: Optional[str] = None
-
-    # LLM Configuration
-    llm_default_provider: str = "openai"
-    llm_default_model: str = "gpt-4o"
-    llm_temperature: float = 0.7
-    llm_max_tokens: int = 4096
-    llm_timeout: int = 60
+    # Database connection pool configuration
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 3600
+    db_pool_pre_ping: bool = True
+    db_echo: bool = False
 
     @property
     def database_url(self) -> str:

@@ -15,6 +15,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -244,6 +245,16 @@ class ActivityRecommendation(Base):
         back_populates="recommendations",
     )
 
+    # Table-level indexes for common query patterns
+    __table_args__ = (
+        # Composite index for filtering recommendations by child and time
+        Index("ix_activity_recommendations_child_generated", "child_id", "generated_at"),
+        # Composite index for getting active recommendations per child
+        Index("ix_activity_recommendations_child_dismissed", "child_id", "is_dismissed"),
+        # Index for time-based queries
+        Index("ix_activity_recommendations_generated_at", "generated_at"),
+    )
+
     def __repr__(self) -> str:
         """Return string representation of the ActivityRecommendation."""
         return (
@@ -332,6 +343,16 @@ class ActivityParticipation(Base):
     activity: Mapped["Activity"] = relationship(
         "Activity",
         back_populates="participations",
+    )
+
+    # Table-level indexes for common query patterns
+    __table_args__ = (
+        # Composite index for filtering participation by child and time
+        Index("ix_activity_participations_child_started", "child_id", "started_at"),
+        # Index for time-based queries
+        Index("ix_activity_participations_started_at", "started_at"),
+        # Index for filtering by completion status
+        Index("ix_activity_participations_status", "completion_status"),
     )
 
     def __repr__(self) -> str:
