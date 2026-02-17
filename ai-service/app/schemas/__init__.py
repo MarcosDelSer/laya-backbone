@@ -9,6 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
+    medical: Medical tracking schemas (allergies, medications, alerts)
 """
 
 from app.schemas.activity import (
@@ -72,6 +73,29 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
+from app.schemas.medical import (
+    AccommodationPlanBase,
+    AccommodationPlanListResponse,
+    AccommodationPlanRequest,
+    AccommodationPlanResponse,
+    AllergenDetectionRequest,
+    AllergenDetectionResponse,
+    AllergyBase,
+    AllergyListResponse,
+    AllergyRequest,
+    AllergyResponse,
+    ChildMedicalSummary,
+    ChildMedicalSummaryRequest,
+    DetectedAllergen,
+    MedicalAlertBase,
+    MedicalAlertListResponse,
+    MedicalAlertRequest,
+    MedicalAlertResponse,
+    MedicationBase,
+    MedicationListResponse,
+    MedicationRequest,
+    MedicationResponse,
+)
 
 __all__ = [
     # Base schemas
@@ -130,4 +154,26 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
+    # Medical schemas
+    "AllergyBase",
+    "AllergyRequest",
+    "AllergyResponse",
+    "AllergyListResponse",
+    "MedicationBase",
+    "MedicationRequest",
+    "MedicationResponse",
+    "MedicationListResponse",
+    "AccommodationPlanBase",
+    "AccommodationPlanRequest",
+    "AccommodationPlanResponse",
+    "AccommodationPlanListResponse",
+    "MedicalAlertBase",
+    "MedicalAlertRequest",
+    "MedicalAlertResponse",
+    "MedicalAlertListResponse",
+    "AllergenDetectionRequest",
+    "DetectedAllergen",
+    "AllergenDetectionResponse",
+    "ChildMedicalSummaryRequest",
+    "ChildMedicalSummary",
 ]
