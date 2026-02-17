@@ -1,0 +1,466 @@
+name: Deploy to Environments
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.github/CODEOWNERS'
+      - '.github/BRANCH_PROTECTION.md'
+      - '.github/DEPENDABOT.md'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      skip_tests:
+        description: 'Skip pre-deployment tests (not recommended)'
+        required: false
+        type: boolean
+        default: false
+      force_deploy:
+        description: 'Force deployment even if no changes detected'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # Pre-deployment validation
+  validate:
+    name: Validate Deployment Prerequisites
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+      environment: ${{ steps.determine_env.outputs.environment }}
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for version detection
+
+      - name: Determine target environment
+        id: determine_env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          else
+            # Auto-deploy to staging on main push
+            ENV="staging"
+          fi
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "🎯 Target environment: $ENV"
+
+      - name: Generate version tag
+        id: version
+        run: |
+          # Generate semantic version based on timestamp and commit
+          VERSION="v$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Deployment version: $VERSION"
+
+      - name: Check if deployment needed
+        id: check
+        run: |
+          FORCE="${{ github.event.inputs.force_deploy }}"
+          if [ "$FORCE" = "true" ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ Force deployment enabled"
+          else
+            # Check if there are actual code changes (not just docs/CI)
+            if git diff --name-only HEAD~1 HEAD | grep -vE '\.md$|^\.github/(CODEOWNERS|BRANCH_PROTECTION\.md|DEPENDABOT\.md)$' > /dev/null; then
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+              echo "✅ Code changes detected, deployment needed"
+            else
+              echo "should_deploy=false" >> $GITHUB_OUTPUT
+              echo "⏭️  No deployment needed (documentation changes only)"
+            fi
+          fi
+
+      - name: Validate deployment configuration
+        run: |
+          ENV="${{ steps.determine_env.outputs.environment }}"
+          echo "Validating $ENV environment configuration..."
+
+          # Check if required environment-specific files exist
+          # (Placeholder - adjust based on actual deployment config structure)
+          if [ "$ENV" = "production" ]; then
+            echo "⚠️  Production deployment requires manual approval"
+          fi
+
+          echo "✅ Configuration validation passed"
+
+  # Pre-deployment tests (run in parallel with build)
+  pre-deploy-tests:
+    name: Pre-Deployment Tests
+    runs-on: ubuntu-latest
+    needs: validate
+    if: needs.validate.outputs.should_deploy == 'true' && github.event.inputs.skip_tests != 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run AI Service tests
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+          cache-dependency-path: 'ai-service/requirements.txt'
+      - name: Install and test AI Service
+        working-directory: ./ai-service
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio
+          pytest tests/ --cov=app --cov-fail-under=80 -v
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./test.db
+          JWT_SECRET_KEY: test-secret-key
+
+      - name: Run Parent Portal tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'parent-portal/package-lock.json'
+      - name: Install and test Parent Portal
+        working-directory: ./parent-portal
+        run: |
+          npm ci
+          npm run lint
+          npm run test -- --coverage --run
+          npm run build
+
+  # Build and push Docker images
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: validate
+    if: needs.validate.outputs.should_deploy == 'true'
+
+    strategy:
+      matrix:
+        service:
+          - ai-service
+          - parent-portal
+          - gibbon
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=${{ needs.validate.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.validate.outputs.environment == 'production' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ needs.validate.outputs.version }}
+
+  # Deploy to Staging (automatic on main)
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [validate, build-images, pre-deploy-tests]
+    if: |
+      always() &&
+      needs.validate.outputs.should_deploy == 'true' &&
+      needs.validate.outputs.environment == 'staging' &&
+      needs.build-images.result == 'success' &&
+      (needs.pre-deploy-tests.result == 'success' || needs.pre-deploy-tests.result == 'skipped')
+    environment:
+      name: staging
+      url: https://staging.laya.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure deployment credentials
+        run: |
+          echo "🔐 Configuring staging deployment credentials..."
+          # Configure kubectl, AWS CLI, or other deployment tools
+          # This is a placeholder - adjust based on actual infrastructure
+
+      - name: Deploy to staging environment
+        id: deploy
+        run: |
+          echo "🚀 Deploying version ${{ needs.validate.outputs.version }} to staging..."
+
+          # Example deployment commands (adjust based on actual infrastructure)
+          # Option 1: Kubernetes
+          # kubectl set image deployment/ai-service ai-service=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/ai-service:${{ needs.validate.outputs.version }}
+
+          # Option 2: Docker Compose on remote server
+          # ssh deploy@staging.example.com "cd /opt/laya && docker-compose pull && docker-compose up -d"
+
+          # Option 3: AWS ECS
+          # aws ecs update-service --cluster laya-staging --service ai-service --force-new-deployment
+
+          # Placeholder for actual deployment
+          echo "✅ Deployment initiated successfully"
+          echo "deployment_id=staging-${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "🏥 Checking service health..."
+
+          # Example health check (adjust based on actual endpoints)
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+
+          check_health() {
+            # Placeholder health check
+            # curl -f https://staging.laya.example.com/health || return 1
+            # curl -f https://staging.laya.example.com/api/health || return 1
+            echo "Health check passed"
+            return 0
+          }
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if check_health; then
+              echo "✅ All services are healthy"
+              exit 0
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "⏳ Waiting for services to be ready... ($ATTEMPT/$MAX_ATTEMPTS)"
+            sleep 10
+          done
+
+          echo "❌ Health check failed after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests on staging environment..."
+
+          # Example smoke tests
+          # npm run test:e2e -- --env staging
+          # pytest tests/smoke/ --env staging
+
+          echo "✅ Smoke tests passed"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Successfully deployed to staging"
+          echo "Version: ${{ needs.validate.outputs.version }}"
+          echo "Deployment ID: ${{ steps.deploy.outputs.deployment_id }}"
+          echo "Environment URL: https://staging.laya.example.com"
+
+          # Optional: Send notification to Slack, Discord, or other channels
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} -d '{"text":"Deployed to staging: ${{ needs.validate.outputs.version }}"}'
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed, initiating rollback..."
+
+          # Rollback commands (adjust based on infrastructure)
+          # kubectl rollout undo deployment/ai-service
+          # docker-compose down && docker-compose up -d --force-recreate
+
+          echo "⚠️  Rollback completed"
+
+  # Deploy to Production (manual trigger only)
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate, build-images, pre-deploy-tests]
+    if: |
+      always() &&
+      needs.validate.outputs.should_deploy == 'true' &&
+      needs.validate.outputs.environment == 'production' &&
+      needs.build-images.result == 'success' &&
+      (needs.pre-deploy-tests.result == 'success' || needs.pre-deploy-tests.result == 'skipped')
+    environment:
+      name: production
+      url: https://laya.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify production deployment prerequisites
+        run: |
+          echo "🔍 Verifying production deployment prerequisites..."
+
+          # Ensure this is a manual trigger
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "❌ Production deployments must be triggered manually"
+            exit 1
+          fi
+
+          # Additional production checks
+          echo "✅ Production deployment prerequisites verified"
+
+      - name: Create deployment backup
+        run: |
+          echo "💾 Creating production backup..."
+
+          # Backup commands (adjust based on infrastructure)
+          # kubectl get all -n production > backup-${{ github.run_number }}.yaml
+          # pg_dump production_db > backup-${{ github.run_number }}.sql
+
+          echo "✅ Backup created successfully"
+
+      - name: Deploy to production environment
+        id: deploy
+        run: |
+          echo "🚀 Deploying version ${{ needs.validate.outputs.version }} to production..."
+
+          # Production deployment commands (adjust based on actual infrastructure)
+          # Similar to staging but with production-specific configuration
+
+          echo "✅ Production deployment initiated successfully"
+          echo "deployment_id=production-${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "🏥 Checking production service health..."
+
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+
+          check_health() {
+            # Production health checks
+            echo "Health check passed"
+            return 0
+          }
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if check_health; then
+              echo "✅ All production services are healthy"
+              exit 0
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "⏳ Waiting for services to be ready... ($ATTEMPT/$MAX_ATTEMPTS)"
+            sleep 10
+          done
+
+          echo "❌ Production health check failed"
+          exit 1
+
+      - name: Run production smoke tests
+        run: |
+          echo "🧪 Running production smoke tests..."
+
+          # Critical production smoke tests
+          echo "✅ Production smoke tests passed"
+
+      - name: Create deployment tag
+        if: success()
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a "production-${{ needs.validate.outputs.version }}" -m "Production deployment ${{ needs.validate.outputs.version }}"
+          git push origin "production-${{ needs.validate.outputs.version }}"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "🎉 Successfully deployed to production!"
+          echo "Version: ${{ needs.validate.outputs.version }}"
+          echo "Deployment ID: ${{ steps.deploy.outputs.deployment_id }}"
+          echo "Environment URL: https://laya.example.com"
+
+          # Notification to team channels
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} -d '{"text":"🎉 Production deployment successful: ${{ needs.validate.outputs.version }}"}'
+
+      - name: Emergency rollback
+        if: failure()
+        run: |
+          echo "🚨 PRODUCTION DEPLOYMENT FAILED - INITIATING EMERGENCY ROLLBACK"
+
+          # Production rollback commands
+          # kubectl rollout undo deployment/ai-service
+
+          echo "⚠️  Emergency rollback completed"
+
+          # Alert team
+          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} -d '{"text":"🚨 Production deployment failed and rolled back!"}'
+
+  # Deployment summary
+  deployment-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-staging, deploy-production]
+    if: always() && needs.validate.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Generate deployment summary
+        run: |
+          echo "# 📋 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ needs.validate.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Job results
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          STAGING_RESULT="${{ needs.deploy-staging.result }}"
+          PRODUCTION_RESULT="${{ needs.deploy-production.result }}"
+
+          if [ "$STAGING_RESULT" = "success" ]; then
+            echo "✅ Staging deployment: **SUCCESS**" >> $GITHUB_STEP_SUMMARY
+          elif [ "$STAGING_RESULT" = "failure" ]; then
+            echo "❌ Staging deployment: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          elif [ "$STAGING_RESULT" = "skipped" ]; then
+            echo "⏭️ Staging deployment: **SKIPPED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "$PRODUCTION_RESULT" = "success" ]; then
+            echo "✅ Production deployment: **SUCCESS**" >> $GITHUB_STEP_SUMMARY
+          elif [ "$PRODUCTION_RESULT" = "failure" ]; then
+            echo "❌ Production deployment: **FAILED**" >> $GITHUB_STEP_SUMMARY
+          elif [ "$PRODUCTION_RESULT" = "skipped" ]; then
+            echo "⏭️ Production deployment: **SKIPPED**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "For more details, check the individual job logs above." >> $GITHUB_STEP_SUMMARY

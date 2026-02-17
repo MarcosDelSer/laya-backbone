@@ -1,0 +1,317 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+# Ensure only one instance runs at a time per PR
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # This job acts as a status check that waits for all other required checks
+  all-checks-pass:
+    name: All CI Checks Must Pass
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better context
+
+      - name: Check workflow run status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            const { data: checkRuns } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pullRequest.head.sha,
+            });
+
+            // Define required workflows
+            const requiredWorkflows = [
+              'AI Service CI',
+              'Parent Portal CI',
+              'Gibbon Modules CI',
+              'Docker Compose Build Verification'
+            ];
+
+            // Track which workflows have run and their status
+            const workflowStatus = {};
+
+            checkRuns.check_runs.forEach(run => {
+              requiredWorkflows.forEach(workflow => {
+                if (run.name.includes(workflow) || run.app.name === workflow) {
+                  workflowStatus[workflow] = {
+                    status: run.status,
+                    conclusion: run.conclusion,
+                    name: run.name
+                  };
+                }
+              });
+            });
+
+            // Generate report
+            console.log('='.repeat(80));
+            console.log('PR CHECK REQUIREMENTS STATUS');
+            console.log('='.repeat(80));
+
+            let allPassed = true;
+            let pendingChecks = [];
+            let failedChecks = [];
+
+            requiredWorkflows.forEach(workflow => {
+              const status = workflowStatus[workflow];
+
+              if (!status) {
+                console.log(`⏭️  ${workflow}: SKIPPED (no relevant changes)`);
+              } else if (status.status !== 'completed') {
+                console.log(`⏳ ${workflow}: IN PROGRESS`);
+                pendingChecks.push(workflow);
+                allPassed = false;
+              } else if (status.conclusion === 'success') {
+                console.log(`✅ ${workflow}: PASSED`);
+              } else {
+                console.log(`❌ ${workflow}: FAILED (${status.conclusion})`);
+                failedChecks.push(workflow);
+                allPassed = false;
+              }
+            });
+
+            console.log('='.repeat(80));
+
+            if (failedChecks.length > 0) {
+              core.setFailed(`The following required checks failed: ${failedChecks.join(', ')}`);
+            } else if (pendingChecks.length > 0) {
+              core.setFailed(`The following required checks are still pending: ${pendingChecks.join(', ')}`);
+            } else {
+              console.log('✅ All required PR checks have passed!');
+            }
+
+      - name: Comment PR with status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            const { data: checkRuns } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pullRequest.head.sha,
+            });
+
+            // Define required workflows
+            const requiredWorkflows = [
+              'AI Service CI',
+              'Parent Portal CI',
+              'Gibbon Modules CI',
+              'Docker Compose Build Verification'
+            ];
+
+            // Track which workflows have run and their status
+            const workflowStatus = {};
+
+            checkRuns.check_runs.forEach(run => {
+              requiredWorkflows.forEach(workflow => {
+                if (run.name.includes(workflow) || run.app.name === workflow) {
+                  workflowStatus[workflow] = {
+                    status: run.status,
+                    conclusion: run.conclusion,
+                    name: run.name,
+                    url: run.html_url
+                  };
+                }
+              });
+            });
+
+            // Build comment body
+            let commentBody = '## 🔍 PR Check Requirements Status\n\n';
+            commentBody += '| Check | Status | Details |\n';
+            commentBody += '|-------|--------|----------|\n';
+
+            let allPassed = true;
+
+            requiredWorkflows.forEach(workflow => {
+              const status = workflowStatus[workflow];
+
+              if (!status) {
+                commentBody += `| ${workflow} | ⏭️ Skipped | No relevant changes detected |\n`;
+              } else if (status.status !== 'completed') {
+                commentBody += `| ${workflow} | ⏳ In Progress | [View Run](${status.url}) |\n`;
+                allPassed = false;
+              } else if (status.conclusion === 'success') {
+                commentBody += `| ${workflow} | ✅ Passed | [View Run](${status.url}) |\n`;
+              } else {
+                commentBody += `| ${workflow} | ❌ Failed | [View Run](${status.url}) |\n`;
+                allPassed = false;
+              }
+            });
+
+            commentBody += '\n---\n\n';
+
+            if (allPassed) {
+              commentBody += '✅ **All required checks have passed!** This PR is ready for review.\n\n';
+            } else {
+              commentBody += '⚠️ **Some checks are pending or have failed.** Please review the failing checks above.\n\n';
+            }
+
+            commentBody += '_This comment is automatically updated by the PR Checks workflow._';
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('PR Check Requirements Status')
+            );
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+            }
+
+  # Validate PR title and description
+  pr-validation:
+    name: Validate PR Metadata
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check PR title format
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            const title = pullRequest.title;
+
+            // Check if title is meaningful (not just task IDs)
+            if (title.length < 10) {
+              core.setFailed('PR title is too short. Please provide a descriptive title (minimum 10 characters).');
+              return;
+            }
+
+            console.log(`✅ PR title: "${title}"`);
+
+      - name: Check PR has description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            const body = pullRequest.body || '';
+
+            if (body.trim().length < 20) {
+              core.warning('PR description is very short or missing. Please add a description explaining the changes.');
+            } else {
+              console.log('✅ PR has a description');
+            }
+
+  # Check for merge conflicts
+  conflict-check:
+    name: Check for Merge Conflicts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for conflicts with base branch
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          if git merge-base --is-ancestor HEAD origin/${{ github.base_ref }}; then
+            echo "✅ No conflicts detected"
+          else
+            # Try to merge to check for conflicts
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            if git merge --no-commit --no-ff origin/${{ github.base_ref }}; then
+              echo "✅ Clean merge possible"
+              git merge --abort
+            else
+              echo "❌ Merge conflicts detected"
+              git merge --abort
+              exit 1
+            fi
+          fi
+
+  # Summary job that all branch protection rules should depend on
+  pr-ready:
+    name: PR Ready for Review
+    runs-on: ubuntu-latest
+    needs: [all-checks-pass, pr-validation, conflict-check]
+    if: always()
+
+    steps:
+      - name: Check if all required jobs passed
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const needs = ${{ toJSON(needs) }};
+
+            console.log('Job Status Summary:');
+            console.log('='.repeat(80));
+
+            let allPassed = true;
+
+            for (const [job, status] of Object.entries(needs)) {
+              const icon = status.result === 'success' ? '✅' : '❌';
+              console.log(`${icon} ${job}: ${status.result}`);
+
+              if (status.result !== 'success') {
+                allPassed = false;
+              }
+            }
+
+            console.log('='.repeat(80));
+
+            if (!allPassed) {
+              core.setFailed('One or more required checks failed');
+            } else {
+              console.log('✅ All PR requirements met! Ready for review.');
+            }

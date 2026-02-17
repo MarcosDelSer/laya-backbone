@@ -1,0 +1,155 @@
+# CODEOWNERS file for LAYA Backbone
+# This file defines code ownership and automatic review requests
+#
+# Format: <pattern> <owner1> <owner2> ...
+# Owners can be:
+#   - @username (individual GitHub user)
+#   - @org/team-name (GitHub team)
+#   - email@example.com (email address)
+#
+# Last match takes precedence
+# Use '#' for comments
+
+# ============================================================================
+# Default Owners
+# ============================================================================
+# Default owners for everything in the repo (unless overridden below)
+# Replace with actual team or usernames
+* @laya-devops-team
+
+# ============================================================================
+# CI/CD and Infrastructure
+# ============================================================================
+# GitHub Actions workflows
+/.github/workflows/ @laya-devops-team @laya-backend-team
+/.github/BRANCH_PROTECTION.md @laya-devops-team
+/.github/CODEOWNERS @laya-devops-team
+
+# Docker and deployment
+/docker-compose*.yml @laya-devops-team @laya-backend-team
+/Dockerfile* @laya-devops-team
+/.dockerignore @laya-devops-team
+
+# Kubernetes/Helm (if added later)
+/k8s/ @laya-devops-team
+/helm/ @laya-devops-team
+
+# ============================================================================
+# Backend Services
+# ============================================================================
+# AI Service (Python/FastAPI)
+/ai-service/ @laya-backend-team @laya-ai-team
+/ai-service/app/ @laya-backend-team @laya-ai-team
+/ai-service/tests/ @laya-backend-team @laya-ai-team
+/ai-service/requirements.txt @laya-backend-team
+/ai-service/pyproject.toml @laya-backend-team
+/ai-service/ruff.toml @laya-backend-team
+
+# Gibbon Integration and PHP Modules
+/gibbon/ @laya-backend-team @laya-gibbon-team
+/modules/ @laya-backend-team @laya-gibbon-team
+/gibbon/composer.json @laya-backend-team @laya-gibbon-team
+
+# ============================================================================
+# Frontend
+# ============================================================================
+# Parent Portal (Next.js/React)
+/parent-portal/ @laya-frontend-team
+/parent-portal/src/ @laya-frontend-team
+/parent-portal/public/ @laya-frontend-team
+/parent-portal/tests/ @laya-frontend-team
+/parent-portal/package.json @laya-frontend-team @laya-devops-team
+/parent-portal/package-lock.json @laya-frontend-team
+/parent-portal/.eslintrc* @laya-frontend-team
+/parent-portal/tsconfig.json @laya-frontend-team
+/parent-portal/next.config.js @laya-frontend-team
+
+# ============================================================================
+# Database and Migrations
+# ============================================================================
+# Database migrations and schemas
+/ai-service/alembic/ @laya-backend-team @laya-database-team
+/ai-service/app/db/ @laya-backend-team @laya-database-team
+**/migrations/ @laya-backend-team @laya-database-team
+**/schema.sql @laya-database-team
+
+# ============================================================================
+# Documentation
+# ============================================================================
+# README and documentation files
+/README.md @laya-devops-team
+/docs/ @laya-devops-team
+*.md @laya-devops-team
+
+# API documentation
+/ai-service/docs/ @laya-backend-team
+/parent-portal/docs/ @laya-frontend-team
+
+# ============================================================================
+# Configuration Files
+# ============================================================================
+# Environment and configuration
+/.env.example @laya-devops-team @laya-backend-team
+/.gitignore @laya-devops-team
+/.gitattributes @laya-devops-team
+
+# Dependency configuration
+/package.json @laya-devops-team
+/requirements.txt @laya-backend-team
+/composer.json @laya-backend-team @laya-gibbon-team
+
+# ============================================================================
+# Security and Compliance
+# ============================================================================
+# Security-related files require security team review
+/SECURITY.md @laya-security-team
+/.github/dependabot.yml @laya-security-team @laya-devops-team
+
+# Authentication and authorization code
+/ai-service/app/auth/ @laya-backend-team @laya-security-team
+/ai-service/app/middleware/ @laya-backend-team @laya-security-team
+/parent-portal/src/lib/auth/ @laya-frontend-team @laya-security-team
+
+# ============================================================================
+# Testing
+# ============================================================================
+# Test configurations and fixtures
+/ai-service/tests/ @laya-backend-team
+/parent-portal/tests/ @laya-frontend-team
+/parent-portal/__tests__/ @laya-frontend-team
+/parent-portal/vitest.config.ts @laya-frontend-team
+/ai-service/pytest.ini @laya-backend-team
+
+# ============================================================================
+# Special Files
+# ============================================================================
+# License and legal
+/LICENSE @laya-legal-team
+/NOTICE @laya-legal-team
+
+# Changelog
+/CHANGELOG.md @laya-devops-team
+
+# ============================================================================
+# Notes
+# ============================================================================
+#
+# Team Aliases (configure these in GitHub Organization Settings):
+# - @laya-devops-team: DevOps and infrastructure team
+# - @laya-backend-team: Backend development team
+# - @laya-frontend-team: Frontend development team
+# - @laya-ai-team: AI/ML specialists
+# - @laya-gibbon-team: Gibbon integration specialists
+# - @laya-database-team: Database administrators
+# - @laya-security-team: Security team
+# - @laya-legal-team: Legal and compliance team
+#
+# Usage:
+# 1. Update team names to match your GitHub organization
+# 2. Add individual usernames if you don't have teams configured
+# 3. Patterns are matched in order; last match wins
+# 4. More specific patterns should come after general ones
+#
+# Example for individual users:
+# /ai-service/ @john-doe @jane-smith
+# /parent-portal/ @frontend-dev @ux-designer

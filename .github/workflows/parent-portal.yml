@@ -1,0 +1,77 @@
+name: Parent Portal CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'parent-portal/**'
+      - '.github/workflows/parent-portal.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'parent-portal/**'
+      - '.github/workflows/parent-portal.yml'
+
+jobs:
+  lint-test-build:
+    name: Lint, Test, and Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./parent-portal
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'parent-portal/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Run Vitest with coverage
+        run: |
+          npm run test:coverage -- \
+            --coverage.lines=80 \
+            --coverage.functions=80 \
+            --coverage.branches=80 \
+            --coverage.statements=80
+        continue-on-error: false
+
+      - name: Verify Next.js build
+        run: npm run build
+        env:
+          # Build-time environment variables
+          NODE_ENV: production
+        continue-on-error: false
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./parent-portal/coverage/coverage-final.json
+          flags: parent-portal
+          name: parent-portal-coverage
+        continue-on-error: true
+
+      - name: Archive coverage HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-parent-portal
+          path: parent-portal/coverage/
+          retention-days: 30

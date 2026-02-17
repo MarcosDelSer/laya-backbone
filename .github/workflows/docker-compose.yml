@@ -1,0 +1,193 @@
+name: Docker Compose Build Verification
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docker-compose*.yml'
+      - 'docker-compose*.yaml'
+      - '**/Dockerfile'
+      - '**/Dockerfile.*'
+      - '.dockerignore'
+      - '.github/workflows/docker-compose.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docker-compose*.yml'
+      - 'docker-compose*.yaml'
+      - '**/Dockerfile'
+      - '**/Dockerfile.*'
+      - '.dockerignore'
+      - '.github/workflows/docker-compose.yml'
+
+jobs:
+  validate-and-build:
+    name: Validate and Build Docker Services
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+
+      - name: Validate docker-compose file
+        run: |
+          if [ -f "docker-compose.yml" ]; then
+            echo "Validating docker-compose.yml..."
+            docker-compose config --quiet
+            echo "✅ docker-compose.yml is valid"
+          elif [ -f "docker-compose.yaml" ]; then
+            echo "Validating docker-compose.yaml..."
+            docker-compose -f docker-compose.yaml config --quiet
+            echo "✅ docker-compose.yaml is valid"
+          else
+            echo "⚠️ No docker-compose file found, skipping validation"
+            exit 0
+          fi
+        continue-on-error: false
+
+      - name: Build all services
+        run: |
+          if [ -f "docker-compose.yml" ]; then
+            echo "Building all services from docker-compose.yml..."
+            docker-compose build --parallel
+            echo "✅ All services built successfully"
+          elif [ -f "docker-compose.yaml" ]; then
+            echo "Building all services from docker-compose.yaml..."
+            docker-compose -f docker-compose.yaml build --parallel
+            echo "✅ All services built successfully"
+          else
+            echo "⚠️ No docker-compose file found, skipping build"
+            exit 0
+          fi
+        continue-on-error: false
+        env:
+          DOCKER_BUILDKIT: 1
+          COMPOSE_DOCKER_CLI_BUILD: 1
+
+      - name: Start services
+        run: |
+          if [ -f "docker-compose.yml" ]; then
+            echo "Starting all services..."
+            docker-compose up -d
+            echo "Waiting for services to initialize..."
+            sleep 10
+          elif [ -f "docker-compose.yaml" ]; then
+            echo "Starting all services..."
+            docker-compose -f docker-compose.yaml up -d
+            echo "Waiting for services to initialize..."
+            sleep 10
+          else
+            echo "⚠️ No docker-compose file found, skipping service startup"
+            exit 0
+          fi
+        continue-on-error: false
+
+      - name: Check service health
+        run: |
+          if [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
+            echo "Checking running services..."
+            docker-compose ps
+
+            # Check if any containers have exited
+            EXITED=$(docker-compose ps --filter "status=exited" --quiet | wc -l)
+            if [ "$EXITED" -gt 0 ]; then
+              echo "❌ Some containers have exited unexpectedly"
+              docker-compose logs
+              exit 1
+            fi
+
+            echo "✅ All services are running"
+          else
+            echo "⚠️ No docker-compose file found, skipping health check"
+          fi
+        continue-on-error: false
+
+      - name: Display service logs
+        if: failure()
+        run: |
+          if [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
+            echo "Displaying service logs for debugging..."
+            docker-compose logs --tail=100
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f "docker-compose.yml" ] || [ -f "docker-compose.yaml" ]; then
+            echo "Stopping and removing containers..."
+            docker-compose down -v --remove-orphans
+            echo "✅ Cleanup complete"
+          fi
+
+  build-individual-services:
+    name: Build Individual Dockerfiles
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    strategy:
+      matrix:
+        service:
+          - ai-service
+          - parent-portal
+          - gibbon
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+
+      - name: Build ${{ matrix.service }} Dockerfile
+        run: |
+          if [ -f "${{ matrix.service }}/Dockerfile" ]; then
+            echo "Building ${{ matrix.service }} Dockerfile..."
+            docker build \
+              --build-arg BUILDKIT_INLINE_CACHE=1 \
+              --tag laya-${{ matrix.service }}:test \
+              --file ${{ matrix.service }}/Dockerfile \
+              ${{ matrix.service }}/
+            echo "✅ ${{ matrix.service }} Dockerfile built successfully"
+          elif [ -f "${{ matrix.service }}/Dockerfile.prod" ]; then
+            echo "Building ${{ matrix.service }} Dockerfile.prod..."
+            docker build \
+              --build-arg BUILDKIT_INLINE_CACHE=1 \
+              --tag laya-${{ matrix.service }}:test \
+              --file ${{ matrix.service }}/Dockerfile.prod \
+              ${{ matrix.service }}/
+            echo "✅ ${{ matrix.service }} Dockerfile.prod built successfully"
+          else
+            echo "⚠️ No Dockerfile found for ${{ matrix.service }}, skipping"
+          fi
+        continue-on-error: false
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Inspect image
+        run: |
+          if docker image inspect laya-${{ matrix.service }}:test &> /dev/null; then
+            echo "Image details for laya-${{ matrix.service }}:test"
+            docker image inspect laya-${{ matrix.service }}:test --format='Size: {{.Size}} bytes'
+            docker image inspect laya-${{ matrix.service }}:test --format='Created: {{.Created}}'
+            echo "✅ Image inspection complete"
+          else
+            echo "⚠️ Image not found, skipping inspection"
+          fi
+
+      - name: Cleanup images
+        if: always()
+        run: |
+          if docker image inspect laya-${{ matrix.service }}:test &> /dev/null; then
+            docker rmi laya-${{ matrix.service }}:test || true
+          fi
