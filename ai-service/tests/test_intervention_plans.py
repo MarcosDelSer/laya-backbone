@@ -39,11 +39,13 @@ from app.schemas.intervention_plan import (
     StrategyCreate,
     StrengthCategory,
     StrengthCreate,
+    VersionResponse,
 )
 from app.services.intervention_plan_service import (
     InterventionPlanService,
     InvalidPlanError,
     PlanNotFoundError,
+    PlanVersionError,
 )
 
 
@@ -2578,3 +2580,190 @@ async def test_large_plan_snapshot(
     assert snapshot["monitoring"][0]["description"] == "Monitoring description 1"
     assert snapshot["parent_involvements"][0]["title"] == "Parent involvement 1"
     assert snapshot["consultations"][0]["specialist_name"] == "Dr. Specialist 1"
+
+
+@pytest.mark.asyncio
+async def test_get_version_and_compare(
+    mock_db_session: AsyncMock,
+    mock_plan_id: UUID,
+    mock_user_id: UUID,
+) -> None:
+    """Test that get_version retrieves specific version and compare_versions highlights changes.
+
+    Verifies that:
+    - get_version can retrieve a specific version by version number
+    - compare_versions returns detailed diff between two versions
+    - compare_versions highlights changed fields correctly
+    """
+    service = InterventionPlanService(mock_db_session)
+
+    # Create mock plan
+    plan = MagicMock()
+    plan.id = mock_plan_id
+
+    # Create mock versions with different snapshot data
+    from app.models.intervention_plan import InterventionVersion
+
+    version1 = MagicMock(spec=InterventionVersion)
+    version1.id = uuid4()
+    version1.plan_id = mock_plan_id
+    version1.version_number = 1
+    version1.snapshot_data = {
+        "title": "Original Title",
+        "status": "draft",
+        "child_name": "John Doe",
+        "diagnosis": ["autism"],
+        "strengths": [],
+        "needs": [],
+        "goals": [],
+    }
+    version1.change_summary = "Initial plan creation"
+    version1.created_at = datetime(2024, 1, 1, 10, 0, 0)
+    version1.created_by = mock_user_id
+
+    version2 = MagicMock(spec=InterventionVersion)
+    version2.id = uuid4()
+    version2.plan_id = mock_plan_id
+    version2.version_number = 2
+    version2.snapshot_data = {
+        "title": "Updated Title",
+        "status": "active",
+        "child_name": "John Doe",
+        "diagnosis": ["autism", "adhd"],
+        "strengths": [{"description": "Strong visual learner"}],
+        "needs": [],
+        "goals": [],
+    }
+    version2.change_summary = "Updated title and status"
+    version2.created_at = datetime(2024, 1, 15, 14, 30, 0)
+    version2.created_by = mock_user_id
+
+    # Test get_version
+    # Mock database query to return plan
+    mock_plan_result = MagicMock()
+    mock_plan_result.scalar_one_or_none.return_value = plan
+
+    # Mock database query to return specific version
+    mock_version_result = MagicMock()
+    mock_version_result.scalar_one_or_none.return_value = version1
+
+    mock_db_session.execute.side_effect = [mock_plan_result, mock_version_result]
+
+    result = await service.get_version(mock_plan_id, 1)
+
+    # Verify get_version returns VersionResponse with correct data
+    assert isinstance(result, VersionResponse)
+    assert result.version_number == 1
+    assert result.change_summary == "Initial plan creation"
+
+    # Test compare_versions
+    # Reset mock for compare test
+    mock_db_session.reset_mock()
+
+    # Mock database query to return plan
+    mock_plan_result2 = MagicMock()
+    mock_plan_result2.scalar_one_or_none.return_value = plan
+
+    # Mock database query to return both versions
+    mock_versions_result = MagicMock()
+    mock_versions_result.scalars.return_value.all.return_value = [version1, version2]
+
+    mock_db_session.execute.side_effect = [mock_plan_result2, mock_versions_result]
+
+    comparison = await service.compare_versions(mock_plan_id, 1, 2)
+
+    # Verify comparison result structure
+    assert "plan_id" in comparison
+    assert comparison["plan_id"] == str(mock_plan_id)
+    assert comparison["version1"] == 1
+    assert comparison["version2"] == 2
+    assert "version1_date" in comparison
+    assert "version2_date" in comparison
+    assert "changes" in comparison
+
+    # Verify changed fields are detected
+    changes = comparison["changes"]
+    assert "title" in changes, "Title change should be detected"
+    assert changes["title"]["from"] == "Original Title"
+    assert changes["title"]["to"] == "Updated Title"
+
+    assert "status" in changes, "Status change should be detected"
+    assert changes["status"]["from"] == "draft"
+    assert changes["status"]["to"] == "active"
+
+    assert "diagnosis" in changes, "Diagnosis change should be detected"
+    assert changes["diagnosis"]["from"] == ["autism"]
+    assert changes["diagnosis"]["to"] == ["autism", "adhd"]
+
+
+@pytest.mark.asyncio
+async def test_get_version_raises_not_found(
+    mock_db_session: AsyncMock,
+    mock_plan_id: UUID,
+) -> None:
+    """Test that get_version raises PlanVersionError when version not found.
+
+    Verifies that attempting to retrieve a non-existent version number
+    raises the appropriate error.
+    """
+    service = InterventionPlanService(mock_db_session)
+
+    # Create mock plan
+    plan = MagicMock()
+    plan.id = mock_plan_id
+
+    # Mock database query to return plan
+    mock_plan_result = MagicMock()
+    mock_plan_result.scalar_one_or_none.return_value = plan
+
+    # Mock database query to return None for version (not found)
+    mock_version_result = MagicMock()
+    mock_version_result.scalar_one_or_none.return_value = None
+
+    mock_db_session.execute.side_effect = [mock_plan_result, mock_version_result]
+
+    # Verify error is raised for non-existent version
+    with pytest.raises(PlanVersionError) as exc_info:
+        await service.get_version(mock_plan_id, 999)
+
+    assert "Version 999 not found" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_compare_versions_raises_not_found(
+    mock_db_session: AsyncMock,
+    mock_plan_id: UUID,
+) -> None:
+    """Test that compare_versions raises PlanVersionError when versions not found.
+
+    Verifies that attempting to compare with non-existent version numbers
+    raises the appropriate error.
+    """
+    service = InterventionPlanService(mock_db_session)
+
+    # Create mock plan
+    plan = MagicMock()
+    plan.id = mock_plan_id
+
+    # Create only one version
+    from app.models.intervention_plan import InterventionVersion
+
+    version1 = MagicMock(spec=InterventionVersion)
+    version1.plan_id = mock_plan_id
+    version1.version_number = 1
+
+    # Mock database query to return plan
+    mock_plan_result = MagicMock()
+    mock_plan_result.scalar_one_or_none.return_value = plan
+
+    # Mock database query to return only one version (missing version 2)
+    mock_versions_result = MagicMock()
+    mock_versions_result.scalars.return_value.all.return_value = [version1]
+
+    mock_db_session.execute.side_effect = [mock_plan_result, mock_versions_result]
+
+    # Verify error is raised for missing version
+    with pytest.raises(PlanVersionError) as exc_info:
+        await service.compare_versions(mock_plan_id, 1, 2)
+
+    assert "not found for plan" in str(exc_info.value)
