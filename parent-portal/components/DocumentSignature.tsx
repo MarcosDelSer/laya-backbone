@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { SignatureCanvas } from './SignatureCanvas';
+import { useFocusTrap } from '../hooks';
 
 interface DocumentData {
   id: string;
@@ -31,6 +32,9 @@ export function DocumentSignature({
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  // Focus trap for modal
+  const modalRef = useFocusTrap<HTMLDivElement>(isOpen && !isSubmitting);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -106,7 +110,7 @@ export function DocumentSignature({
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-lg transform rounded-xl bg-white shadow-2xl transition-all">
+        <div ref={modalRef} className="relative w-full max-w-lg transform rounded-xl bg-white shadow-2xl transition-all">
           {/* Header */}
           <div className="border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">

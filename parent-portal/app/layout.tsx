@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Navigation } from '@/components/Navigation';
+import { SkipNavigation } from '@/components/SkipNavigation';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -18,9 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased bg-gray-50`}>
+        <SkipNavigation />
         <div className="min-h-screen flex flex-col">
           <Navigation />
-          <main className="flex-1">
+          <main id="main-content" className="flex-1" tabIndex={-1}>
             {children}
           </main>
           <footer className="border-t border-gray-200 bg-white py-6">

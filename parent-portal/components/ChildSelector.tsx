@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useEscapeKey, useArrowNavigation, useClickOutside } from '../hooks';
 
 interface Child {
   id: string;
@@ -26,14 +27,30 @@ const mockChildren: Child[] = [
 export function ChildSelector() {
   const [selectedChild, setSelectedChild] = useState<Child>(mockChildren[0]);
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleSelect = (child: Child) => {
     setSelectedChild(child);
     setIsOpen(false);
   };
 
+  const handleClose = () => {
+    setIsOpen(false);
+  };
+
+  // Keyboard navigation hooks
+  useEscapeKey(handleClose, isOpen);
+  useClickOutside(containerRef, handleClose, isOpen);
+
+  const { focusedIndex } = useArrowNavigation({
+    itemCount: mockChildren.length,
+    isActive: isOpen,
+    onSelect: (index) => handleSelect(mockChildren[index]),
+    loop: true,
+  });
+
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -79,15 +96,18 @@ export function ChildSelector() {
             <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500" id="child-selector-label">
               Select Child
             </p>
-            {mockChildren.map((child) => (
+            {mockChildren.map((child, index) => (
               <button
                 key={child.id}
                 role="option"
                 aria-selected={selectedChild.id === child.id}
                 onClick={() => handleSelect(child)}
-                className={`flex w-full items-center space-x-3 rounded-md px-3 py-2 text-sm ${
+                tabIndex={focusedIndex === index ? 0 : -1}
+                className={`flex w-full items-center space-x-3 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-inset ${
                   selectedChild.id === child.id
                     ? 'bg-primary-50 text-primary-700'
+                    : focusedIndex === index
+                    ? 'bg-gray-100 text-gray-900'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
