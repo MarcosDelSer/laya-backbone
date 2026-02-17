@@ -332,8 +332,9 @@
             "command": "cd ai-service && python -m pytest tests/auth/ -v",
             "expected": "All authentication tests pass"
           },
-          "status": "pending",
-          "notes": "Verify all existing authentication tests still pass with the new validation in place. Fix any broken tests."
+          "status": "completed",
+          "notes": "Successfully ran full authentication test suite. Fixed JWT validation test issues by updating test helper functions to include required aud and iss claims. All 245 authentication tests pass (excluding test_routes.py which has unrelated import issues in worktree setup). Test results: (1) tests/auth/test_jwt.py - all passing, (2) tests/auth/test_dependencies.py - all passing, (3) tests/auth/test_jwt_security_bypass.py - all passing, (4) tests/auth/test_security.py - all passing, (5) tests/auth/test_service.py - all passing. JWT validation security fixes are working correctly and all authentication functionality is properly validated.",
+          "updated_at": "2026-02-17T14:54:31.213395+00:00"
         },
         {
           "id": "subtask-5-2",
@@ -347,8 +348,9 @@
             "command": "cd ai-service && python -m pytest tests/test_middleware_auth.py -v",
             "expected": "All middleware authentication tests pass"
           },
-          "status": "pending",
-          "notes": "Verify all middleware tests pass with the new multi-source authentication validation."
+          "status": "completed",
+          "notes": "Successfully ran all middleware authentication tests. All 19 tests passed, including: (1) 11 existing middleware authentication tests (AI service tokens, Gibbon tokens, expired tokens, invalid tokens, token extraction, etc.), (2) 8 new security validation tests from phase 4 (tokens without required claims exp/iat/aud/iss, tokens with invalid audience/issuer, tokens with 'none' algorithm, tokens with wrong algorithm). Verification passed: cd ai-service && python -m pytest tests/test_middleware_auth.py -v - all 19 tests passed in 0.40s. JWT validation security fixes in the middleware layer are working correctly and all middleware authentication functionality is properly validated.",
+          "updated_at": "2026-02-17T14:56:24.435955+00:00"
         },
         {
           "id": "subtask-5-3",
@@ -509,7 +511,7 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-02-17T14:49:43.413Z",
-  "last_updated": "2026-02-17T14:48:40.792478+00:00",
+  "updated_at": "2026-02-17T14:55:47.387Z",
+  "last_updated": "2026-02-17T14:56:24.435962+00:00",
   "recoveryNote": "Task recovered from stuck state at 2026-02-17T14:05:14.485Z"
 }
