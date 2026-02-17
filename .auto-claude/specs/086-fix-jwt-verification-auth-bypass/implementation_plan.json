@@ -79,8 +79,9 @@
             "command": "cd ai-service && python -c \"from app.auth.jwt import decode_token; import jwt; from app.config import settings; token = jwt.encode({'sub': 'test', 'iat': 1234567890}, settings.jwt_secret_key, algorithm='HS256'); decode_token(token)\"",
             "expected": "Should raise HTTPException with 401 status (token missing required 'exp' claim)"
           },
-          "status": "pending",
-          "notes": "Add options parameter to jwt.decode() with require=['exp', 'sub', 'iat'] and verify_exp=True. This prevents tokens without expiration from being accepted."
+          "status": "completed",
+          "notes": "Successfully added required claims enforcement to decode_token function. Added options parameter to jwt.decode() with require=['exp', 'sub', 'iat'] and verify_exp=True. Verification passed - tokens missing required claims (especially 'exp') are now properly rejected with HTTPException 401 status. This prevents the critical JWT authentication bypass vulnerability where tokens without expiration could be accepted.",
+          "updated_at": "2026-02-17T14:10:57.949595+00:00"
         },
         {
           "id": "subtask-2-2",
@@ -100,8 +101,9 @@
             "command": "cd ai-service && python -c \"from app.auth.jwt import decode_token; import jwt; from app.config import settings; from datetime import datetime, timezone, timedelta; exp = int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()); token = jwt.encode({'sub': 'test', 'iat': int(datetime.now(timezone.utc).timestamp()), 'exp': exp, 'aud': 'wrong-audience'}, settings.jwt_secret_key, algorithm='HS256'); decode_token(token)\"",
             "expected": "Should raise HTTPException with 401 status (invalid audience)"
           },
-          "status": "pending",
-          "notes": "Add jwt_audience and jwt_issuer to Settings. Update decode_token to validate aud and iss claims using audience= and issuer= parameters in jwt.decode()."
+          "status": "completed",
+          "notes": "Successfully added audience and issuer validation to decode_token function. Added jwt_audience and jwt_issuer fields to Settings class in config.py with default value 'laya-ai-service'. Updated decode_token in jwt.py to validate audience and issuer claims using audience= and issuer= parameters in jwt.decode(). Verification passed - comprehensive tests confirm: (1) tokens with wrong audience are rejected with 401, (2) tokens missing audience are rejected with 401, (3) tokens with wrong issuer are rejected with 401, (4) tokens missing issuer are rejected with 401, (5) tokens with correct audience and issuer are accepted. This prevents JWT authentication bypass by ensuring tokens can only be used for the intended audience and from the expected issuer.",
+          "updated_at": "2026-02-17T14:15:33.365369+00:00"
         },
         {
           "id": "subtask-2-3",
@@ -119,8 +121,9 @@
             "command": "cd ai-service && python -c \"from app.auth.jwt import decode_token; import jwt; token = jwt.encode({'sub': 'test', 'exp': 9999999999}, key='', algorithm='none'); decode_token(token)\"",
             "expected": "Should raise HTTPException with 401 status (invalid algorithm)"
           },
-          "status": "pending",
-          "notes": "Ensure algorithms parameter in jwt.decode() explicitly specifies [settings.jwt_algorithm] and does not include 'none'. Add validation to reject tokens with algorithm mismatch."
+          "status": "completed",
+          "notes": "Successfully added explicit algorithm validation to decode_token function. Implementation includes: (1) Explicit check of token header using jwt.get_unverified_header() to inspect algorithm before verification, (2) Explicit rejection of 'none' algorithm with HTTPException 401, (3) Validation that token algorithm matches expected algorithm (HS256), (4) Defense-in-depth approach with both pre-validation checks and algorithms parameter in jwt.decode(). Verification passed - tokens with 'none' algorithm are properly rejected with 401 status. This prevents JWT algorithm confusion attacks where attackers could bypass signature verification by using 'none' algorithm.",
+          "updated_at": "2026-02-17T14:18:33.135207+00:00"
         },
         {
           "id": "subtask-2-4",
@@ -138,8 +141,9 @@
             "command": "cd ai-service && python -c \"from app.auth.jwt import create_token, decode_token; token = create_token('test123'); payload = decode_token(token); print('aud:', payload.get('aud'), 'iss:', payload.get('iss'))\"",
             "expected": "Should print aud and iss values from settings"
           },
-          "status": "pending",
-          "notes": "Update create_token to automatically include 'aud' and 'iss' claims from settings. Ensure these are added before additional_claims so they cannot be overridden."
+          "status": "completed",
+          "notes": "Successfully updated create_token function to include aud and iss claims from settings. Added jwt_audience and jwt_issuer to the payload dictionary before additional_claims to prevent override. Verification passed - tokens now include aud: laya-ai-service and iss: laya-ai-service claims, which are properly validated by decode_token. This completes the JWT validation security fixes in the create_token function.",
+          "updated_at": "2026-02-17T14:23:58.209467+00:00"
         }
       ]
     },
@@ -169,8 +173,9 @@
             "command": "cd ai-service && python -c \"import asyncio; from app.middleware.auth import verify_token_from_any_source; from fastapi.security import HTTPAuthorizationCredentials; import jwt; from app.config import settings; token = jwt.encode({'sub': 'test', 'iat': 1234567890}, settings.jwt_secret_key, algorithm='HS256'); creds = HTTPAuthorizationCredentials(scheme='Bearer', credentials=token); asyncio.run(verify_token_from_any_source(creds))\"",
             "expected": "Should raise HTTPException with 401 status (missing required claims)"
           },
-          "status": "pending",
-          "notes": "Update jwt.decode() call in verify_token_from_any_source to include options={'require': ['exp', 'sub', 'iat'], 'verify_exp': True} and audience/issuer validation."
+          "status": "completed",
+          "notes": "Successfully added required claims enforcement to verify_token_from_any_source function. Implementation includes: (1) Algorithm validation with explicit rejection of 'none' algorithm, (2) Required claims enforcement (exp, sub, iat) using options parameter, (3) Audience and issuer validation, (4) Defense-in-depth approach with pre-validation checks before jwt.decode(), (5) Comprehensive audit logging maintained. Verification passed - tokens missing required claims are properly rejected with HTTPException 401 status. This prevents JWT authentication bypass vulnerability in the middleware layer.",
+          "updated_at": "2026-02-17T14:28:09.874609+00:00"
         },
         {
           "id": "subtask-3-2",
@@ -498,7 +503,7 @@
   "qa_signoff": null,
   "status": "in_progress",
   "planStatus": "in_progress",
-  "updated_at": "2026-02-17T14:05:21.038Z",
-  "last_updated": "2026-02-17T14:07:49.418992+00:00",
+  "updated_at": "2026-02-17T14:26:30.255Z",
+  "last_updated": "2026-02-17T14:28:09.874625+00:00",
   "recoveryNote": "Task recovered from stuck state at 2026-02-17T14:05:14.485Z"
 }

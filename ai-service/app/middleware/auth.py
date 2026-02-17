@@ -232,6 +232,8 @@ async def verify_token_from_any_source(
                 token,
                 settings.jwt_secret_key,
                 algorithms=[settings.jwt_algorithm],
+                audience=settings.jwt_audience,
+                issuer=settings.jwt_issuer,
                 options={"verify_exp": False},
             )
             audit_logger.log_token_expired(
