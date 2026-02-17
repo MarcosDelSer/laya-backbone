@@ -1,6 +1,12 @@
 export default function Loading() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <div
+      className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading content, please wait"
+    >
+      <span className="sr-only">Loading content, please wait...</span>
       {/* Header skeleton */}
       <div className="mb-8">
         <div className="h-8 w-48 skeleton mb-2" />

@@ -1,6 +1,12 @@
 export default function DocumentsLoading() {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+    <div
+      className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading documents"
+    >
+      <span className="sr-only">Loading documents, please wait...</span>
       {/* Header skeleton */}
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

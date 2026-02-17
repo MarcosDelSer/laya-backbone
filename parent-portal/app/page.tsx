@@ -182,18 +182,18 @@ export default function DashboardPage() {
               </Link>
             </header>
             <section className="card-body">
-              <div className="space-y-4">
+              <div className="space-y-4" role="list">
                 {todaysSummary.activities.map((activity, index) => (
-                  <div key={index} className="flex items-start space-x-4">
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-purple-100">
-                      <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div key={index} className="flex items-start space-x-4" role="listitem">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-purple-100" aria-hidden="true">
+                      <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <p className="font-medium text-gray-900">{activity.name}</p>
-                        <span className="text-sm text-gray-500">{activity.time}</span>
+                        <time className="text-sm text-gray-500" dateTime={activity.time}>{activity.time}</time>
                       </div>
                       <p className="text-sm text-gray-600">{activity.description}</p>
                     </div>
@@ -211,21 +211,21 @@ export default function DashboardPage() {
                 <h3 className="section-title">Meals</h3>
               </header>
               <section className="card-body">
-                <div className="space-y-3">
+                <div className="space-y-3" role="list">
                   {todaysSummary.meals.map((meal, index) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-green-100">
-                        <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div key={index} className="flex items-start space-x-3" role="listitem">
+                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-green-100" aria-hidden="true">
+                        <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <p className="font-medium text-gray-900">{meal.type}</p>
-                          <span className="text-xs text-gray-500">{meal.time}</span>
+                          <time className="text-xs text-gray-500" dateTime={meal.time}>{meal.time}</time>
                         </div>
                         <p className="text-sm text-gray-600">{meal.notes}</p>
-                        <span className={`badge mt-1 ${meal.amount === 'all' ? 'badge-success' : 'badge-info'}`}>
+                        <span className={`badge mt-1 ${meal.amount === 'all' ? 'badge-success' : 'badge-info'}`} role="status" aria-label={`Ate ${meal.amount} of meal`}>
                           Ate {meal.amount}
                         </span>
                       </div>
@@ -241,20 +241,20 @@ export default function DashboardPage() {
                 <h3 className="section-title">Nap Time</h3>
               </header>
               <section className="card-body">
-                <div className="space-y-3">
+                <div className="space-y-3" role="list">
                   {todaysSummary.naps.map((nap, index) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
-                        <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div key={index} className="flex items-start space-x-3" role="listitem">
+                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100" aria-hidden="true">
+                        <svg className="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900">{nap.duration}</p>
                         <p className="text-sm text-gray-600">
-                          {nap.startTime} - {nap.endTime}
+                          <time dateTime={nap.startTime}>{nap.startTime}</time> - <time dateTime={nap.endTime}>{nap.endTime}</time>
                         </p>
-                        <span className={`badge mt-1 ${nap.quality === 'good' ? 'badge-success' : 'badge-warning'}`}>
+                        <span className={`badge mt-1 ${nap.quality === 'good' ? 'badge-success' : 'badge-warning'}`} role="status" aria-label={`${nap.quality} quality sleep`}>
                           {nap.quality.charAt(0).toUpperCase() + nap.quality.slice(1)} sleep
                         </span>
                       </div>
@@ -279,23 +279,24 @@ export default function DashboardPage() {
             <section className="card-body">
               <div className="grid grid-cols-2 gap-2">
                 {recentPhotos.map((photo) => (
-                  <div
+                  <button
                     key={photo.id}
-                    className="group relative aspect-square overflow-hidden rounded-lg bg-gray-200"
+                    className="group relative aspect-square overflow-hidden rounded-lg bg-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    aria-label={`View photo: ${photo.caption}, taken ${photo.date}`}
                   >
                     {/* Placeholder for actual photo */}
-                    <div className="flex h-full w-full items-center justify-center text-gray-400">
-                      <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex h-full w-full items-center justify-center text-gray-400" role="img" aria-label={`${photo.caption} - ${photo.date}`}>
+                      <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">
                       <div className="absolute bottom-2 left-2 text-white">
                         <p className="text-xs font-medium">{photo.caption}</p>
                         <p className="text-xs opacity-75">{photo.date}</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </section>

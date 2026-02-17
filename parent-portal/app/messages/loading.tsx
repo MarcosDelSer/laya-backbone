@@ -1,6 +1,12 @@
 export default function MessagesLoading() {
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col">
+    <div
+      className="h-[calc(100vh-4rem)] flex flex-col"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading messages"
+    >
+      <span className="sr-only">Loading messages, please wait...</span>
       {/* Header skeleton */}
       <div className="border-b border-gray-200 bg-white px-4 py-4">
         <div className="mx-auto max-w-7xl">

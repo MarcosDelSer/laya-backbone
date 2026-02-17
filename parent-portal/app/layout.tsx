@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Navigation } from '@/components/Navigation';
 import { SkipNavigation } from '@/components/SkipNavigation';
+import { ScreenReaderAnnouncer } from '@/components/ScreenReaderAnnouncer';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -19,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased bg-gray-50`}>
+        <ScreenReaderAnnouncer />
         <SkipNavigation />
         <div className="min-h-screen flex flex-col">
           <Navigation />
