@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "013-task-l-desktop-app",
+  "spec": "052-allergy-medical-tracking",
   "state": "building",
   "subtasks": {
-    "completed": 10,
-    "total": 12,
+    "completed": 17,
+    "total": 29,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Integration Verification",
+    "current": "Parent Portal Medical UI",
     "id": null,
-    "total": 3
+    "total": 6
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 4,
-    "started_at": "2026-02-15T05:15:00.899192"
+    "number": 6,
+    "started_at": "2026-02-17T10:42:20.917652"
   },
-  "last_update": "2026-02-15T05:19:32.125362"
+  "last_update": "2026-02-17T11:05:09.366257"
 }
