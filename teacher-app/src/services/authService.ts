@@ -10,6 +10,7 @@
  */
 
 import {Platform} from 'react-native';
+import ReactNativeBiometrics from 'react-native-biometrics';
 import {api, setSessionToken, getSessionToken} from '../api/client';
 import {API_CONFIG} from '../api/config';
 import type {
@@ -94,43 +95,48 @@ export function getCurrentUser(): Teacher | null {
 
 /**
  * Check biometric availability on the device
- *
- * Note: This is a mock implementation. In production, use
- * react-native-biometrics or expo-local-authentication.
  */
 export async function checkBiometricAvailability(): Promise<BiometricStatus> {
-  // Mock implementation - in production, use react-native-biometrics
-  // For Android, this would check for fingerprint, face unlock, or iris
-  // For iOS, this would check for Touch ID or Face ID
+  try {
+    const rnBiometrics = new ReactNativeBiometrics();
+    const {available, biometryType} = await rnBiometrics.isSensorAvailable();
 
-  if (Platform.OS === 'android') {
-    // Android typically has fingerprint support on most modern devices
+    if (!available) {
+      return {
+        isAvailable: false,
+        biometricType: 'none',
+        isEnrolled: false,
+      };
+    }
+
+    // Map react-native-biometrics types to our BiometricType
+    let mappedType: BiometricType = 'none';
+    if (biometryType === ReactNativeBiometrics.TouchID) {
+      mappedType = 'fingerprint';
+    } else if (biometryType === ReactNativeBiometrics.FaceID) {
+      mappedType = 'face';
+    } else if (biometryType === ReactNativeBiometrics.Biometrics) {
+      // Generic biometrics (Android)
+      mappedType = 'fingerprint';
+    }
+
     return {
       isAvailable: true,
-      biometricType: 'fingerprint',
+      biometricType: mappedType,
       isEnrolled: true,
     };
-  } else if (Platform.OS === 'ios') {
-    // iOS devices have Touch ID or Face ID
+  } catch (error) {
+    // If biometric check fails, assume not available
     return {
-      isAvailable: true,
-      biometricType: 'face',
-      isEnrolled: true,
+      isAvailable: false,
+      biometricType: 'none',
+      isEnrolled: false,
     };
   }
-
-  return {
-    isAvailable: false,
-    biometricType: 'none',
-    isEnrolled: false,
-  };
 }
 
 /**
  * Authenticate using biometrics
- *
- * Note: This is a mock implementation. In production, use
- * react-native-biometrics for proper biometric authentication.
  */
 export async function authenticateWithBiometrics(
   promptMessage = 'Authenticate to access your account',
@@ -157,15 +163,36 @@ export async function authenticateWithBiometrics(
     };
   }
 
-  // Mock implementation - in production, this would show the system biometric prompt
-  // Using react-native-biometrics:
-  // const { success } = await ReactNativeBiometrics.simplePrompt({ promptMessage });
+  try {
+    const rnBiometrics = new ReactNativeBiometrics();
+    const {success} = await rnBiometrics.simplePrompt({
+      promptMessage: promptMessage,
+    });
 
-  // For development, always succeed
-  return {
-    success: true,
-    data: true,
-  };
+    if (success) {
+      return {
+        success: true,
+        data: true,
+      };
+    }
+
+    return {
+      success: false,
+      error: {
+        code: 'BIOMETRIC_FAILED',
+        message: 'Biometric authentication failed',
+      },
+    };
+  } catch (error) {
+    // Handle cancellation or errors
+    return {
+      success: false,
+      error: {
+        code: 'BIOMETRIC_CANCELED',
+        message: error instanceof Error ? error.message : 'Biometric authentication was canceled',
+      },
+    };
+  }
 }
 
 /**
