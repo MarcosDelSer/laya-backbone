@@ -15,7 +15,7 @@ from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
 from app.routers.cache import router as cache_router
 from app.routers.communication import router as communication_router
-from app.routers.search import router as search_router
+from app.routers.health import router as health_router
 from app.routers.webhooks import router as webhooks_router
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ app.add_middleware(
 )
 
 # Register API routers
+app.include_router(health_router, prefix="/api/v1", tags=["health"])
 app.include_router(coaching.router, prefix="/api/v1/coaching", tags=["coaching"])
 app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
 app.include_router(activities_router)
