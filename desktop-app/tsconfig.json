@@ -5,7 +5,7 @@
     "skipLibCheck": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "noEmit": true,
+    "noEmit": false,
     "esModuleInterop": true,
     "module": "commonjs",
     "moduleResolution": "node",
@@ -13,8 +13,10 @@
     "isolatedModules": true,
     "target": "es2020",
     "incremental": true,
-    "types": ["node"]
+    "types": ["node"],
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
-  "include": ["**/*.ts", "**/*.js"],
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "build"]
 }

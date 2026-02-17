@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "description": "LAYA Desktop Application - Windows wrapper for parent-portal",
   "private": true,
-  "main": "main.js",
+  "main": "dist/main.js",
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --win",
-    "dist": "electron-builder --win --x64",
-    "dist:win": "electron-builder --win"
+    "start": "npm run build:ts && electron .",
+    "build:ts": "tsc",
+    "build": "npm run build:ts && electron-builder --win",
+    "dist": "npm run build:ts && electron-builder --win --x64",
+    "dist:win": "npm run build:ts && electron-builder --win"
   },
   "dependencies": {
     "electron-updater": "^6.7.3"
