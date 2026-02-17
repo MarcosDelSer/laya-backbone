@@ -600,3 +600,186 @@ class TestJWTSecurityProperties:
             decode_token(token)
         assert exc_info.value.status_code == 401
         assert "sub" in exc_info.value.detail.lower()
+
+    def test_create_token_includes_issuer(self):
+        """Test that created tokens include issuer claim."""
+        token = create_token(subject="user123")
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
+        )
+        assert "iss" in payload
+        assert payload["iss"] == settings.jwt_issuer
+
+    def test_create_token_includes_audience(self):
+        """Test that created tokens include audience claim."""
+        token = create_token(subject="user123")
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
+        )
+        assert "aud" in payload
+        assert payload["aud"] == settings.jwt_audience
+
+    def test_decode_token_validates_issuer(self):
+        """Test that decode_token rejects tokens with wrong issuer."""
+        # Create token with wrong issuer
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": "evil-issuer",
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for wrong issuer
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "issuer" in exc_info.value.detail.lower()
+
+    def test_decode_token_validates_audience(self):
+        """Test that decode_token rejects tokens with wrong audience."""
+        # Create token with wrong audience
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": "wrong-audience",
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for wrong audience
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "audience" in exc_info.value.detail.lower()
+
+    def test_token_missing_issuer_claim_raises_401(self):
+        """Test that tokens missing issuer claim are rejected."""
+        # Create token without issuer claim
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing issuer claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "iss" in exc_info.value.detail.lower()
+
+    def test_token_missing_audience_claim_raises_401(self):
+        """Test that tokens missing audience claim are rejected."""
+        # Create token without audience claim
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing audience claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "aud" in exc_info.value.detail.lower()
+
+    def test_issuer_validation_prevents_token_reuse_across_services(self):
+        """Test that issuer validation prevents tokens from other services being accepted."""
+        # Simulate token from a different service with same secret
+        other_service_token = jwt.encode(
+            {
+                "sub": "user123",
+                "iat": int(datetime.now(timezone.utc).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                "iss": "other-service",
+                "aud": settings.jwt_audience,
+            },
+            settings.jwt_secret_key,  # Same secret but different issuer
+            algorithm=settings.jwt_algorithm,
+        )
+        # Should be rejected due to wrong issuer
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(other_service_token)
+        assert exc_info.value.status_code == 401
+
+    def test_audience_validation_prevents_token_misuse(self):
+        """Test that audience validation prevents tokens intended for other audiences."""
+        # Create token intended for different audience
+        wrong_audience_token = jwt.encode(
+            {
+                "sub": "user123",
+                "iat": int(datetime.now(timezone.utc).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                "iss": settings.jwt_issuer,
+                "aud": "different-api",
+            },
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # Should be rejected due to wrong audience
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(wrong_audience_token)
+        assert exc_info.value.status_code == 401
+
+    def test_issuer_and_audience_both_must_be_valid(self):
+        """Test that both issuer and audience must be valid together."""
+        # Valid issuer, wrong audience
+        token1 = jwt.encode(
+            {
+                "sub": "user123",
+                "iat": int(datetime.now(timezone.utc).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                "iss": settings.jwt_issuer,
+                "aud": "wrong-audience",
+            },
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        with pytest.raises(HTTPException):
+            decode_token(token1)
+
+        # Wrong issuer, valid audience
+        token2 = jwt.encode(
+            {
+                "sub": "user123",
+                "iat": int(datetime.now(timezone.utc).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                "iss": "wrong-issuer",
+                "aud": settings.jwt_audience,
+            },
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        with pytest.raises(HTTPException):
+            decode_token(token2)
+
+        # Both correct - should work
+        token3 = create_token(subject="user123")
+        payload = decode_token(token3)
+        assert payload["sub"] == "user123"

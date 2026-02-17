@@ -3,23 +3,23 @@
   "spec": "086-fix-jwt-verification",
   "state": "building",
   "subtasks": {
-    "completed": 5,
+    "completed": 8,
     "total": 14,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Fix Multi-Source Auth Middleware",
+    "current": "Add Comprehensive Security Tests",
     "id": null,
-    "total": 2
+    "total": 4
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 3,
+    "number": 6,
     "started_at": "2026-02-17T12:32:10.496259"
   },
-  "last_update": "2026-02-17T12:36:34.756340"
+  "last_update": "2026-02-17T12:42:15.527914"
 }
