@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+RL-24 Sample Transmission File
+This is a sample XML file demonstrating the expected format for Revenu Quebec RL-24 submissions.
+
+File naming convention: AAPPPPPPSSS.xml
+- AA: Last 2 digits of tax year (25 for 2025)
+- PPPPPP: 6-digit preparer number (123456)
+- SSS: 3-digit sequence number (001)
+
+Example filename: 25123456001.xml
+-->
+<Transmission xmlns="http://www.revenuquebec.gouv.qc.ca/rl24"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <!-- Header Section (Entete) -->
+    <Entete>
+        <Transmetteur>
+            <!-- Transmitter Number: NP + 6-digit preparer number -->
+            <NoTransmetteur>NP123456</NoTransmetteur>
+            <!-- Transmission Type: O=Original, A=Amended, D=Cancelled -->
+            <TypeTransmission>O</TypeTransmission>
+            <!-- Tax Year (4 digits) -->
+            <Annee>2025</Annee>
+            <!-- Sequence Number (3 digits, zero-padded) -->
+            <NoSequence>001</NoSequence>
+            <!-- Software Information -->
+            <NomLogiciel>Gibbon RL24 Submission</NomLogiciel>
+            <VersionLogiciel>1.0</VersionLogiciel>
+        </Transmetteur>
+    </Entete>
+
+    <!-- Group Section (Groupe) - Contains Issuer, Slips, and Summary -->
+    <Groupe>
+        <!-- Issuer/Provider Information (Emetteur) -->
+        <Emetteur>
+            <!-- Quebec Enterprise Number (NEQ) - 10 digits -->
+            <NEQ>1234567890</NEQ>
+            <NomEmetteur>
+                <Ligne1>Centre de la petite enfance ABC</Ligne1>
+            </NomEmetteur>
+            <AdresseEmetteur>
+                <Ligne1>5678 rue Laval</Ligne1>
+                <Ville>Montreal</Ville>
+                <Province>QC</Province>
+                <CodePostal>H2X 3T5</CodePostal>
+                <Pays>CAN</Pays>
+            </AdresseEmetteur>
+        </Emetteur>
+
+        <!-- RL-24 Slip #1 -->
+        <RL24>
+            <IdentificationReleve>
+                <!-- Sequential slip number within transmission -->
+                <NoReleve>1</NoReleve>
+                <!-- Case A: O=Original, A=Amended, D=Cancelled -->
+                <CaseA>O</CaseA>
+            </IdentificationReleve>
+
+            <!-- Recipient/Parent Information (Beneficiaire) -->
+            <Beneficiaire>
+                <!-- Social Insurance Number (9 digits, Luhn validated) -->
+                <NAS>123456782</NAS>
+                <NomBeneficiaire>
+                    <Nom>Tremblay</Nom>
+                    <Prenom>Jean</Prenom>
+                </NomBeneficiaire>
+                <AdresseBeneficiaire>
+                    <Ligne1>1234 rue Principale</Ligne1>
+                    <Ville>Montreal</Ville>
+                    <Province>QC</Province>
+                    <CodePostal>H3A 1B2</CodePostal>
+                    <Pays>CAN</Pays>
+                </AdresseBeneficiaire>
+            </Beneficiaire>
+
+            <!-- Child Information (Enfant) -->
+            <Enfant>
+                <Nom>Tremblay</Nom>
+                <Prenom>Marie</Prenom>
+                <DateNaissance>2020-03-15</DateNaissance>
+            </Enfant>
+
+            <!-- Service Period -->
+            <PeriodeService>
+                <DateDebut>2025-01-06</DateDebut>
+                <DateFin>2025-06-30</DateFin>
+            </PeriodeService>
+
+            <!-- Amounts -->
+            <!-- Case 10: Number of eligible days -->
+            <Case10>125</Case10>
+            <!-- Case 11: Total childcare expenses paid -->
+            <Case11>5000.00</Case11>
+            <!-- Case 12: Eligible childcare expenses -->
+            <Case12>4000.00</Case12>
+            <!-- Case 13: Government contribution/reimbursement -->
+            <Case13>500.00</Case13>
+            <!-- Case 14: Net eligible amount (Case12 - Case13) -->
+            <Case14>3500.00</Case14>
+        </RL24>
+
+        <!-- RL-24 Slip #2 -->
+        <RL24>
+            <IdentificationReleve>
+                <NoReleve>2</NoReleve>
+                <CaseA>O</CaseA>
+            </IdentificationReleve>
+
+            <Beneficiaire>
+                <NAS>046454286</NAS>
+                <NomBeneficiaire>
+                    <Nom>Bouchard</Nom>
+                    <Prenom>Sophie</Prenom>
+                </NomBeneficiaire>
+                <AdresseBeneficiaire>
+                    <Ligne1>5678 avenue du Parc</Ligne1>
+                    <Ville>Laval</Ville>
+                    <Province>QC</Province>
+                    <CodePostal>H7N 4K9</CodePostal>
+                    <Pays>CAN</Pays>
+                </AdresseBeneficiaire>
+            </Beneficiaire>
+
+            <Enfant>
+                <Nom>Bouchard</Nom>
+                <Prenom>Pierre</Prenom>
+                <DateNaissance>2019-07-22</DateNaissance>
+            </Enfant>
+
+            <PeriodeService>
+                <DateDebut>2025-01-06</DateDebut>
+                <DateFin>2025-12-20</DateFin>
+            </PeriodeService>
+
+            <Case10>230</Case10>
+            <Case11>9500.00</Case11>
+            <Case12>7600.00</Case12>
+            <Case13>950.00</Case13>
+            <Case14>6650.00</Case14>
+        </RL24>
+
+        <!-- Summary Section (Sommaire) -->
+        <Sommaire>
+            <!-- Total number of slips in this transmission -->
+            <NombreReleves>2</NombreReleves>
+            <!-- Total days (sum of all Case10 values) -->
+            <TotalCase10>355</TotalCase10>
+            <!-- Total Case 11 amounts -->
+            <TotalCase11>14500.00</TotalCase11>
+            <!-- Total Case 12 amounts -->
+            <TotalCase12>11600.00</TotalCase12>
+            <!-- Total Case 13 amounts -->
+            <TotalCase13>1450.00</TotalCase13>
+            <!-- Total Case 14 amounts (TotalCase12 - TotalCase13) -->
+            <TotalCase14>10150.00</TotalCase14>
+        </Sommaire>
+    </Groupe>
+</Transmission>
