@@ -198,13 +198,22 @@ class InterventionPlanService:
                 )
                 self.db.add(consultation)
 
+        # Flush to ensure all related entities are saved
+        await self.db.flush()
+
+        # Reload plan with all relationships for snapshot
+        plan = await self._get_plan_with_relations(plan.id)
+
+        # Create snapshot of initial state
+        snapshot = await self._create_plan_snapshot(plan)
+
         # Create initial version record
         version = InterventionVersion(
             plan_id=plan.id,
             version_number=1,
             created_by=user_id,
             change_summary="Initial plan creation",
-            snapshot_data=None,  # Will be populated on subsequent versions
+            snapshot_data=snapshot,
         )
         self.db.add(version)
 
