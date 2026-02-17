@@ -73,6 +73,7 @@ const mockProtocolSummaries: Record<string, ProtocolSummary[]> = {
       authorizationStatus: 'active',
       lastAuthorizedAt: '2024-01-15T10:00:00Z',
       weightKg: 15.2,
+      weightRecordedAt: '2024-01-15T10:00:00Z',
       isWeightExpired: false,
       lastAdministeredAt: '2024-02-10T14:30:00Z',
       canAdminister: true,
@@ -184,14 +185,16 @@ export default function MedicalProtocolsPage() {
   const handleSubmitAuthorization = (request: CreateProtocolAuthorizationRequest) => {
     // In production, this would call the API
     // Update local state to reflect the new authorization
+    const now = new Date().toISOString();
     setProtocolSummaries((prev) =>
       prev.map((p) =>
         p.protocolId === request.protocolId
           ? {
               ...p,
               authorizationStatus: 'active' as ProtocolAuthorizationStatus,
-              lastAuthorizedAt: new Date().toISOString(),
+              lastAuthorizedAt: now,
               weightKg: request.weightKg || p.weightKg,
+              weightRecordedAt: request.weightKg ? now : p.weightRecordedAt,
               isWeightExpired: false,
               canAdminister: true,
             }
