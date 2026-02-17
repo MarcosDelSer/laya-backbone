@@ -9,7 +9,7 @@ Modules:
     activity: Models for activity intelligence domain
     analytics: Models for analytics, forecasting, and compliance
     communication: Models for parent communication domain
-    intervention_plan: Models for special needs intervention plans
+    development_profile: Models for Quebec-aligned developmental tracking
 """
 
 from app.models.base import Base
@@ -38,17 +38,13 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
-from app.models.intervention_plan import (
-    InterventionConsultation,
-    InterventionGoal,
-    InterventionMonitoring,
-    InterventionNeed,
-    InterventionParentInvolvement,
-    InterventionPlan,
-    InterventionProgress,
-    InterventionStrategy,
-    InterventionStrength,
-    InterventionVersion,
+from app.models.development_profile import (
+    DevelopmentProfile,
+    DevelopmentalDomain,
+    MonthlySnapshot,
+    Observation,
+    SkillAssessment,
+    SkillStatus,
 )
 
 __all__ = [
@@ -74,15 +70,11 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
-    # Intervention plan models
-    "InterventionPlan",
-    "InterventionStrength",
-    "InterventionNeed",
-    "InterventionGoal",
-    "InterventionStrategy",
-    "InterventionMonitoring",
-    "InterventionParentInvolvement",
-    "InterventionConsultation",
-    "InterventionProgress",
-    "InterventionVersion",
+    # Development Profile models
+    "DevelopmentProfile",
+    "DevelopmentalDomain",
+    "SkillStatus",
+    "SkillAssessment",
+    "Observation",
+    "MonthlySnapshot",
 ]

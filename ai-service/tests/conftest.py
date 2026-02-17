@@ -6,7 +6,7 @@ test data, and authentication mocking for coaching, activity, and communication 
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 from uuid import UUID, uuid4
 
@@ -245,69 +245,6 @@ CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(chi
 """
 
 
-# SQLite-compatible message quality tables (PostgreSQL ARRAY not supported in SQLite)
-SQLITE_CREATE_MESSAGE_QUALITY_TABLES_SQL = """
-CREATE TABLE IF NOT EXISTS message_analyses (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    child_id TEXT,
-    message_text TEXT NOT NULL,
-    language VARCHAR(2) NOT NULL DEFAULT 'en',
-    context VARCHAR(50) NOT NULL DEFAULT 'general_update',
-    quality_score INTEGER NOT NULL DEFAULT 0,
-    is_acceptable INTEGER NOT NULL DEFAULT 0,
-    issues_detected TEXT,
-    has_positive_opening INTEGER NOT NULL DEFAULT 0,
-    has_factual_basis INTEGER NOT NULL DEFAULT 1,
-    has_solution_focus INTEGER NOT NULL DEFAULT 0,
-    rewrite_suggested INTEGER NOT NULL DEFAULT 0,
-    rewrite_accepted INTEGER,
-    analysis_notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS message_templates (
-    id TEXT PRIMARY KEY,
-    title VARCHAR(200) NOT NULL,
-    content TEXT NOT NULL,
-    category VARCHAR(50) NOT NULL,
-    language VARCHAR(2) NOT NULL DEFAULT 'en',
-    description TEXT,
-    is_system INTEGER NOT NULL DEFAULT 0,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    usage_count INTEGER NOT NULL DEFAULT 0,
-    created_by TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS training_examples (
-    id TEXT PRIMARY KEY,
-    original_message TEXT NOT NULL,
-    improved_message TEXT NOT NULL,
-    issues_demonstrated TEXT NOT NULL,
-    explanation TEXT NOT NULL,
-    language VARCHAR(2) NOT NULL DEFAULT 'en',
-    difficulty_level VARCHAR(20) NOT NULL DEFAULT 'beginner',
-    is_active INTEGER NOT NULL DEFAULT 1,
-    view_count INTEGER NOT NULL DEFAULT 0,
-    helpfulness_score REAL,
-    created_by TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_message_analyses_user ON message_analyses(user_id);
-CREATE INDEX IF NOT EXISTS idx_message_analyses_child ON message_analyses(child_id);
-CREATE INDEX IF NOT EXISTS idx_message_analyses_language ON message_analyses(language);
-CREATE INDEX IF NOT EXISTS idx_message_templates_category ON message_templates(category);
-CREATE INDEX IF NOT EXISTS idx_message_templates_language ON message_templates(language);
-CREATE INDEX IF NOT EXISTS idx_training_examples_language ON training_examples(language);
-CREATE INDEX IF NOT EXISTS idx_training_examples_difficulty ON training_examples(difficulty_level);
-"""
-
-
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -396,9 +333,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
-    # Create message quality tables via raw SQL (SQLite compatibility)
+    # Create development profile tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_MESSAGE_QUALITY_TABLES_SQL.strip().split(';'):
+        for statement in SQLITE_CREATE_DEVELOPMENT_PROFILE_TABLES_SQL.strip().split(';'):
             statement = statement.strip()
             if statement:
                 await conn.execute(text(statement))
@@ -425,10 +362,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
-        # Drop message quality tables
-        await conn.execute(text("DROP TABLE IF EXISTS message_analyses"))
-        await conn.execute(text("DROP TABLE IF EXISTS message_templates"))
-        await conn.execute(text("DROP TABLE IF EXISTS training_examples"))
+        # Drop development profile tables
+        await conn.execute(text("DROP TABLE IF EXISTS monthly_snapshots"))
+        await conn.execute(text("DROP TABLE IF EXISTS observations"))
+        await conn.execute(text("DROP TABLE IF EXISTS skill_assessments"))
+        await conn.execute(text("DROP TABLE IF EXISTS development_profiles"))
 
 
 @pytest_asyncio.fixture
@@ -1619,3 +1557,648 @@ async def sample_home_activities(
         activities.append(activity)
 
     return activities
+
+
+# ============================================================================
+# Development Profile fixtures
+# ============================================================================
+
+
+# SQLite-compatible development profile tables (PostgreSQL ARRAY/JSONB not supported in SQLite)
+SQLITE_CREATE_DEVELOPMENT_PROFILE_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS development_profiles (
+    id TEXT PRIMARY KEY,
+    child_id TEXT NOT NULL UNIQUE,
+    educator_id TEXT,
+    birth_date DATE,
+    notes TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS skill_assessments (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES development_profiles(id) ON DELETE CASCADE,
+    domain VARCHAR(20) NOT NULL,
+    skill_name VARCHAR(200) NOT NULL,
+    skill_name_fr VARCHAR(200),
+    status VARCHAR(20) NOT NULL DEFAULT 'not_yet',
+    assessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    assessed_by_id TEXT,
+    evidence TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS observations (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES development_profiles(id) ON DELETE CASCADE,
+    domain VARCHAR(20) NOT NULL,
+    observed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    observer_id TEXT,
+    observer_type VARCHAR(50) NOT NULL DEFAULT 'educator',
+    behavior_description TEXT NOT NULL,
+    context TEXT,
+    is_milestone INTEGER NOT NULL DEFAULT 0,
+    is_concern INTEGER NOT NULL DEFAULT 0,
+    attachments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS monthly_snapshots (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES development_profiles(id) ON DELETE CASCADE,
+    snapshot_month DATE NOT NULL,
+    age_months INTEGER,
+    domain_summaries TEXT,
+    overall_progress VARCHAR(50) NOT NULL DEFAULT 'on_track',
+    strengths TEXT,
+    growth_areas TEXT,
+    recommendations TEXT,
+    generated_by_id TEXT,
+    is_parent_shared INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_development_profiles_child ON development_profiles(child_id);
+CREATE INDEX IF NOT EXISTS idx_development_profiles_educator ON development_profiles(educator_id);
+CREATE INDEX IF NOT EXISTS idx_development_profiles_active ON development_profiles(is_active);
+CREATE INDEX IF NOT EXISTS idx_skill_assessments_profile ON skill_assessments(profile_id);
+CREATE INDEX IF NOT EXISTS idx_skill_assessments_domain ON skill_assessments(domain);
+CREATE INDEX IF NOT EXISTS idx_skill_assessments_status ON skill_assessments(status);
+CREATE INDEX IF NOT EXISTS idx_observations_profile ON observations(profile_id);
+CREATE INDEX IF NOT EXISTS idx_observations_domain ON observations(domain);
+CREATE INDEX IF NOT EXISTS idx_observations_concern ON observations(is_concern);
+CREATE INDEX IF NOT EXISTS idx_monthly_snapshots_profile ON monthly_snapshots(profile_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_snapshots_month ON monthly_snapshots(snapshot_month);
+"""
+
+
+class MockDevelopmentProfile:
+    """Mock DevelopmentProfile object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        child_id,
+        educator_id,
+        birth_date,
+        notes,
+        is_active,
+        created_at,
+        updated_at,
+        skill_assessments=None,
+        observations=None,
+        monthly_snapshots=None,
+    ):
+        self.id = id
+        self.child_id = child_id
+        self.educator_id = educator_id
+        self.birth_date = birth_date
+        self.notes = notes
+        self.is_active = is_active
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.skill_assessments = skill_assessments or []
+        self.observations = observations or []
+        self.monthly_snapshots = monthly_snapshots or []
+
+    def __repr__(self) -> str:
+        return f"<DevelopmentProfile(id={self.id}, child_id={self.child_id})>"
+
+
+class MockSkillAssessment:
+    """Mock SkillAssessment object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        profile_id,
+        domain,
+        skill_name,
+        skill_name_fr,
+        status,
+        assessed_at,
+        assessed_by_id,
+        evidence,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.profile_id = profile_id
+        self.domain = domain
+        self.skill_name = skill_name
+        self.skill_name_fr = skill_name_fr
+        self.status = status
+        self.assessed_at = assessed_at
+        self.assessed_by_id = assessed_by_id
+        self.evidence = evidence
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<SkillAssessment(id={self.id}, domain={self.domain}, "
+            f"skill='{self.skill_name}', status={self.status})>"
+        )
+
+
+class MockObservation:
+    """Mock Observation object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        profile_id,
+        domain,
+        observed_at,
+        observer_id,
+        observer_type,
+        behavior_description,
+        context,
+        is_milestone,
+        is_concern,
+        attachments,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.profile_id = profile_id
+        self.domain = domain
+        self.observed_at = observed_at
+        self.observer_id = observer_id
+        self.observer_type = observer_type
+        self.behavior_description = behavior_description
+        self.context = context
+        self.is_milestone = is_milestone
+        self.is_concern = is_concern
+        self.attachments = attachments
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<Observation(id={self.id}, domain={self.domain}, "
+            f"observed_at={self.observed_at})>"
+        )
+
+
+class MockMonthlySnapshot:
+    """Mock MonthlySnapshot object for testing without SQLAlchemy ORM overhead."""
+
+    def __init__(
+        self,
+        id,
+        profile_id,
+        snapshot_month,
+        age_months,
+        domain_summaries,
+        overall_progress,
+        strengths,
+        growth_areas,
+        recommendations,
+        generated_by_id,
+        is_parent_shared,
+        created_at,
+        updated_at,
+    ):
+        self.id = id
+        self.profile_id = profile_id
+        self.snapshot_month = snapshot_month
+        self.age_months = age_months
+        self.domain_summaries = domain_summaries
+        self.overall_progress = overall_progress
+        self.strengths = strengths
+        self.growth_areas = growth_areas
+        self.recommendations = recommendations
+        self.generated_by_id = generated_by_id
+        self.is_parent_shared = is_parent_shared
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def __repr__(self) -> str:
+        return (
+            f"<MonthlySnapshot(id={self.id}, profile_id={self.profile_id}, "
+            f"month={self.snapshot_month}, progress={self.overall_progress})>"
+        )
+
+
+async def create_development_profile_in_db(
+    session: AsyncSession,
+    child_id: UUID,
+    educator_id: Optional[UUID] = None,
+    birth_date: Optional[date] = None,
+    notes: Optional[str] = None,
+    is_active: bool = True,
+) -> MockDevelopmentProfile:
+    """Helper function to create a development profile directly in SQLite database."""
+    from datetime import date as date_type
+
+    profile_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO development_profiles (
+                id, child_id, educator_id, birth_date, notes,
+                is_active, created_at, updated_at
+            ) VALUES (
+                :id, :child_id, :educator_id, :birth_date, :notes,
+                :is_active, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": profile_id,
+            "child_id": str(child_id),
+            "educator_id": str(educator_id) if educator_id else None,
+            "birth_date": birth_date.isoformat() if birth_date else None,
+            "notes": notes,
+            "is_active": 1 if is_active else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockDevelopmentProfile(
+        id=UUID(profile_id),
+        child_id=child_id,
+        educator_id=educator_id,
+        birth_date=birth_date,
+        notes=notes,
+        is_active=is_active,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_skill_assessment_in_db(
+    session: AsyncSession,
+    profile_id: UUID,
+    domain: str,
+    skill_name: str,
+    skill_name_fr: Optional[str] = None,
+    status: str = "not_yet",
+    assessed_by_id: Optional[UUID] = None,
+    evidence: Optional[str] = None,
+) -> MockSkillAssessment:
+    """Helper function to create a skill assessment directly in SQLite database."""
+    assessment_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO skill_assessments (
+                id, profile_id, domain, skill_name, skill_name_fr,
+                status, assessed_at, assessed_by_id, evidence,
+                created_at, updated_at
+            ) VALUES (
+                :id, :profile_id, :domain, :skill_name, :skill_name_fr,
+                :status, :assessed_at, :assessed_by_id, :evidence,
+                :created_at, :updated_at
+            )
+        """),
+        {
+            "id": assessment_id,
+            "profile_id": str(profile_id),
+            "domain": domain,
+            "skill_name": skill_name,
+            "skill_name_fr": skill_name_fr,
+            "status": status,
+            "assessed_at": now.isoformat(),
+            "assessed_by_id": str(assessed_by_id) if assessed_by_id else None,
+            "evidence": evidence,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockSkillAssessment(
+        id=UUID(assessment_id),
+        profile_id=profile_id,
+        domain=domain,
+        skill_name=skill_name,
+        skill_name_fr=skill_name_fr,
+        status=status,
+        assessed_at=now,
+        assessed_by_id=assessed_by_id,
+        evidence=evidence,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_observation_in_db(
+    session: AsyncSession,
+    profile_id: UUID,
+    domain: str,
+    behavior_description: str,
+    observer_id: Optional[UUID] = None,
+    observer_type: str = "educator",
+    context: Optional[str] = None,
+    is_milestone: bool = False,
+    is_concern: bool = False,
+    attachments: Optional[Dict] = None,
+) -> MockObservation:
+    """Helper function to create an observation directly in SQLite database."""
+    import json
+
+    observation_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO observations (
+                id, profile_id, domain, observed_at, observer_id,
+                observer_type, behavior_description, context,
+                is_milestone, is_concern, attachments,
+                created_at, updated_at
+            ) VALUES (
+                :id, :profile_id, :domain, :observed_at, :observer_id,
+                :observer_type, :behavior_description, :context,
+                :is_milestone, :is_concern, :attachments,
+                :created_at, :updated_at
+            )
+        """),
+        {
+            "id": observation_id,
+            "profile_id": str(profile_id),
+            "domain": domain,
+            "observed_at": now.isoformat(),
+            "observer_id": str(observer_id) if observer_id else None,
+            "observer_type": observer_type,
+            "behavior_description": behavior_description,
+            "context": context,
+            "is_milestone": 1 if is_milestone else 0,
+            "is_concern": 1 if is_concern else 0,
+            "attachments": json.dumps(attachments) if attachments else None,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockObservation(
+        id=UUID(observation_id),
+        profile_id=profile_id,
+        domain=domain,
+        observed_at=now,
+        observer_id=observer_id,
+        observer_type=observer_type,
+        behavior_description=behavior_description,
+        context=context,
+        is_milestone=is_milestone,
+        is_concern=is_concern,
+        attachments=attachments,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+async def create_monthly_snapshot_in_db(
+    session: AsyncSession,
+    profile_id: UUID,
+    snapshot_month: date,
+    age_months: Optional[int] = None,
+    domain_summaries: Optional[Dict] = None,
+    overall_progress: str = "on_track",
+    strengths: Optional[List[str]] = None,
+    growth_areas: Optional[List[str]] = None,
+    recommendations: Optional[str] = None,
+    generated_by_id: Optional[UUID] = None,
+    is_parent_shared: bool = False,
+) -> MockMonthlySnapshot:
+    """Helper function to create a monthly snapshot directly in SQLite database."""
+    import json
+    from datetime import date as date_type
+
+    snapshot_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    await session.execute(
+        text("""
+            INSERT INTO monthly_snapshots (
+                id, profile_id, snapshot_month, age_months,
+                domain_summaries, overall_progress, strengths,
+                growth_areas, recommendations, generated_by_id,
+                is_parent_shared, created_at, updated_at
+            ) VALUES (
+                :id, :profile_id, :snapshot_month, :age_months,
+                :domain_summaries, :overall_progress, :strengths,
+                :growth_areas, :recommendations, :generated_by_id,
+                :is_parent_shared, :created_at, :updated_at
+            )
+        """),
+        {
+            "id": snapshot_id,
+            "profile_id": str(profile_id),
+            "snapshot_month": snapshot_month.isoformat(),
+            "age_months": age_months,
+            "domain_summaries": json.dumps(domain_summaries) if domain_summaries else None,
+            "overall_progress": overall_progress,
+            "strengths": json.dumps({"items": strengths}) if strengths else None,
+            "growth_areas": json.dumps({"items": growth_areas}) if growth_areas else None,
+            "recommendations": recommendations,
+            "generated_by_id": str(generated_by_id) if generated_by_id else None,
+            "is_parent_shared": 1 if is_parent_shared else 0,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    )
+    await session.commit()
+
+    return MockMonthlySnapshot(
+        id=UUID(snapshot_id),
+        profile_id=profile_id,
+        snapshot_month=snapshot_month,
+        age_months=age_months,
+        domain_summaries=domain_summaries,
+        overall_progress=overall_progress,
+        strengths=strengths,
+        growth_areas=growth_areas,
+        recommendations=recommendations,
+        generated_by_id=generated_by_id,
+        is_parent_shared=is_parent_shared,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def sample_profile_child_id() -> UUID:
+    """Generate a unique child ID for development profile tests."""
+    return UUID("11111111-2222-3333-4444-555555555555")
+
+
+@pytest.fixture
+def sample_educator_id() -> UUID:
+    """Generate a unique educator ID for development profile tests."""
+    return UUID("66666666-7777-8888-9999-aaaaaaaaaaaa")
+
+
+@pytest.fixture
+def sample_birth_date() -> date:
+    """Sample birth date for a 3-year-old child."""
+    from datetime import date as date_type, timedelta
+    return date_type.today() - timedelta(days=365 * 3)
+
+
+@pytest_asyncio.fixture
+async def sample_development_profile(
+    db_session: AsyncSession,
+    sample_profile_child_id: UUID,
+    sample_educator_id: UUID,
+    sample_birth_date: date,
+) -> MockDevelopmentProfile:
+    """Create a sample development profile in the database."""
+    return await create_development_profile_in_db(
+        db_session,
+        child_id=sample_profile_child_id,
+        educator_id=sample_educator_id,
+        birth_date=sample_birth_date,
+        notes="Sample development profile for testing",
+        is_active=True,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_skill_assessment(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> MockSkillAssessment:
+    """Create a sample skill assessment in the database."""
+    return await create_skill_assessment_in_db(
+        db_session,
+        profile_id=sample_development_profile.id,
+        domain="affective",
+        skill_name="Emotional Expression",
+        skill_name_fr="Expression émotionnelle",
+        status="learning",
+        assessed_by_id=test_user_id,
+        evidence="Child is beginning to identify and name basic emotions",
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_observation(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> MockObservation:
+    """Create a sample observation in the database."""
+    return await create_observation_in_db(
+        db_session,
+        profile_id=sample_development_profile.id,
+        domain="social",
+        behavior_description="Child initiated play with peers during free time",
+        observer_id=test_user_id,
+        observer_type="educator",
+        context="During morning free play session",
+        is_milestone=True,
+        is_concern=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_monthly_snapshot(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> MockMonthlySnapshot:
+    """Create a sample monthly snapshot in the database."""
+    from datetime import date as date_type
+    snapshot_month = date_type.today().replace(day=1)
+
+    return await create_monthly_snapshot_in_db(
+        db_session,
+        profile_id=sample_development_profile.id,
+        snapshot_month=snapshot_month,
+        age_months=36,
+        domain_summaries={
+            "affective": {"skills_can": 3, "skills_learning": 2, "skills_not_yet": 1},
+            "social": {"skills_can": 4, "skills_learning": 1, "skills_not_yet": 0},
+        },
+        overall_progress="on_track",
+        strengths=["Social development", "Peer interactions"],
+        growth_areas=["Self-regulation"],
+        recommendations="Continue supporting emotional expression",
+        generated_by_id=test_user_id,
+        is_parent_shared=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def sample_skill_assessments_all_domains(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> List[MockSkillAssessment]:
+    """Create skill assessments across all 6 Quebec developmental domains."""
+    domains_and_skills = [
+        ("affective", "Emotional Expression", "Expression émotionnelle", "can"),
+        ("affective", "Self-Regulation", "Autorégulation", "learning"),
+        ("social", "Peer Interactions", "Interactions avec les pairs", "can"),
+        ("social", "Turn-Taking", "Tour de rôle", "learning"),
+        ("language", "Receptive Language", "Langage réceptif", "can"),
+        ("language", "Speech Clarity", "Clarté du discours", "learning"),
+        ("cognitive", "Problem-Solving", "Résolution de problèmes", "can"),
+        ("cognitive", "Number Concept", "Concept du nombre", "not_yet"),
+        ("gross_motor", "Balance", "Équilibre", "can"),
+        ("gross_motor", "Coordination", "Coordination", "learning"),
+        ("fine_motor", "Pencil Grip", "Prise du crayon", "learning"),
+        ("fine_motor", "Hand-Eye Coordination", "Coordination œil-main", "can"),
+    ]
+
+    assessments = []
+    for domain, skill_name, skill_name_fr, status in domains_and_skills:
+        assessment = await create_skill_assessment_in_db(
+            db_session,
+            profile_id=sample_development_profile.id,
+            domain=domain,
+            skill_name=skill_name,
+            skill_name_fr=skill_name_fr,
+            status=status,
+            assessed_by_id=test_user_id,
+            evidence=f"Assessment evidence for {skill_name}",
+        )
+        assessments.append(assessment)
+
+    return assessments
+
+
+@pytest_asyncio.fixture
+async def sample_observations_all_domains(
+    db_session: AsyncSession,
+    sample_development_profile: MockDevelopmentProfile,
+    test_user_id: UUID,
+) -> List[MockObservation]:
+    """Create observations across all 6 Quebec developmental domains."""
+    observations_data = [
+        ("affective", "Child expressed happiness when seeing friends", False, False),
+        ("social", "Child shared toys with classmates", True, False),
+        ("language", "Child used a new vocabulary word correctly", True, False),
+        ("cognitive", "Child solved a puzzle independently", True, False),
+        ("gross_motor", "Child climbed playground equipment safely", True, False),
+        ("fine_motor", "Child struggled with scissors", False, True),
+    ]
+
+    observations = []
+    for domain, description, is_milestone, is_concern in observations_data:
+        observation = await create_observation_in_db(
+            db_session,
+            profile_id=sample_development_profile.id,
+            domain=domain,
+            behavior_description=description,
+            observer_id=test_user_id,
+            observer_type="educator",
+            is_milestone=is_milestone,
+            is_concern=is_concern,
+        )
+        observations.append(observation)
+
+    return observations

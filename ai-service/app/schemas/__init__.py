@@ -9,7 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
-    intervention_plan: Intervention plan schemas for special needs support
+    development_profile: Quebec-aligned developmental tracking schemas
 """
 
 from app.schemas.activity import (
@@ -73,76 +73,35 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
-from app.schemas.intervention_plan import (
-    # Enums
-    GoalStatus,
-    InterventionPlanStatus,
-    MonitoringMethod,
-    NeedCategory,
-    NeedPriority,
-    ParentActivityType,
-    ProgressLevel,
-    ResponsibleParty,
-    ReviewSchedule,
-    SpecialistType,
-    StrengthCategory,
-    # Part 2 - Strengths
-    StrengthBase,
-    StrengthCreate,
-    StrengthResponse,
-    StrengthUpdate,
-    # Part 3 - Needs
-    NeedBase,
-    NeedCreate,
-    NeedResponse,
-    NeedUpdate,
-    # Part 4 - SMART Goals
-    SMARTGoalBase,
-    SMARTGoalCreate,
-    SMARTGoalResponse,
-    SMARTGoalUpdate,
-    # Part 5 - Strategies
-    StrategyBase,
-    StrategyCreate,
-    StrategyResponse,
-    StrategyUpdate,
-    # Part 6 - Monitoring
-    MonitoringBase,
-    MonitoringCreate,
-    MonitoringResponse,
-    MonitoringUpdate,
-    # Part 7 - Parent Involvement
-    ParentInvolvementBase,
-    ParentInvolvementCreate,
-    ParentInvolvementResponse,
-    ParentInvolvementUpdate,
-    # Part 8 - Consultations
-    ConsultationBase,
-    ConsultationCreate,
-    ConsultationResponse,
-    ConsultationUpdate,
-    # Progress Tracking
-    ProgressBase,
-    ProgressCreate,
-    ProgressResponse,
-    ProgressUpdate,
-    # Version History
-    VersionBase,
-    VersionCreate,
-    VersionResponse,
-    # Main Intervention Plan
-    InterventionPlanBase,
-    InterventionPlanCreate,
-    InterventionPlanListResponse,
-    InterventionPlanResponse,
-    InterventionPlanSummary,
-    InterventionPlanUpdate,
-    # Parent Signature
-    ParentSignatureRequest,
-    ParentSignatureResponse,
-    # Review Reminders
-    PlanReviewReminder,
-    PlanReviewReminderListResponse,
+from app.schemas.development_profile import (
+    DevelopmentalDomain,
+    DevelopmentProfileBase,
+    DevelopmentProfileListResponse,
+    DevelopmentProfileRequest,
+    DevelopmentProfileResponse,
+    DevelopmentProfileSummaryResponse,
+    DomainSummary,
+    GrowthDataPoint,
+    GrowthTrajectoryRequest,
+    GrowthTrajectoryResponse,
+    MonthlySnapshotBase,
+    MonthlySnapshotListResponse,
+    MonthlySnapshotRequest,
+    MonthlySnapshotResponse,
+    MonthlySnapshotUpdateRequest,
+    ObservationBase,
+    ObservationListResponse,
+    ObservationRequest,
+    ObservationResponse,
+    ObservationUpdateRequest,
+    ObserverType,
+    OverallProgress,
+    SkillAssessmentBase,
+    SkillAssessmentListResponse,
+    SkillAssessmentRequest,
+    SkillAssessmentResponse,
+    SkillAssessmentUpdateRequest,
+    SkillStatus,
 )
 
 __all__ = [
@@ -202,73 +161,33 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
-    # Intervention plan schemas - Enums
-    "InterventionPlanStatus",
-    "ReviewSchedule",
-    "GoalStatus",
-    "ProgressLevel",
-    "StrengthCategory",
-    "NeedCategory",
-    "NeedPriority",
-    "ResponsibleParty",
-    "MonitoringMethod",
-    "ParentActivityType",
-    "SpecialistType",
-    # Intervention plan schemas - Part 2 Strengths
-    "StrengthBase",
-    "StrengthCreate",
-    "StrengthUpdate",
-    "StrengthResponse",
-    # Intervention plan schemas - Part 3 Needs
-    "NeedBase",
-    "NeedCreate",
-    "NeedUpdate",
-    "NeedResponse",
-    # Intervention plan schemas - Part 4 SMART Goals
-    "SMARTGoalBase",
-    "SMARTGoalCreate",
-    "SMARTGoalUpdate",
-    "SMARTGoalResponse",
-    # Intervention plan schemas - Part 5 Strategies
-    "StrategyBase",
-    "StrategyCreate",
-    "StrategyUpdate",
-    "StrategyResponse",
-    # Intervention plan schemas - Part 6 Monitoring
-    "MonitoringBase",
-    "MonitoringCreate",
-    "MonitoringUpdate",
-    "MonitoringResponse",
-    # Intervention plan schemas - Part 7 Parent Involvement
-    "ParentInvolvementBase",
-    "ParentInvolvementCreate",
-    "ParentInvolvementUpdate",
-    "ParentInvolvementResponse",
-    # Intervention plan schemas - Part 8 Consultations
-    "ConsultationBase",
-    "ConsultationCreate",
-    "ConsultationUpdate",
-    "ConsultationResponse",
-    # Intervention plan schemas - Progress Tracking
-    "ProgressBase",
-    "ProgressCreate",
-    "ProgressUpdate",
-    "ProgressResponse",
-    # Intervention plan schemas - Version History
-    "VersionBase",
-    "VersionCreate",
-    "VersionResponse",
-    # Intervention plan schemas - Main Plan
-    "InterventionPlanBase",
-    "InterventionPlanCreate",
-    "InterventionPlanUpdate",
-    "InterventionPlanResponse",
-    "InterventionPlanSummary",
-    "InterventionPlanListResponse",
-    # Intervention plan schemas - Parent Signature
-    "ParentSignatureRequest",
-    "ParentSignatureResponse",
-    # Intervention plan schemas - Review Reminders
-    "PlanReviewReminder",
-    "PlanReviewReminderListResponse",
+    # Development Profile schemas
+    "DevelopmentalDomain",
+    "SkillStatus",
+    "ObserverType",
+    "OverallProgress",
+    "DomainSummary",
+    "DevelopmentProfileBase",
+    "DevelopmentProfileRequest",
+    "DevelopmentProfileResponse",
+    "DevelopmentProfileSummaryResponse",
+    "DevelopmentProfileListResponse",
+    "SkillAssessmentBase",
+    "SkillAssessmentRequest",
+    "SkillAssessmentUpdateRequest",
+    "SkillAssessmentResponse",
+    "SkillAssessmentListResponse",
+    "ObservationBase",
+    "ObservationRequest",
+    "ObservationUpdateRequest",
+    "ObservationResponse",
+    "ObservationListResponse",
+    "MonthlySnapshotBase",
+    "MonthlySnapshotRequest",
+    "MonthlySnapshotUpdateRequest",
+    "MonthlySnapshotResponse",
+    "MonthlySnapshotListResponse",
+    "GrowthDataPoint",
+    "GrowthTrajectoryRequest",
+    "GrowthTrajectoryResponse",
 ]
