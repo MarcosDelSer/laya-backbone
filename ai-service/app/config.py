@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         postgres_password: PostgreSQL database password
         jwt_secret_key: Secret key for JWT token signing
         jwt_algorithm: Algorithm for JWT token signing
+        cors_origins: Comma-separated list of allowed CORS origins
     """
 
     # Database configuration
@@ -29,6 +30,9 @@ class Settings(BaseSettings):
     # JWT configuration
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
+
+    # CORS configuration - comma-separated origins for production security
+    cors_origins: str = ""
 
     @property
     def database_url(self) -> str:
