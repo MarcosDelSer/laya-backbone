@@ -7,13 +7,9 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import redis.asyncio as redis
-from fastapi import Depends, FastAPI, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
-from pydantic import ValidationError
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.core.cache_warming import warm_all_caches
@@ -22,7 +18,10 @@ from app.core.logging import configure_logging, get_logger
 from app.dependencies import get_current_user
 from app.middleware.correlation import CorrelationMiddleware
 from app.middleware.error_handler import ErrorHandlerMiddleware
-from app.middleware.rate_limit import get_auth_limit, limiter
+from app.middleware.rate_limit import (
+    get_auth_rate_limiter,
+    get_general_rate_limiter,
+)
 from app.middleware.security import get_cors_origins
 from app.redis_client import close_redis
 from app.routers import coaching
@@ -146,14 +145,10 @@ app.include_router(webhooks_router, prefix="/api/v1/webhook", tags=["webhooks"])
 
 
 @app.get("/")
-@limiter.limit("100 per minute")
-async def health_check(request: Request) -> dict:
+async def health_check(_: bool = Depends(get_general_rate_limiter())) -> dict:
     """Health check endpoint.
 
     Rate limited to 100 requests per minute per client.
-
-    Args:
-        request: The incoming request (required for rate limiting)
 
     Returns:
         dict: Service status information with request tracking IDs
@@ -168,8 +163,7 @@ async def health_check(request: Request) -> dict:
 
 
 @app.get("/api/v1/csrf-token")
-@limiter.limit("100 per minute")
-async def get_csrf_token(request: Request) -> dict:
+async def get_csrf_token(_: bool = Depends(get_general_rate_limiter())) -> dict:
     """Generate and return a CSRF token for form submissions.
 
     This endpoint generates a cryptographically secure CSRF token that clients
@@ -180,9 +174,6 @@ async def get_csrf_token(request: Request) -> dict:
     Tokens are signed using JWT to ensure authenticity.
 
     Rate limited to 100 requests per minute per client.
-
-    Args:
-        request: The incoming request (required for rate limiting)
 
     Returns:
         dict: CSRF token and metadata
@@ -198,8 +189,10 @@ async def get_csrf_token(request: Request) -> dict:
 
 
 @app.post("/api/v1/test-csrf")
-@limiter.limit("100 per minute")
-async def test_csrf_endpoint(request: Request, data: dict[str, Any]) -> dict:
+async def test_csrf_endpoint(
+    data: dict[str, Any],
+    _: bool = Depends(get_general_rate_limiter()),
+) -> dict:
     """Test endpoint for CSRF protection validation.
 
     This endpoint requires a valid CSRF token in the X-CSRF-Token header.
@@ -208,7 +201,6 @@ async def test_csrf_endpoint(request: Request, data: dict[str, Any]) -> dict:
     Rate limited to 100 requests per minute per client.
 
     Args:
-        request: The incoming request (required for rate limiting)
         data: Request payload
 
     Returns:
@@ -221,10 +213,9 @@ async def test_csrf_endpoint(request: Request, data: dict[str, Any]) -> dict:
 
 
 @app.get("/protected")
-@limiter.limit(get_auth_limit())
 async def protected_endpoint(
-    request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
+    _: bool = Depends(get_auth_rate_limiter()),
 ) -> dict:
     """Protected endpoint requiring JWT authentication.
 
@@ -233,7 +224,6 @@ async def protected_endpoint(
     Rate limited to 10 requests per minute per client for auth endpoints.
 
     Args:
-        request: The incoming request (required for rate limiting)
         current_user: Decoded JWT payload containing user information
 
     Returns:
