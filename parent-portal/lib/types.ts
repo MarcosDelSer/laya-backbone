@@ -391,6 +391,186 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
+// Menu Types
+// ============================================================================
+
+/**
+ * Allergen severity levels.
+ */
+export type AllergenSeverity = 'mild' | 'moderate' | 'severe';
+
+/**
+ * Menu item category types.
+ */
+export type MenuCategory =
+  | 'main'
+  | 'side'
+  | 'beverage'
+  | 'snack'
+  | 'dessert'
+  | 'fruit'
+  | 'vegetable'
+  | 'dairy'
+  | 'grain';
+
+/**
+ * Dietary type categories.
+ */
+export type DietaryType =
+  | 'regular'
+  | 'vegetarian'
+  | 'vegan'
+  | 'halal'
+  | 'kosher'
+  | 'gluten_free'
+  | 'lactose_free'
+  | 'other';
+
+/**
+ * Allergen associated with a menu item.
+ */
+export interface MenuAllergen {
+  id: string;
+  name: string;
+  severity: AllergenSeverity;
+}
+
+/**
+ * Nutritional information for a menu item.
+ */
+export interface NutritionalInfo {
+  calories: number;
+  protein: number;
+  carbohydrates: number;
+  fat: number;
+  fiber?: number;
+  servingSize?: string;
+}
+
+/**
+ * Menu item in the meal catalog.
+ */
+export interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  category: MenuCategory;
+  allergens: MenuAllergen[];
+  nutritionalInfo?: NutritionalInfo;
+  photoUrl?: string;
+  isActive: boolean;
+}
+
+/**
+ * Menu entry for a specific date and meal type.
+ */
+export interface WeeklyMenuEntry {
+  id: string;
+  date: string;
+  mealType: MealType;
+  menuItems: MenuItem[];
+  servingNotes?: string;
+}
+
+/**
+ * Weekly menu containing all entries for a week.
+ */
+export interface WeeklyMenu {
+  weekStartDate: string;
+  weekEndDate: string;
+  entries: WeeklyMenuEntry[];
+}
+
+/**
+ * Child allergy information.
+ */
+export interface ChildAllergy {
+  allergen: string;
+  severity: AllergenSeverity;
+  notes?: string;
+}
+
+/**
+ * Child's dietary profile and accommodations.
+ */
+export interface DietaryProfile {
+  id: string;
+  childId: string;
+  childName?: string;
+  dietaryType: DietaryType;
+  allergies: ChildAllergy[];
+  restrictions?: string;
+  notes?: string;
+  parentNotified: boolean;
+  lastUpdated?: string;
+}
+
+/**
+ * Request payload for updating dietary profile.
+ */
+export interface UpdateDietaryProfileRequest {
+  dietaryType: DietaryType;
+  allergies: ChildAllergy[];
+  restrictions?: string;
+  notes?: string;
+}
+
+/**
+ * Daily nutritional breakdown entry.
+ */
+export interface DailyNutritionalBreakdown {
+  date: string;
+  mealType: MealType;
+  calories: number;
+  protein: number;
+  carbohydrates: number;
+  fat: number;
+  appetiteLevel: MealAmount;
+}
+
+/**
+ * Nutritional report totals.
+ */
+export interface NutritionalTotals {
+  totalCalories: number;
+  totalProtein: number;
+  totalCarbohydrates: number;
+  totalFat: number;
+  averageCaloriesPerDay: number;
+  mealsTracked: number;
+}
+
+/**
+ * Nutritional report for a child over a date range.
+ */
+export interface NutritionalReport {
+  childId: string;
+  childName?: string;
+  startDate: string;
+  endDate: string;
+  totals: NutritionalTotals;
+  dailyBreakdown: DailyNutritionalBreakdown[];
+  appetiteTrends: {
+    all: number;
+    most: number;
+    some: number;
+    none: number;
+  };
+}
+
+/**
+ * Allergen warning for menu viewing.
+ */
+export interface AllergenWarning {
+  date: string;
+  mealType: MealType;
+  menuItemId: string;
+  menuItemName: string;
+  allergen: string;
+  severity: AllergenSeverity;
+}
+
+// ============================================================================
 // API Response Types
 // ============================================================================
 
