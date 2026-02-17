@@ -18,6 +18,7 @@ from app.schemas.message_quality import (
     Language,
     MessageAnalysisRequest,
     MessageAnalysisResponse,
+    MessageQualityHistoryResponse,
     MessageRewriteRequest,
     MessageRewriteResponse,
     MessageTemplateListResponse,
@@ -381,6 +382,65 @@ async def get_training_examples(
             language=language,
             issue_type=issue_type,
             difficulty_level=difficulty_level,
+            limit=limit,
+            offset=offset,
+        )
+    except MessageQualityServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Message quality service error: {str(e)}",
+        )
+
+
+@router.get("/history", response_model=MessageQualityHistoryResponse)
+async def get_message_quality_history(
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of history items to return",
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="Number of history items to skip for pagination",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN, UserRole.TEACHER)),
+) -> MessageQualityHistoryResponse:
+    """Get message quality analysis history.
+
+    Returns a paginated list of message quality analysis history records.
+    Directors (admins) can see all history across all educators.
+    Educators (teachers) can only see their own message quality history.
+
+    This endpoint provides access to past message quality analyses to help
+    educators track their progress and directors monitor overall quality trends.
+
+    Args:
+        limit: Maximum number of history items to return (default: 20, max: 100)
+        offset: Number of history items to skip for pagination (default: 0)
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        MessageQualityHistoryResponse containing:
+        - items: List of message quality history records
+        - total: Total number of history items
+        - page: Current page number
+        - page_size: Number of items per page
+        - has_more: Whether more items are available
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user doesn't have required role
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = MessageQualityService(db)
+
+    try:
+        return await service.get_history(
+            current_user=current_user,
             limit=limit,
             offset=offset,
         )

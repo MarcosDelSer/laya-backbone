@@ -571,3 +571,56 @@ class TrainingExampleListResponse(PaginatedResponse):
         ...,
         description="List of training examples",
     )
+
+
+class MessageQualityHistoryItem(BaseResponse):
+    """A single message quality history record.
+
+    Attributes:
+        message_text: The analyzed message text
+        quality_score: Quality score for this message
+        language: Language of the message
+        analyzed_at: Timestamp when the message was analyzed
+        educator_id: ID of the educator who created the message
+        context: Context type of the message
+    """
+
+    message_text: str = Field(
+        ...,
+        description="The analyzed message text",
+    )
+    quality_score: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Quality score for this message",
+    )
+    language: Language = Field(
+        ...,
+        description="Language of the message",
+    )
+    analyzed_at: datetime = Field(
+        ...,
+        description="Timestamp when the message was analyzed",
+    )
+    educator_id: UUID = Field(
+        ...,
+        description="ID of the educator who created the message",
+    )
+    context: MessageContext = Field(
+        default=MessageContext.GENERAL_UPDATE,
+        description="Context type of the message",
+    )
+
+
+class MessageQualityHistoryResponse(PaginatedResponse):
+    """Paginated response for message quality history.
+
+    Attributes:
+        items: List of message quality history records
+    """
+
+    items: list[MessageQualityHistoryItem] = Field(
+        default_factory=list,
+        description="List of message quality history records",
+    )

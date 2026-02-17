@@ -13,6 +13,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.models import UserRole
 from app.models.message_quality import MessageAnalysis, MessageTemplate, TrainingExample
 from app.schemas.message_quality import (
     IssueSeverity,
@@ -20,6 +21,8 @@ from app.schemas.message_quality import (
     MessageAnalysisRequest,
     MessageAnalysisResponse,
     MessageContext,
+    MessageQualityHistoryItem,
+    MessageQualityHistoryResponse,
     MessageTemplateListResponse,
     MessageTemplateRequest,
     MessageTemplateResponse,
@@ -1976,6 +1979,78 @@ class MessageQualityService:
         ]
 
         return TrainingExampleListResponse(
+            items=items,
+            total=total,
+            skip=offset,
+            limit=limit,
+        )
+
+    async def get_history(
+        self,
+        current_user: dict,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> MessageQualityHistoryResponse:
+        """Get message quality analysis history.
+
+        Returns message quality analysis history with role-based filtering:
+        - Admins/Directors: Can see all history across all educators
+        - Teachers/Educators: Can only see their own history
+
+        Args:
+            current_user: Current user payload from JWT token
+            limit: Maximum number of history items to return (default: 20)
+            offset: Number of history items to skip for pagination (default: 0)
+
+        Returns:
+            MessageQualityHistoryResponse with paginated list of history items
+        """
+        from sqlalchemy import select, func
+
+        # Extract user information
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role", "").lower()
+
+        # Build base query
+        query = select(MessageAnalysis).where(MessageAnalysis.is_active == True)
+
+        # Apply role-based filtering
+        # Admins can see all history, teachers can only see their own
+        if user_role != UserRole.ADMIN.value.lower():
+            query = query.where(MessageAnalysis.educator_id == user_id)
+
+        # Get total count for pagination
+        count_query = select(func.count()).select_from(
+            query.subquery()
+        )
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Apply ordering, limit and offset
+        query = query.order_by(
+            MessageAnalysis.created_at.desc()
+        ).offset(offset).limit(limit)
+
+        result = await self.db.execute(query)
+        analyses = result.scalars().all()
+
+        # Convert to response models
+        items = [
+            MessageQualityHistoryItem(
+                id=analysis.id,
+                message_text=analysis.message_text,
+                quality_score=analysis.quality_score,
+                language=Language(analysis.language),
+                analyzed_at=analysis.created_at,
+                educator_id=analysis.educator_id,
+                context=MessageContext(analysis.context) if analysis.context else MessageContext.GENERAL_UPDATE,
+                created_at=analysis.created_at,
+                updated_at=analysis.updated_at,
+            )
+            for analysis in analyses
+        ]
+
+        return MessageQualityHistoryResponse(
             items=items,
             total=total,
             skip=offset,
