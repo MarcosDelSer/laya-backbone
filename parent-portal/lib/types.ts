@@ -412,238 +412,153 @@ export interface ApiErrorResponse {
 }
 
 // ============================================================================
-// Development Profile Types
+// RBAC Types
 // ============================================================================
 
 /**
- * Quebec-aligned developmental domains for early childhood education.
+ * Predefined role types for the RBAC system.
  */
-export type DevelopmentalDomain =
-  | 'affective'
-  | 'social'
-  | 'language'
-  | 'cognitive'
-  | 'gross_motor'
-  | 'fine_motor';
+export type RoleType = 'director' | 'teacher' | 'assistant' | 'staff' | 'parent';
 
 /**
- * Status levels for skill assessment tracking.
+ * Types of audit log actions.
  */
-export type SkillStatus = 'can' | 'learning' | 'not_yet' | 'na';
+export type AuditAction =
+  | 'role_assigned'
+  | 'role_revoked'
+  | 'permission_granted'
+  | 'permission_revoked'
+  | 'access_granted'
+  | 'access_denied'
+  | 'login'
+  | 'logout'
+  | 'data_modified'
+  | 'data_deleted';
 
 /**
- * Types of observers who can document child behavior.
+ * Types of permission actions.
  */
-export type ObserverType = 'educator' | 'parent' | 'specialist';
+export type PermissionAction = 'read' | 'write' | 'delete' | 'manage';
 
 /**
- * Overall developmental progress indicators.
+ * Permission assigned to a role.
  */
-export type OverallProgress = 'on_track' | 'needs_support' | 'excelling';
-
-/**
- * Summary of developmental progress for a single domain.
- */
-export interface DomainSummary {
-  domain: DevelopmentalDomain;
-  skillsCan: number;
-  skillsLearning: number;
-  skillsNotYet: number;
-  progressPercentage: number;
-  keyObservations: string[];
-}
-
-/**
- * Development profile for a child with Quebec-aligned tracking.
- */
-export interface DevelopmentProfile {
+export interface Permission {
   id: string;
-  childId: string;
-  educatorId?: string;
-  birthDate?: string;
-  notes?: string;
+  roleId: string;
+  resource: string;
+  action: string;
+  conditions?: Record<string, unknown>;
   isActive: boolean;
-  skillAssessments: SkillAssessment[];
-  observations: Observation[];
-  monthlySnapshots: MonthlySnapshot[];
   createdAt?: string;
-  updatedAt?: string;
 }
 
 /**
- * Summary response for development profile (without nested relations).
+ * Role with assigned permissions.
  */
-export interface DevelopmentProfileSummary {
+export interface Role {
   id: string;
-  childId: string;
-  educatorId?: string;
-  birthDate?: string;
-  notes?: string;
+  name: string;
+  displayName: string;
+  description?: string;
+  isSystemRole: boolean;
   isActive: boolean;
-  assessmentCount: number;
-  observationCount: number;
-  snapshotCount: number;
+  permissions: Permission[];
   createdAt?: string;
   updatedAt?: string;
 }
 
 /**
- * Individual skill assessment within a developmental domain.
+ * User role assignment.
  */
-export interface SkillAssessment {
+export interface UserRole {
   id: string;
-  profileId: string;
-  domain: DevelopmentalDomain;
-  skillName: string;
-  skillNameFr?: string;
-  status: SkillStatus;
-  evidence?: string;
-  assessedAt: string;
-  assessedById?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  userId: string;
+  roleId: string;
+  organizationId?: string;
+  groupId?: string;
+  expiresAt?: string;
+  assignedBy?: string;
+  assignedAt: string;
+  isActive: boolean;
+  role?: Role;
 }
 
 /**
- * Observable behavior observation for a child.
+ * Request payload for assigning a role to a user.
  */
-export interface Observation {
+export interface AssignRoleRequest {
+  userId: string;
+  roleId: string;
+  organizationId?: string;
+  groupId?: string;
+  expiresAt?: string;
+}
+
+/**
+ * Request payload for revoking a role from a user.
+ */
+export interface RevokeRoleRequest {
+  userId: string;
+  roleId: string;
+  organizationId?: string;
+  groupId?: string;
+}
+
+/**
+ * Request payload for checking user permissions.
+ */
+export interface PermissionCheckRequest {
+  userId: string;
+  resource: string;
+  action: string;
+  organizationId?: string;
+  groupId?: string;
+}
+
+/**
+ * Response for permission check results.
+ */
+export interface PermissionCheckResponse {
+  allowed: boolean;
+  userId: string;
+  resource: string;
+  action: string;
+  matchedRole?: string;
+  reason?: string;
+}
+
+/**
+ * Response for getting all permissions for a user.
+ */
+export interface UserPermissionsResponse {
+  userId: string;
+  roles: Role[];
+  permissions: Permission[];
+}
+
+/**
+ * Audit log entry.
+ */
+export interface AuditLog {
   id: string;
-  profileId: string;
-  domain: DevelopmentalDomain;
-  behaviorDescription: string;
-  context?: string;
-  isMilestone: boolean;
-  isConcern: boolean;
-  observedAt: string;
-  observerId?: string;
-  observerType: ObserverType;
-  attachments?: Record<string, unknown>;
-  createdAt?: string;
-  updatedAt?: string;
+  userId: string;
+  action: AuditAction;
+  resourceType: string;
+  resourceId?: string;
+  details?: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
 }
 
 /**
- * Monthly developmental snapshot summarizing progress.
+ * Filter parameters for querying audit logs.
  */
-export interface MonthlySnapshot {
-  id: string;
-  profileId: string;
-  snapshotMonth: string;
-  ageMonths?: number;
-  overallProgress: OverallProgress;
-  domainSummaries?: Record<string, DomainSummary>;
-  strengths?: string[];
-  growthAreas?: string[];
-  recommendations?: string;
-  generatedById?: string;
-  isParentShared: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-/**
- * A single data point in the growth trajectory.
- */
-export interface GrowthDataPoint {
-  month: string;
-  ageMonths?: number;
-  domainScores: Record<string, number>;
-  overallScore: number;
-}
-
-/**
- * Growth trajectory analysis for a child's development over time.
- */
-export interface GrowthTrajectory {
-  profileId: string;
-  childId: string;
-  dataPoints: GrowthDataPoint[];
-  trendAnalysis?: string;
-  alerts: string[];
-}
-
-/**
- * Request payload for creating a development profile.
- */
-export interface CreateDevelopmentProfileRequest {
-  childId: string;
-  educatorId?: string;
-  birthDate?: string;
-  notes?: string;
-}
-
-/**
- * Request payload for creating a skill assessment.
- */
-export interface CreateSkillAssessmentRequest {
-  profileId: string;
-  domain: DevelopmentalDomain;
-  skillName: string;
-  skillNameFr?: string;
-  status: SkillStatus;
-  evidence?: string;
-  assessedById?: string;
-}
-
-/**
- * Request payload for updating a skill assessment.
- */
-export interface UpdateSkillAssessmentRequest {
-  status?: SkillStatus;
-  evidence?: string;
-  assessedById?: string;
-}
-
-/**
- * Request payload for creating an observation.
- */
-export interface CreateObservationRequest {
-  profileId: string;
-  domain: DevelopmentalDomain;
-  behaviorDescription: string;
-  context?: string;
-  isMilestone?: boolean;
-  isConcern?: boolean;
-  observedAt?: string;
-  observerId?: string;
-  observerType?: ObserverType;
-  attachments?: Record<string, unknown>;
-}
-
-/**
- * Request payload for updating an observation.
- */
-export interface UpdateObservationRequest {
-  behaviorDescription?: string;
-  context?: string;
-  isMilestone?: boolean;
-  isConcern?: boolean;
-  attachments?: Record<string, unknown>;
-}
-
-/**
- * Request payload for creating a monthly snapshot.
- */
-export interface CreateMonthlySnapshotRequest {
-  profileId: string;
-  snapshotMonth: string;
-  ageMonths?: number;
-  overallProgress?: OverallProgress;
-  domainSummaries?: Record<string, DomainSummary>;
-  strengths?: string[];
-  growthAreas?: string[];
-  recommendations?: string;
-  generatedById?: string;
-}
-
-/**
- * Request payload for updating a monthly snapshot.
- */
-export interface UpdateMonthlySnapshotRequest {
-  overallProgress?: OverallProgress;
-  recommendations?: string;
-  strengths?: string[];
-  growthAreas?: string[];
-  isParentShared?: boolean;
+export interface AuditLogFilter {
+  userId?: string;
+  action?: AuditAction;
+  resourceType?: string;
+  startDate?: string;
+  endDate?: string;
 }

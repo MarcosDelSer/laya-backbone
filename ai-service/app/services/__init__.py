@@ -7,8 +7,9 @@ Modules:
     coaching_service: Service for RAG-based special needs coaching guidance
     activity_service: Service for activity intelligence and recommendations
     analytics_service: Service for business intelligence and analytics
-    development_profile_service: Service for Quebec-aligned developmental tracking
-    mfa_service: Service for multi-factor authentication using TOTP
+    rbac_service: Service for role-based access control
+    audit_service: Service for audit logging and tracking
+    notification_service: Service for unauthorized access notifications
 """
 
 from app.services.activity_service import ActivityService
@@ -20,14 +21,26 @@ from app.services.coaching_service import (
     InvalidChildError,
     NoSourcesFoundError,
 )
-from app.services.development_profile_service import DevelopmentProfileService
-from app.services.mfa_service import (
-    InvalidCodeError,
-    MFAAlreadyEnabledError,
-    MFALockoutError,
-    MFANotEnabledError,
-    MFAService,
-    MFAServiceError,
+from app.services.activity_service import ActivityService
+from app.services.analytics_service import AnalyticsService
+from app.services.rbac_service import (
+    RBACService,
+    RBACServiceError,
+    RoleNotFoundError,
+    UserRoleNotFoundError,
+    PermissionDeniedError,
+    InvalidAssignmentError,
+)
+from app.services.audit_service import (
+    AuditService,
+    AuditServiceError,
+    AuditLogNotFoundError,
+)
+from app.services.notification_service import (
+    NotificationService,
+    NotificationServiceError,
+    NotificationDeliveryError,
+    NoRecipientsFoundError,
 )
 
 __all__: list[str] = [
@@ -41,13 +54,24 @@ __all__: list[str] = [
     "InvalidChildError",
     "NoSourcesFoundError",
     "SAFETY_DISCLAIMER",
-    # Development Profile
-    "DevelopmentProfileService",
-    # MFA
-    "MFAService",
-    "MFAServiceError",
-    "MFANotEnabledError",
-    "MFAAlreadyEnabledError",
-    "MFALockoutError",
-    "InvalidCodeError",
+    # Activity
+    "ActivityService",
+    # Analytics
+    "AnalyticsService",
+    # RBAC
+    "RBACService",
+    "RBACServiceError",
+    "RoleNotFoundError",
+    "UserRoleNotFoundError",
+    "PermissionDeniedError",
+    "InvalidAssignmentError",
+    # Audit
+    "AuditService",
+    "AuditServiceError",
+    "AuditLogNotFoundError",
+    # Notification
+    "NotificationService",
+    "NotificationServiceError",
+    "NotificationDeliveryError",
+    "NoRecipientsFoundError",
 ]

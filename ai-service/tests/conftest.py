@@ -245,6 +245,68 @@ CREATE INDEX IF NOT EXISTS idx_comm_prefs_child ON communication_preferences(chi
 """
 
 
+# SQLite-compatible RBAC tables (PostgreSQL JSONB replaced with TEXT)
+SQLITE_CREATE_RBAC_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS roles (
+    id TEXT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    display_name VARCHAR(100) NOT NULL,
+    description TEXT,
+    is_system_role INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+    id TEXT PRIMARY KEY,
+    role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    resource VARCHAR(100) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    conditions TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_roles (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    organization_id TEXT,
+    group_id TEXT,
+    assigned_by TEXT,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    is_active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    resource_type VARCHAR(100) NOT NULL,
+    resource_id TEXT,
+    details TEXT,
+    ip_address VARCHAR(45),
+    user_agent VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_roles_name ON roles(name);
+CREATE INDEX IF NOT EXISTS idx_roles_is_active ON roles(is_active);
+CREATE INDEX IF NOT EXISTS idx_permissions_role_id ON permissions(role_id);
+CREATE INDEX IF NOT EXISTS idx_permissions_resource_action ON permissions(resource, action);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_role ON user_roles(user_id, role_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_org ON user_roles(user_id, organization_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_group ON user_roles(user_id, group_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+"""
+
+
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -380,16 +442,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
-    # Create storage tables via raw SQL (SQLite compatibility)
+    # Create RBAC tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_STORAGE_TABLES_SQL.strip().split(';'):
-            statement = statement.strip()
-            if statement:
-                await conn.execute(text(statement))
-
-    # Create development profile tables via raw SQL (SQLite compatibility)
-    async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_DEVELOPMENT_PROFILE_TABLES_SQL.strip().split(';'):
+        for statement in SQLITE_CREATE_RBAC_TABLES_SQL.strip().split(';'):
             statement = statement.strip()
             if statement:
                 await conn.execute(text(statement))
@@ -416,11 +471,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
         await conn.execute(text("DROP TABLE IF EXISTS activities"))
-        # Drop development profile tables
-        await conn.execute(text("DROP TABLE IF EXISTS monthly_snapshots"))
-        await conn.execute(text("DROP TABLE IF EXISTS observations"))
-        await conn.execute(text("DROP TABLE IF EXISTS skill_assessments"))
-        await conn.execute(text("DROP TABLE IF EXISTS development_profiles"))
+        # Drop RBAC tables
+        await conn.execute(text("DROP TABLE IF EXISTS audit_logs"))
+        await conn.execute(text("DROP TABLE IF EXISTS user_roles"))
+        await conn.execute(text("DROP TABLE IF EXISTS permissions"))
+        await conn.execute(text("DROP TABLE IF EXISTS roles"))
 
 
 @pytest_asyncio.fixture
