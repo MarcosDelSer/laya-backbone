@@ -109,6 +109,28 @@ For cloud-based QA execution (web + mobile), use the OpenClaw layer as an extern
 - Use Langfuse tracing to track run latency, failures, and token spend.
 - If provider outage occurs, mark task blocked and switch to backup provider profile.
 
+## Desktop LLM QA Orchestration
+
+For desktop application QA (Windows VM/emulator and macOS installed app), use the desktop LLM QA runner.
+
+### Flow
+
+1. Auto-Claude moves task to `in_progress` and prepares scenario context.
+2. Desktop QA receives the run trigger and executes test scenarios.
+3. Windows suites run via `.auto-claude/scripts/run-desktop-llm-qa.sh --platform windows`.
+4. macOS suites run via `.auto-claude/scripts/run-desktop-llm-qa.sh --platform macos`.
+5. Artifacts are written under `.auto-claude/qa/runs/desktop/...` and summarized.
+
+### Operational Notes
+
+- Windows requires `WINDOWS_VM_HOST`, `WINDOWS_VM_USER` for VM connectivity.
+- macOS requires `MACOS_APP_BUNDLE_ID` or `MACOS_APP_PATH` for app identification.
+- Use `DESKTOP_QA_DRY_RUN=true` for configuration validation without execution.
+- Evidence (screenshots, logs) is captured per-run under timestamped directories.
+- Scenario packs are located at:
+  - Windows: `.auto-claude/qa/desktop/windows/scenarios.json`
+  - macOS: `.auto-claude/qa/desktop/macos/scenarios.json`
+
 ## Related Docs
 
 | Doc | Purpose |
@@ -119,6 +141,7 @@ For cloud-based QA execution (web + mobile), use the OpenClaw layer as an extern
 | **REFRESH_BOARD.md** | No Auto-Claude CLI to refresh the board; script uses Cursor Reload Window. |
 | **`docs/OPENCLAW_CLOUD_QA_RUNBOOK.md`** | OpenClaw cloud QA setup, execution, and incident runbook. |
 | **`docs/OPENCLAW_COST_BASELINE.md`** | Fixed and variable cost baseline for cloud QA system. |
+| **`docs/LLM_QA_DESKTOP.md`** | Desktop LLM QA setup, execution, and troubleshooting. |
 
 ## Summary
 
