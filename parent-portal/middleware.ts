@@ -7,6 +7,10 @@
  * - Locale prefix routing (e.g., /en/dashboard, /fr/dashboard)
  * - Locale persistence via cookies
  * - Redirect to default locale when none is specified
+ *
+ * Security: All cookies set by this middleware use SameSite=Lax for CSRF protection:
+ * - CSRF token cookie: SameSite=Lax (configured in lib/csrf.ts)
+ * - Locale preference cookie: SameSite=Lax (next-intl default)
  */
 
 import createMiddleware from 'next-intl/middleware';
@@ -26,7 +30,7 @@ import {
  * Uses next-intl's createMiddleware to handle locale routing:
  * - Detects user's preferred locale from Accept-Language header
  * - Prefixes all routes with the locale (e.g., /en, /fr)
- * - Stores locale preference in a cookie for subsequent visits
+ * - Stores locale preference in a cookie for subsequent visits (SameSite=Lax by default)
  * - Redirects to the default locale if no locale is specified
  */
 const i18nMiddleware = createMiddleware({
@@ -100,7 +104,11 @@ export default async function middleware(request: NextRequest) {
       // Generate new CSRF token
       const newToken = generateCsrfToken();
 
-      // Set token in response cookie
+      // Set token in response cookie with secure defaults:
+      // - httpOnly: true (prevents XSS access)
+      // - secure: true in production (HTTPS only)
+      // - sameSite: 'lax' (prevents CSRF attacks, allows top-level navigation)
+      // - maxAge: 2 hours (token expiry)
       setCsrfToken(response, newToken);
     }
   }
