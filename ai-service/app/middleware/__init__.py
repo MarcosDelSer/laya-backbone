@@ -1,9 +1,17 @@
-"""Middleware package for LAYA AI Service.
+"""Middleware package for LAYA AI Service."""
 
-This package contains middleware components for request/response processing.
-"""
+from app.middleware.rate_limit import get_auth_limit, get_general_limit, limiter
+from app.middleware.security import get_cors_origins
+from app.middleware.validation import (
+    get_validation_middleware,
+    validation_exception_handler,
+)
 
-from app.middleware.cache_headers import CacheHeadersMiddleware
-from app.middleware.compression import GzipCompressionMiddleware
-
-__all__ = ["CacheHeadersMiddleware", "GzipCompressionMiddleware"]
+__all__ = [
+    "get_cors_origins",
+    "limiter",
+    "get_auth_limit",
+    "get_general_limit",
+    "validation_exception_handler",
+    "get_validation_middleware",
+]

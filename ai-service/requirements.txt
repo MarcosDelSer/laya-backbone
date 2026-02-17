@@ -21,14 +21,8 @@ httpx>=0.26.0
 # Configuration
 pydantic-settings>=2.1.0
 
-# Redis cache
-redis[hiredis]>=5.0.0
-
-# System monitoring
-psutil>=5.9.0
-
-# Alert delivery
-aiohttp>=3.9.0
+# Rate limiting
+slowapi>=0.1.9
 
 # Form data parsing
 python-multipart>=0.0.6
