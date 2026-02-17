@@ -20,13 +20,14 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
 
   if (photos.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-8">
+      <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-8" role="status" aria-label="No photos available">
         <div className="text-center">
           <svg
             className="mx-auto h-12 w-12 text-gray-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -46,11 +47,13 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4" role="list" aria-label="Photo gallery">
         {displayPhotos.map((photo, index) => (
           <button
             key={photo.id}
             onClick={() => setSelectedPhoto(photo)}
+            aria-label={`View ${photo.caption || `photo ${index + 1}`} in full size`}
+            role="listitem"
             className="group relative aspect-square overflow-hidden rounded-lg bg-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
           >
             {photo.url ? (
@@ -62,12 +65,13 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
                 sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-gray-400">
+              <div className="flex h-full w-full items-center justify-center text-gray-400" aria-label="No image available">
                 <svg
                   className="h-8 w-8"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -78,7 +82,7 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
                 </svg>
               </div>
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">
               {photo.caption && (
                 <div className="absolute bottom-2 left-2 right-2 text-white">
                   <p className="truncate text-xs font-medium">{photo.caption}</p>
@@ -87,8 +91,8 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
             </div>
             {/* Show remaining count on last visible photo */}
             {index === maxDisplay - 1 && remainingCount > 0 && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                <span className="text-2xl font-bold text-white">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50" aria-label={`${remainingCount} more photos`}>
+                <span className="text-2xl font-bold text-white" aria-hidden="true">
                   +{remainingCount}
                 </span>
               </div>
@@ -100,6 +104,9 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
       {/* Lightbox Modal */}
       {selectedPhoto && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo viewer"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
           onClick={() => setSelectedPhoto(null)}
         >
@@ -109,6 +116,7 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
           >
             <button
               onClick={() => setSelectedPhoto(null)}
+              aria-label="Close photo viewer"
               className="absolute right-2 top-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
             >
               <svg
@@ -116,6 +124,7 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -136,12 +145,13 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
                   priority
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-400">
+                <div className="flex h-full w-full items-center justify-center bg-gray-200 text-gray-400" aria-label="No image available">
                   <svg
                     className="h-24 w-24"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
+                    aria-hidden="true"
                   >
                     <path
                       strokeLinecap="round"
@@ -161,7 +171,7 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
           </div>
 
           {/* Navigation buttons for gallery */}
-          <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2">
+          <nav className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2" aria-label="Photo navigation">
             {photos.map((photo, index) => (
               <button
                 key={photo.id}
@@ -169,15 +179,16 @@ export function PhotoGallery({ photos, maxDisplay = 4 }: PhotoGalleryProps) {
                   e.stopPropagation();
                   setSelectedPhoto(photo);
                 }}
+                aria-label={`View photo ${index + 1}${photo.caption ? `: ${photo.caption}` : ''}`}
+                aria-current={selectedPhoto.id === photo.id ? 'true' : undefined}
                 className={`h-2 w-2 rounded-full transition-colors ${
                   selectedPhoto.id === photo.id
                     ? 'bg-white'
                     : 'bg-white/50 hover:bg-white/75'
                 }`}
-                aria-label={`View photo ${index + 1}`}
               />
             ))}
-          </div>
+          </nav>
         </div>
       )}
     </>

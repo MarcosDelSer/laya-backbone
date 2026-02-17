@@ -112,13 +112,13 @@ export function Navigation() {
   const pathname = usePathname();
 
   return (
-    <nav className="bg-white border-b border-gray-200">
+    <nav className="bg-white border-b border-gray-200" aria-label="Main navigation">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600">
+            <Link href="/" className="flex items-center space-x-2" aria-label="LAYA Home">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600" aria-hidden="true">
                 <span className="text-lg font-bold text-white">L</span>
               </div>
               <span className="text-xl font-semibold text-gray-900">
@@ -128,20 +128,21 @@ export function Navigation() {
           </div>
 
           {/* Navigation Links */}
-          <div className="hidden md:flex md:items-center md:space-x-1">
+          <div className="hidden md:flex md:items-center md:space-x-1" role="navigation" aria-label="Primary">
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
                   className={`flex items-center space-x-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   }`}
                 >
-                  {item.icon}
+                  <span aria-hidden="true">{item.icon}</span>
                   <span>{item.label}</span>
                 </Link>
               );
@@ -157,25 +158,26 @@ export function Navigation() {
 
       {/* Mobile Navigation */}
       <div className="border-t border-gray-200 md:hidden">
-        <div className="flex justify-around py-2">
+        <nav className="flex justify-around py-2" aria-label="Mobile navigation">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex flex-col items-center px-2 py-1 text-xs ${
                   isActive
                     ? 'text-primary-600'
                     : 'text-gray-500 hover:text-gray-900'
                 }`}
               >
-                {item.icon}
+                <span aria-hidden="true">{item.icon}</span>
                 <span className="mt-1">{item.label}</span>
               </Link>
             );
           })}
-        </div>
+        </nav>
       </div>
     </nav>
   );

@@ -52,7 +52,7 @@ function StatusBadge({ status }: { status: string }) {
 
   const config = statusConfig[status as keyof typeof statusConfig] || statusConfig['checked-out'];
 
-  return <span className={`badge ${config.className}`}>{config.label}</span>;
+  return <span className={`badge ${config.className}`} role="status" aria-label={`Child status: ${config.label}`}>{config.label}</span>;
 }
 
 function StatIcon({ icon, color }: { icon: string; color: string }) {
@@ -99,7 +99,7 @@ function StatIcon({ icon, color }: { icon: string; color: string }) {
   };
 
   return (
-    <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${colorClasses[color as keyof typeof colorClasses]}`}>
+    <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${colorClasses[color as keyof typeof colorClasses]}`} aria-hidden="true">
       <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         {iconPaths[icon as keyof typeof iconPaths]}
       </svg>
@@ -109,7 +109,7 @@ function StatIcon({ icon, color }: { icon: string; color: string }) {
 
 export default function DashboardPage() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -120,7 +120,7 @@ export default function DashboardPage() {
             <p className="mt-1 text-gray-600">{todaysSummary.date}</p>
           </div>
           <div className="mt-4 sm:mt-0">
-            <Link href="/daily-reports" className="btn btn-primary">
+            <Link href="/daily-reports" className="btn btn-primary" aria-label="View full daily report">
               View Full Report
             </Link>
           </div>
@@ -128,15 +128,15 @@ export default function DashboardPage() {
       </div>
 
       {/* Child Status Card */}
-      <section className="card mb-8">
+      <section className="card mb-8" aria-labelledby="child-status-heading">
         <div className="p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-100 text-2xl font-semibold text-primary-700">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-100 text-2xl font-semibold text-primary-700" aria-hidden="true">
                 {childData.name.charAt(0)}
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 id="child-status-heading" className="text-xl font-semibold text-gray-900">
                   {childData.name}
                 </h2>
                 <p className="text-gray-600">
@@ -155,9 +155,9 @@ export default function DashboardPage() {
       </section>
 
       {/* Quick Stats */}
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8" aria-label="Quick statistics">
         {quickStats.map((stat) => (
-          <article key={stat.label} className="card p-4">
+          <article key={stat.label} className="card p-4" aria-label={`${stat.label}: ${stat.value}`}>
             <div className="flex items-center space-x-3">
               <StatIcon icon={stat.icon} color={stat.color} />
               <div>

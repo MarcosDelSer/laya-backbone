@@ -9,8 +9,8 @@ interface ActivityEntryProps {
 
 export function ActivityEntry({ activity }: ActivityEntryProps) {
   return (
-    <div className="flex items-start space-x-3">
-      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-purple-100">
+    <div className="flex items-start space-x-3" role="listitem" aria-label={`${activity.name} at ${activity.time}`}>
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-purple-100" aria-hidden="true">
         <svg
           className="h-5 w-5 text-purple-600"
           fill="none"
@@ -28,7 +28,7 @@ export function ActivityEntry({ activity }: ActivityEntryProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
           <p className="font-medium text-gray-900">{activity.name}</p>
-          <span className="text-sm text-gray-500">{activity.time}</span>
+          <time className="text-sm text-gray-500">{activity.time}</time>
         </div>
         {activity.description && (
           <p className="text-sm text-gray-600 mt-0.5">{activity.description}</p>

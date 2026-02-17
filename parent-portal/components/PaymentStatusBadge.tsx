@@ -51,9 +51,11 @@ export function PaymentStatusBadge({ status, size = 'md' }: PaymentStatusBadgePr
 
   return (
     <span
+      role="status"
+      aria-label={`Payment status: ${config.label}`}
       className={`badge ${config.className} ${sizeClasses} inline-flex items-center`}
     >
-      {config.icon}
+      <span aria-hidden="true">{config.icon}</span>
       {config.label}
     </span>
   );
