@@ -21,12 +21,16 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use Gibbon\Module\EnhancedFinance\Domain\InvoiceEmailDelivery;
 use Gibbon\Module\EnhancedFinance\Domain\InvoicePDFGenerator;
+use Gibbon\Module\EnhancedFinance\Domain\InvoiceGateway;
+
+// Include core (this file is called directly, not through module framework)
+include '../../gibbon.php';
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
 
-// Check if user is logged in
-if (!isset($_SESSION[$guid]['gibbonPersonID'])) {
+// Access check - require user to be logged in
+if (!$session->has('gibbonPersonID')) {
     header('HTTP/1.1 403 Forbidden');
     echo json_encode([
         'error' => true,
@@ -35,9 +39,8 @@ if (!isset($_SESSION[$guid]['gibbonPersonID'])) {
     exit;
 }
 
-// Check action access
-$URL = $_SESSION[$guid]['absoluteURL'] . '/index.php?q=/modules/EnhancedFinance/invoices.php';
-if (!isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/invoices.php')) {
+// Check if user has access to this module action
+if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/invoice_email.php') == false) {
     header('HTTP/1.1 403 Forbidden');
     echo json_encode([
         'error' => true,
@@ -89,29 +92,45 @@ try {
             throw new Exception('Invalid invoice data JSON: ' . json_last_error_msg());
         }
     } else {
-        // In production, fetch invoice data from database using $invoiceID
-        // For now, use demo data
+        // Fetch canonical invoice data from database using $invoiceID
+        $invoiceGateway = $container->get(InvoiceGateway::class);
+        $invoice = $invoiceGateway->selectInvoiceByID($invoiceID);
+
+        if (empty($invoice)) {
+            throw new Exception('Invoice not found with ID: ' . $invoiceID);
+        }
+
+        // Get settings for payment terms
+        $settingGateway = $container->get('Gibbon\Domain\System\SettingGateway');
+        $paymentTermsDays = $settingGateway->getSettingByScope('Enhanced Finance', 'defaultPaymentTermsDays') ?: '30';
+
+        // Format child name for invoice
+        $childName = trim(($invoice['childPreferredName'] ?? '') . ' ' . ($invoice['childSurname'] ?? ''));
+        $period = date('F Y', strtotime($invoice['invoiceDate']));
+
+        // Build invoice data structure for PDF generation
         $invoiceData = [
-            'invoiceNumber' => 'INV-2026-02-001',
-            'invoiceDate' => date('Y-m-d'),
-            'dueDate' => date('Y-m-d', strtotime('+30 days')),
-            'customerName' => $recipientName ?: 'Valued Customer',
+            'invoiceNumber' => $invoice['invoiceNumber'],
+            'invoiceDate' => $invoice['invoiceDate'],
+            'dueDate' => $invoice['dueDate'],
+            'period' => $period,
+            'customerName' => $recipientName ?: ($invoice['familyName'] ?? 'Valued Customer'),
             'customerEmail' => $recipientEmail,
-            'customerAddress' => '123 Main Street, Montreal, QC H3A 1B1',
+            'customerAddress' => '', // Address not stored in invoice table
             'items' => [
                 [
-                    'description' => 'Full-time Daycare - ' . date('F Y'),
+                    'description' => "Invoice for {$childName} - {$period}",
                     'quantity' => 1,
-                    'unitPrice' => 800.00,
-                ],
-                [
-                    'description' => 'Daily Meals',
-                    'quantity' => 20,
-                    'unitPrice' => 8.50,
+                    'unitPrice' => (float)$invoice['subtotal'],
                 ],
             ],
-            'notes' => 'Payment due within 30 days. Thank you for your business.',
-            'paymentTerms' => 'Net 30 days',
+            'subtotal' => (float)$invoice['subtotal'],
+            'taxAmount' => (float)$invoice['taxAmount'],
+            'totalAmount' => (float)$invoice['totalAmount'],
+            'paidAmount' => (float)$invoice['paidAmount'],
+            'balanceRemaining' => (float)$invoice['balanceRemaining'],
+            'notes' => $invoice['notes'] ?? '',
+            'paymentTerms' => "Net {$paymentTermsDays} days",
             'paymentMethods' => 'E-transfer, Credit Card, Cheque',
         ];
     }
@@ -129,12 +148,8 @@ try {
         throw new Exception('Invoice data must include items array');
     }
 
-    // Get InvoiceEmailDelivery service from container
-    $container = $gibbon->getContainer();
-
-    // Get required dependencies
+    // Get required dependencies from container (container is available via bootstrap)
     $mailer = $container->get('Gibbon\Contracts\Comms\Mailer');
-    $session = $container->get('Gibbon\Contracts\Services\Session');
     $settingGateway = $container->get('Gibbon\Domain\System\SettingGateway');
 
     // Create InvoicePDFGenerator
@@ -167,7 +182,7 @@ try {
             'Invoice email sent: %s to %s (User: %s)',
             $invoiceData['invoiceNumber'],
             $recipientEmail,
-            $_SESSION[$guid]['gibbonPersonID']
+            $session->get('gibbonPersonID')
         );
         error_log($logMessage);
 
