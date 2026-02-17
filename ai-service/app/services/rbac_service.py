@@ -3,10 +3,14 @@
 Provides permission checking, role assignment, group filtering, and
 audit trail functionality for the 5-role RBAC system. Supports
 group-level restrictions for educators and parent-specific access.
+
+Integrates with NotificationService to alert directors of unauthorized
+access attempts and AuditService for comprehensive audit logging.
 """
 
+import logging
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import and_, select
@@ -31,6 +35,12 @@ from app.schemas.rbac import (
     UserRoleAssignment,
     UserRoleResponse,
 )
+
+if TYPE_CHECKING:
+    from app.services.audit_service import AuditService
+    from app.services.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 
 class RBACServiceError(Exception):
@@ -71,17 +81,45 @@ class RBACService:
     5-role system (Director, Teacher, Assistant, Staff, Parent) with
     group-level restrictions.
 
+    Integrates with NotificationService and AuditService to provide:
+    - Unauthorized access notifications to directors
+    - Comprehensive audit trail for all access checks
+    - Threshold-based alerts for repeated failed attempts
+
     Attributes:
         db: Async database session for database operations
+        notification_service: Optional service for sending notifications
+        audit_service: Optional service for audit logging
+        failed_attempt_threshold: Number of failed attempts before alerting
+        failed_attempt_window_minutes: Time window for counting failed attempts
     """
 
-    def __init__(self, db: AsyncSession) -> None:
+    # Default configuration for unauthorized access detection
+    DEFAULT_FAILED_ATTEMPT_THRESHOLD = 5
+    DEFAULT_FAILED_ATTEMPT_WINDOW_MINUTES = 15
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        notification_service: Optional["NotificationService"] = None,
+        audit_service: Optional["AuditService"] = None,
+        failed_attempt_threshold: int = DEFAULT_FAILED_ATTEMPT_THRESHOLD,
+        failed_attempt_window_minutes: int = DEFAULT_FAILED_ATTEMPT_WINDOW_MINUTES,
+    ) -> None:
         """Initialize the RBAC service.
 
         Args:
             db: Async database session
+            notification_service: Optional notification service for alerts
+            audit_service: Optional audit service for logging
+            failed_attempt_threshold: Number of failed attempts before alerting
+            failed_attempt_window_minutes: Time window for failed attempt counting
         """
         self.db = db
+        self._notification_service = notification_service
+        self._audit_service = audit_service
+        self.failed_attempt_threshold = failed_attempt_threshold
+        self.failed_attempt_window_minutes = failed_attempt_window_minutes
 
     # =========================================================================
     # Permission Checking Methods
@@ -187,6 +225,137 @@ class RBACService:
         )
         result = await self.check_permission(request)
         return result.allowed
+
+    async def check_permission_with_audit(
+        self,
+        request: PermissionCheckRequest,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        notify_on_denial: bool = True,
+    ) -> PermissionCheckResponse:
+        """Check permission and log/notify on unauthorized access.
+
+        This method extends the basic permission check with integrated
+        audit logging and notification dispatch for unauthorized access
+        attempts.
+
+        Args:
+            request: The permission check request
+            ip_address: Optional IP address of the request
+            user_agent: Optional user agent string
+            notify_on_denial: Whether to send notification on denial
+
+        Returns:
+            PermissionCheckResponse indicating if the permission is allowed
+        """
+        result = await self.check_permission(request)
+
+        if result.allowed:
+            # Log successful access if audit service is available
+            await self._log_access_granted(
+                user_id=request.user_id,
+                resource=request.resource,
+                action=request.action,
+                organization_id=request.organization_id,
+                group_id=request.group_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        else:
+            # Handle access denial with logging and notifications
+            await self._handle_access_denied(
+                user_id=request.user_id,
+                resource=request.resource,
+                action=request.action,
+                reason=result.reason,
+                organization_id=request.organization_id,
+                group_id=request.group_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                notify=notify_on_denial,
+            )
+
+        return result
+
+    async def require_permission_with_audit(
+        self,
+        user_id: UUID,
+        resource: str,
+        action: str,
+        organization_id: Optional[UUID] = None,
+        group_id: Optional[UUID] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> None:
+        """Require a permission with audit logging, raising on denial.
+
+        This is a convenience method that checks permission and raises
+        PermissionDeniedError if access is denied, while also handling
+        audit logging and notification dispatch.
+
+        Args:
+            user_id: ID of the user to check
+            resource: The resource to check access for
+            action: The action to check permission for
+            organization_id: Optional organization context
+            group_id: Optional group context
+            ip_address: Optional IP address of the request
+            user_agent: Optional user agent string
+
+        Raises:
+            PermissionDeniedError: If the user doesn't have the permission
+        """
+        request = PermissionCheckRequest(
+            user_id=user_id,
+            resource=resource,
+            action=action,
+            organization_id=organization_id,
+            group_id=group_id,
+        )
+        result = await self.check_permission_with_audit(
+            request=request,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            notify_on_denial=True,
+        )
+
+        if not result.allowed:
+            raise PermissionDeniedError(
+                f"User {user_id} denied access to {resource}:{action}. "
+                f"Reason: {result.reason}"
+            )
+
+    # =========================================================================
+    # Service Configuration Methods
+    # =========================================================================
+
+    def set_notification_service(
+        self,
+        notification_service: "NotificationService",
+    ) -> None:
+        """Set the notification service for unauthorized access alerts.
+
+        Allows setting the notification service after initialization,
+        useful for dependency injection scenarios.
+
+        Args:
+            notification_service: The notification service instance
+        """
+        self._notification_service = notification_service
+
+    def set_audit_service(
+        self,
+        audit_service: "AuditService",
+    ) -> None:
+        """Set the audit service for access logging.
+
+        Allows setting the audit service after initialization,
+        useful for dependency injection scenarios.
+
+        Args:
+            audit_service: The audit service instance
+        """
+        self._audit_service = audit_service
 
     async def get_user_permissions(
         self,
@@ -932,6 +1101,251 @@ class RBACService:
             is_active=user_role.is_active,
             role=role_response,
         )
+
+    # =========================================================================
+    # Unauthorized Access Detection & Notification Methods
+    # =========================================================================
+
+    async def _handle_access_denied(
+        self,
+        user_id: UUID,
+        resource: str,
+        action: str,
+        reason: Optional[str] = None,
+        organization_id: Optional[UUID] = None,
+        group_id: Optional[UUID] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        notify: bool = True,
+    ) -> None:
+        """Handle an access denied event with logging and notifications.
+
+        This method:
+        1. Logs the access denied event to the audit trail
+        2. Checks if failed attempt threshold is exceeded
+        3. Dispatches notifications to directors if configured
+
+        Args:
+            user_id: ID of the user who was denied
+            resource: The resource that was denied
+            action: The action that was denied
+            reason: The reason for denial
+            organization_id: Optional organization context
+            group_id: Optional group context
+            ip_address: Optional IP address of the request
+            user_agent: Optional user agent string
+            notify: Whether to dispatch notifications
+        """
+        details = {
+            "resource": resource,
+            "action": action,
+            "reason": reason or "Permission denied",
+        }
+        if group_id:
+            details["group_id"] = str(group_id)
+
+        # Log the access denied event
+        await self._log_access_denied(
+            user_id=user_id,
+            resource=resource,
+            action=action,
+            details=details,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        if not notify or not self._notification_service:
+            return
+
+        # Check if we should dispatch notification based on attempt
+        try:
+            # Dispatch immediate notification for this unauthorized access
+            await self._notification_service.notify_unauthorized_access(
+                user_id=user_id,
+                resource_type=resource,
+                attempted_action=action,
+                details=details,
+                ip_address=ip_address,
+                organization_id=organization_id,
+            )
+
+            # Check if threshold exceeded for multiple failed attempts
+            await self._notification_service.check_and_notify_threshold(
+                user_id=user_id,
+                threshold=self.failed_attempt_threshold,
+                time_window_minutes=self.failed_attempt_window_minutes,
+                organization_id=organization_id,
+            )
+        except Exception as e:
+            # Log notification errors but don't fail the permission check
+            logger.warning(
+                f"Failed to dispatch unauthorized access notification: {e}",
+                extra={
+                    "user_id": str(user_id),
+                    "resource": resource,
+                    "action": action,
+                },
+            )
+
+    async def _log_access_granted(
+        self,
+        user_id: UUID,
+        resource: str,
+        action: str,
+        organization_id: Optional[UUID] = None,
+        group_id: Optional[UUID] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> None:
+        """Log an access granted event to the audit trail.
+
+        Args:
+            user_id: ID of the user who was granted access
+            resource: The resource that was accessed
+            action: The action that was performed
+            organization_id: Optional organization context
+            group_id: Optional group context
+            ip_address: Optional IP address of the request
+            user_agent: Optional user agent string
+        """
+        if not self._audit_service:
+            return
+
+        details = {
+            "resource": resource,
+            "action": action,
+        }
+        if organization_id:
+            details["organization_id"] = str(organization_id)
+        if group_id:
+            details["group_id"] = str(group_id)
+
+        try:
+            await self._audit_service.log_access_granted(
+                user_id=user_id,
+                resource_type=resource,
+                details=details,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        except Exception as e:
+            # Log audit errors but don't fail the operation
+            logger.warning(
+                f"Failed to log access granted event: {e}",
+                extra={
+                    "user_id": str(user_id),
+                    "resource": resource,
+                    "action": action,
+                },
+            )
+
+    async def _log_access_denied(
+        self,
+        user_id: UUID,
+        resource: str,
+        action: str,
+        details: Optional[dict] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> None:
+        """Log an access denied event to the audit trail.
+
+        Args:
+            user_id: ID of the user who was denied
+            resource: The resource that was denied
+            action: The action that was denied
+            details: Optional additional details
+            ip_address: Optional IP address of the request
+            user_agent: Optional user agent string
+        """
+        if not self._audit_service:
+            return
+
+        try:
+            await self._audit_service.log_access_denied(
+                user_id=user_id,
+                resource_type=resource,
+                details=details,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        except Exception as e:
+            # Log audit errors but don't fail the operation
+            logger.warning(
+                f"Failed to log access denied event: {e}",
+                extra={
+                    "user_id": str(user_id),
+                    "resource": resource,
+                    "action": action,
+                },
+            )
+
+    async def detect_suspicious_activity(
+        self,
+        user_id: UUID,
+        organization_id: Optional[UUID] = None,
+    ) -> dict:
+        """Detect suspicious activity patterns for a user.
+
+        Analyzes recent access patterns to identify potential security
+        concerns such as repeated failed attempts or unusual access patterns.
+
+        Args:
+            user_id: ID of the user to analyze
+            organization_id: Optional organization context
+
+        Returns:
+            Dictionary with suspicious activity analysis results
+        """
+        if not self._notification_service:
+            return {
+                "user_id": str(user_id),
+                "analyzed": False,
+                "reason": "Notification service not configured",
+            }
+
+        try:
+            failed_count = await self._notification_service.count_failed_attempts(
+                user_id=user_id,
+                minutes=self.failed_attempt_window_minutes,
+            )
+
+            recent_attempts = await self._notification_service.get_recent_unauthorized_attempts(
+                user_id=user_id,
+                hours=24,
+                limit=50,
+            )
+
+            is_suspicious = failed_count >= self.failed_attempt_threshold
+            severity = "low"
+            if failed_count >= self.failed_attempt_threshold * 2:
+                severity = "critical"
+            elif failed_count >= self.failed_attempt_threshold:
+                severity = "high"
+            elif failed_count >= self.failed_attempt_threshold // 2:
+                severity = "medium"
+
+            return {
+                "user_id": str(user_id),
+                "analyzed": True,
+                "is_suspicious": is_suspicious,
+                "severity": severity,
+                "failed_attempts_recent": failed_count,
+                "failed_attempts_24h": len(recent_attempts),
+                "threshold": self.failed_attempt_threshold,
+                "window_minutes": self.failed_attempt_window_minutes,
+                "recent_attempts": recent_attempts[:10],  # Return last 10 attempts
+            }
+        except Exception as e:
+            logger.error(
+                f"Failed to detect suspicious activity: {e}",
+                extra={"user_id": str(user_id)},
+            )
+            return {
+                "user_id": str(user_id),
+                "analyzed": False,
+                "error": str(e),
+            }
 
     # =========================================================================
     # Audit Log Methods
