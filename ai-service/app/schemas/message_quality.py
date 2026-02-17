@@ -305,6 +305,75 @@ class MessageTemplateRequest(BaseSchema):
     )
 
 
+class MessageRewriteRequest(BaseSchema):
+    """Request schema for message rewrite suggestions.
+
+    Provides a simplified endpoint focused solely on rewrite suggestions
+    using 'I' language and sandwich method.
+
+    Attributes:
+        message_text: The message text to rewrite
+        language: Language of the message
+        child_name: Optional child's name for personalization
+    """
+
+    message_text: str = Field(
+        ...,
+        min_length=1,
+        max_length=5000,
+        description="The message text to rewrite",
+    )
+    language: Language = Field(
+        default=Language.EN,
+        description="Language of the message",
+    )
+    child_name: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Optional child's name for personalization",
+    )
+
+
+class MessageQualitySettingsRequest(BaseSchema):
+    """Request schema for updating message quality configuration.
+
+    Directors can configure quality thresholds, enable/disable features,
+    and set notification preferences for the message quality system.
+
+    Attributes:
+        quality_threshold: Minimum quality score to be considered acceptable (0-100)
+        enable_auto_suggestions: Whether to automatically show suggestions
+        enable_notifications: Whether to send quality notifications to educators
+        notification_threshold: Quality score below which to send notifications (0-100)
+        strict_mode: Whether to enforce strict quality checks before sending
+    """
+
+    quality_threshold: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Minimum quality score to be considered acceptable (0-100)",
+    )
+    enable_auto_suggestions: Optional[bool] = Field(
+        default=None,
+        description="Whether to automatically show suggestions",
+    )
+    enable_notifications: Optional[bool] = Field(
+        default=None,
+        description="Whether to send quality notifications to educators",
+    )
+    notification_threshold: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Quality score below which to send notifications (0-100)",
+    )
+    strict_mode: Optional[bool] = Field(
+        default=None,
+        description="Whether to enforce strict quality checks before sending",
+    )
+
+
 class TrainingExampleRequest(BaseSchema):
     """Request schema for creating a training example.
 
@@ -498,6 +567,70 @@ class TrainingExampleResponse(BaseResponse):
     )
 
 
+class MessageRewriteResponse(BaseResponse):
+    """Response schema for message rewrite suggestions.
+
+    Contains a single rewrite suggestion using 'I' language and sandwich method.
+
+    Attributes:
+        rewrite: The suggested rewrite with explanation
+    """
+
+    rewrite: RewriteSuggestion = Field(
+        ...,
+        description="The suggested rewrite with explanation",
+    )
+
+
+class MessageQualitySettingsResponse(BaseResponse):
+    """Response schema for message quality configuration.
+
+    Contains the current message quality system configuration settings.
+
+    Attributes:
+        quality_threshold: Minimum quality score to be considered acceptable (0-100)
+        enable_auto_suggestions: Whether to automatically show suggestions
+        enable_notifications: Whether to send quality notifications to educators
+        notification_threshold: Quality score below which to send notifications (0-100)
+        strict_mode: Whether to enforce strict quality checks before sending
+        updated_at: Timestamp when settings were last updated
+        updated_by: ID of the user who last updated the settings
+    """
+
+    quality_threshold: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Minimum quality score to be considered acceptable (0-100)",
+    )
+    enable_auto_suggestions: bool = Field(
+        ...,
+        description="Whether to automatically show suggestions",
+    )
+    enable_notifications: bool = Field(
+        ...,
+        description="Whether to send quality notifications to educators",
+    )
+    notification_threshold: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Quality score below which to send notifications (0-100)",
+    )
+    strict_mode: bool = Field(
+        ...,
+        description="Whether to enforce strict quality checks before sending",
+    )
+    updated_at: datetime = Field(
+        ...,
+        description="Timestamp when settings were last updated",
+    )
+    updated_by: UUID = Field(
+        ...,
+        description="ID of the user who last updated the settings",
+    )
+
+
 # =============================================================================
 # Paginated Response Schemas
 # =============================================================================
@@ -526,4 +659,57 @@ class TrainingExampleListResponse(PaginatedResponse):
     items: list[TrainingExampleResponse] = Field(
         ...,
         description="List of training examples",
+    )
+
+
+class MessageQualityHistoryItem(BaseResponse):
+    """A single message quality history record.
+
+    Attributes:
+        message_text: The analyzed message text
+        quality_score: Quality score for this message
+        language: Language of the message
+        analyzed_at: Timestamp when the message was analyzed
+        educator_id: ID of the educator who created the message
+        context: Context type of the message
+    """
+
+    message_text: str = Field(
+        ...,
+        description="The analyzed message text",
+    )
+    quality_score: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Quality score for this message",
+    )
+    language: Language = Field(
+        ...,
+        description="Language of the message",
+    )
+    analyzed_at: datetime = Field(
+        ...,
+        description="Timestamp when the message was analyzed",
+    )
+    educator_id: UUID = Field(
+        ...,
+        description="ID of the educator who created the message",
+    )
+    context: MessageContext = Field(
+        default=MessageContext.GENERAL_UPDATE,
+        description="Context type of the message",
+    )
+
+
+class MessageQualityHistoryResponse(PaginatedResponse):
+    """Paginated response for message quality history.
+
+    Attributes:
+        items: List of message quality history records
+    """
+
+    items: list[MessageQualityHistoryItem] = Field(
+        default_factory=list,
+        description="List of message quality history records",
     )

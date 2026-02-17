@@ -6,11 +6,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { QualityCoachPanel } from '@/components/QualityCoachPanel'
+import * as AuthContext from '@/contexts/AuthContext'
 import type {
   MessageAnalysisResponse,
   QualityIssueDetail,
   RewriteSuggestion,
 } from '@/lib/types'
+import type { User } from '@/lib/auth'
+
+// Mock the AuthContext
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: vi.fn(),
+}))
+
+// Helper to create mock user
+function createMockUser(role: string): User {
+  return {
+    id: `user-${role}`,
+    email: `${role}@example.com`,
+    role,
+    firstName: 'Test',
+    lastName: 'User',
+  }
+}
 
 // Helper to create mock analysis data
 function createMockAnalysis(
@@ -63,6 +81,112 @@ function createMockRewrite(
 }
 
 describe('QualityCoachPanel', () => {
+  const mockUseAuth = vi.mocked(AuthContext.useAuth)
+
+  beforeEach(() => {
+    // Default: Mock as teacher user (authorized)
+    mockUseAuth.mockReturnValue({
+      user: createMockUser('teacher'),
+      isAuthenticated: true,
+      isLoading: false,
+      updateUser: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+  })
+
+  describe('Role-Based Access Control', () => {
+    it('renders for teacher role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('teacher'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<QualityCoachPanel analysis={createMockAnalysis()} />)
+      expect(screen.getByText('Quality Coach')).toBeInTheDocument()
+    })
+
+    it('renders for admin role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('admin'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<QualityCoachPanel analysis={createMockAnalysis()} />)
+      expect(screen.getByText('Quality Coach')).toBeInTheDocument()
+    })
+
+    it('does not render for parent role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('parent'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      const { container } = render(<QualityCoachPanel analysis={createMockAnalysis()} />)
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('does not render for staff role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('staff'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      const { container } = render(<QualityCoachPanel analysis={createMockAnalysis()} />)
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('does not render for accountant role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('accountant'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      const { container } = render(<QualityCoachPanel analysis={createMockAnalysis()} />)
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('does not render when user is null', () => {
+      mockUseAuth.mockReturnValue({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      const { container } = render(<QualityCoachPanel analysis={createMockAnalysis()} />)
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('does not render when not authenticated', () => {
+      mockUseAuth.mockReturnValue({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      const { container } = render(<QualityCoachPanel analysis={createMockAnalysis()} />)
+      expect(container.firstChild).toBeNull()
+    })
+  })
+
   describe('Loading State', () => {
     it('renders loading state when isLoading is true', () => {
       render(<QualityCoachPanel analysis={null} isLoading={true} />)
@@ -661,7 +785,7 @@ describe('QualityCoachPanel', () => {
 
       it('displays French apply suggestion button', () => {
         const analysis = createMockAnalysis({
-          rewriteSuggestions: [createMockRewriteSuggestion()],
+          rewriteSuggestions: [createMockRewrite()],
         })
         render(<QualityCoachPanel analysis={analysis} onApplyRewrite={vi.fn()} language="fr" />)
         expect(screen.getByRole('button', { name: 'Appliquer la suggestion' })).toBeInTheDocument()

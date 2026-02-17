@@ -3139,3 +3139,136 @@ class TestAPIEdgeCasesAndErrorHandling:
         )
 
         assert response.status_code == 422
+
+
+# =============================================================================
+# Ownership Validation Tests
+# =============================================================================
+
+
+def test_ownership_validation(mock_db_session):
+    """Test ownership validation in message quality service.
+
+    Verifies that:
+    - Admins can access all resources (bypass ownership check)
+    - Teachers can access their own resources
+    - Teachers cannot access other teachers' resources (403 error)
+    - Ownership validation properly uses has_admin_access()
+    """
+    from app.services.message_quality_service import MessageQualityService
+
+    service = MessageQualityService(mock_db_session)
+
+    # Test 1: Admin can access any resource
+    admin_user = {
+        "sub": str(uuid4()),
+        "role": "admin",
+    }
+    other_user_id = uuid4()
+    service.check_ownership(other_user_id, admin_user)  # Should not raise
+
+    # Test 2: Teacher can access own resource
+    teacher_id = uuid4()
+    teacher_user = {
+        "sub": str(teacher_id),
+        "role": "teacher",
+    }
+    service.check_ownership(teacher_id, teacher_user)  # Should not raise
+
+    # Test 3: Teacher cannot access another teacher's resource
+    another_teacher_id = uuid4()
+    with pytest.raises(Exception) as exc_info:
+        service.check_ownership(another_teacher_id, teacher_user)
+
+    # Verify it's a 403 Forbidden error
+    assert hasattr(exc_info.value, 'status_code')
+    assert exc_info.value.status_code == 403
+    assert "permission" in str(exc_info.value.detail).lower()
+
+
+# =============================================================================
+# Audit Logging Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_audit_logging(
+    client: AsyncClient,
+    auth_headers: Dict[str, str],
+    mock_persist_analysis,
+) -> None:
+    """Test that audit logs are captured for all access attempts.
+
+    Verifies that:
+    - Analyze endpoint logs access
+    - Rewrite endpoint logs access
+    - History endpoint logs access
+    - Templates endpoint logs access
+    - Training examples endpoint logs access
+    """
+    from unittest.mock import patch
+
+    with patch("app.routers.message_quality.audit_logger") as mock_logger:
+        # Test analyze endpoint
+        analyze_request = {
+            "message_text": "You never listen to me!",
+            "language": "en",
+        }
+        response = await client.post(
+            "/api/v1/message-quality/analyze",
+            json=analyze_request,
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "analyze"
+
+        # Test rewrite endpoint
+        mock_logger.reset_mock()
+        rewrite_request = {
+            "message_text": "You never listen to me!",
+            "language": "en",
+        }
+        response = await client.post(
+            "/api/v1/message-quality/rewrite",
+            json=rewrite_request,
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "rewrite"
+
+        # Test history endpoint
+        mock_logger.reset_mock()
+        response = await client.get(
+            "/api/v1/message-quality/history",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "history"
+
+        # Test templates endpoint
+        mock_logger.reset_mock()
+        response = await client.get(
+            "/api/v1/message-quality/templates",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "get_templates"
+
+        # Test training examples endpoint
+        mock_logger.reset_mock()
+        response = await client.get(
+            "/api/v1/message-quality/training-examples",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        mock_logger.log_message_quality_access.assert_called()
+        call_args = mock_logger.log_message_quality_access.call_args
+        assert call_args[1]["action"] == "get_training_examples"

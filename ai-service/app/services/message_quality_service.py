@@ -12,7 +12,10 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException, status
 
+from app.auth.bridges import has_admin_access
+from app.auth.models import UserRole
 from app.models.message_quality import MessageAnalysis, MessageTemplate, TrainingExample
 from app.schemas.message_quality import (
     IssueSeverity,
@@ -20,6 +23,10 @@ from app.schemas.message_quality import (
     MessageAnalysisRequest,
     MessageAnalysisResponse,
     MessageContext,
+    MessageQualityHistoryItem,
+    MessageQualityHistoryResponse,
+    MessageQualitySettingsRequest,
+    MessageQualitySettingsResponse,
     MessageTemplateListResponse,
     MessageTemplateRequest,
     MessageTemplateResponse,
@@ -386,6 +393,42 @@ class MessageQualityService:
             db: Async database session
         """
         self.db = db
+
+    def check_ownership(
+        self,
+        resource_owner_id: UUID,
+        current_user: dict,
+    ) -> None:
+        """Check if the current user has permission to access a resource.
+
+        Validates ownership by checking if the current user is either:
+        1. An admin (admins can access all resources)
+        2. The owner of the resource (user_id matches resource_owner_id)
+
+        Args:
+            resource_owner_id: UUID of the user who owns the resource
+            current_user: Current user payload from JWT token containing:
+                - sub: User ID
+                - role: User role (admin, teacher, etc.)
+
+        Raises:
+            HTTPException 403: When a non-admin user tries to access
+                another user's resource
+        """
+        # Extract user information from token
+        current_user_id = UUID(current_user.get("sub", current_user.get("user_id")))
+        user_role = current_user.get("role", "").lower()
+
+        # Admins can access all resources
+        if has_admin_access(user_role):
+            return
+
+        # Check if user owns the resource
+        if current_user_id != resource_owner_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this resource. Educators can only access their own messages.",
+            )
 
     async def analyze_message(
         self,
@@ -1980,4 +2023,141 @@ class MessageQualityService:
             total=total,
             skip=offset,
             limit=limit,
+        )
+
+    async def get_history(
+        self,
+        current_user: dict,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> MessageQualityHistoryResponse:
+        """Get message quality analysis history.
+
+        Returns message quality analysis history with role-based filtering:
+        - Admins/Directors: Can see all history across all educators
+        - Teachers/Educators: Can only see their own history
+
+        Args:
+            current_user: Current user payload from JWT token
+            limit: Maximum number of history items to return (default: 20)
+            offset: Number of history items to skip for pagination (default: 0)
+
+        Returns:
+            MessageQualityHistoryResponse with paginated list of history items
+        """
+        from sqlalchemy import select, func
+
+        # Extract user information
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role", "").lower()
+
+        # Build base query
+        query = select(MessageAnalysis).where(MessageAnalysis.is_active == True)
+
+        # Apply role-based filtering
+        # Admins can see all history, teachers can only see their own
+        if user_role != UserRole.ADMIN.value.lower():
+            query = query.where(MessageAnalysis.educator_id == user_id)
+
+        # Get total count for pagination
+        count_query = select(func.count()).select_from(
+            query.subquery()
+        )
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar() or 0
+
+        # Apply ordering, limit and offset
+        query = query.order_by(
+            MessageAnalysis.created_at.desc()
+        ).offset(offset).limit(limit)
+
+        result = await self.db.execute(query)
+        analyses = result.scalars().all()
+
+        # Convert to response models
+        items = [
+            MessageQualityHistoryItem(
+                id=analysis.id,
+                message_text=analysis.message_text,
+                quality_score=analysis.quality_score,
+                language=Language(analysis.language),
+                analyzed_at=analysis.created_at,
+                educator_id=analysis.educator_id,
+                context=MessageContext(analysis.context) if analysis.context else MessageContext.GENERAL_UPDATE,
+                created_at=analysis.created_at,
+                updated_at=analysis.updated_at,
+            )
+            for analysis in analyses
+        ]
+
+        return MessageQualityHistoryResponse(
+            items=items,
+            total=total,
+            skip=offset,
+            limit=limit,
+        )
+
+    async def update_settings(
+        self,
+        request: MessageQualitySettingsRequest,
+        current_user: dict,
+    ) -> MessageQualitySettingsResponse:
+        """Update message quality configuration settings.
+
+        Allows directors (admins) to configure quality thresholds, enable/disable
+        features, and set notification preferences for the message quality system.
+        This method is only accessible to users with admin role.
+
+        Args:
+            request: Settings update request with optional field updates
+            current_user: Current user payload from JWT token (must be admin)
+
+        Returns:
+            MessageQualitySettingsResponse with updated settings
+
+        Raises:
+            MessageQualityServiceError: If settings update fails
+
+        Note:
+            This is a placeholder implementation that returns default settings.
+            In production, this would persist settings to the database and apply
+            them to the message quality analysis system.
+        """
+        # Extract user information
+        user_id = UUID(current_user["sub"])
+
+        # Get current settings (placeholder - in production, would fetch from database)
+        current_settings = {
+            "quality_threshold": 70,
+            "enable_auto_suggestions": True,
+            "enable_notifications": True,
+            "notification_threshold": 60,
+            "strict_mode": False,
+        }
+
+        # Update settings with provided values
+        if request.quality_threshold is not None:
+            current_settings["quality_threshold"] = request.quality_threshold
+        if request.enable_auto_suggestions is not None:
+            current_settings["enable_auto_suggestions"] = request.enable_auto_suggestions
+        if request.enable_notifications is not None:
+            current_settings["enable_notifications"] = request.enable_notifications
+        if request.notification_threshold is not None:
+            current_settings["notification_threshold"] = request.notification_threshold
+        if request.strict_mode is not None:
+            current_settings["strict_mode"] = request.strict_mode
+
+        # In production, would save to database here
+        # For now, just return the updated settings
+
+        return MessageQualitySettingsResponse(
+            id=user_id,  # Placeholder ID
+            quality_threshold=current_settings["quality_threshold"],
+            enable_auto_suggestions=current_settings["enable_auto_suggestions"],
+            enable_notifications=current_settings["enable_notifications"],
+            notification_threshold=current_settings["notification_threshold"],
+            strict_mode=current_settings["strict_mode"],
+            updated_at=datetime.utcnow(),
+            updated_by=user_id,
+            created_at=datetime.utcnow(),
         )

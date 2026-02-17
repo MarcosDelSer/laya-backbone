@@ -49,6 +49,8 @@ class TokenVerificationEvent(BaseModel):
         "token_expired",
         "token_invalid",
         "missing_claims",
+        "message_quality_access",
+        "message_quality_denied",
     ]
     user_id: Optional[str] = None
     username: Optional[str] = None
@@ -61,6 +63,8 @@ class TokenVerificationEvent(BaseModel):
     error_message: Optional[str] = None
     token_expired: bool = False
     token_claims: Optional[dict[str, Any]] = None
+    resource_type: Optional[str] = None
+    action: Optional[str] = None
 
     class Config:
         """Pydantic config."""
@@ -269,6 +273,97 @@ class TokenAuditLogger:
                 "event": event.dict(exclude_none=True),
                 "event_type": "missing_claims",
                 "missing_claims": missing_claims,
+            },
+        )
+
+    def log_message_quality_access(
+        self,
+        action: str,
+        current_user: dict[str, Any],
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        resource_type: str = "message_quality",
+    ) -> None:
+        """Log message quality resource access.
+
+        Args:
+            action: Action performed (analyze, rewrite, history, etc.)
+            current_user: Current user from JWT token
+            ip_address: Client IP address
+            user_agent: Client user agent
+            endpoint: API endpoint being accessed
+            resource_type: Type of resource accessed (default: message_quality)
+        """
+        event = TokenVerificationEvent(
+            timestamp=datetime.utcnow().isoformat(),
+            event_type="message_quality_access",
+            user_id=current_user.get("sub"),
+            username=current_user.get("username"),
+            role=current_user.get("role"),
+            source=current_user.get("source", "ai-service"),
+            ip_address=ip_address,
+            user_agent=user_agent,
+            endpoint=endpoint,
+            session_id=current_user.get("session_id"),
+            resource_type=resource_type,
+            action=action,
+        )
+
+        self.logger.info(
+            f"Message quality access: {action}",
+            extra={
+                "event": event.dict(exclude_none=True),
+                "event_type": "message_quality_access",
+                "user_id": event.user_id,
+                "action": action,
+                "resource_type": resource_type,
+            },
+        )
+
+    def log_message_quality_denied(
+        self,
+        action: str,
+        reason: str,
+        current_user: Optional[dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        endpoint: Optional[str] = None,
+    ) -> None:
+        """Log denied message quality access attempt.
+
+        Args:
+            action: Action attempted (analyze, rewrite, history, etc.)
+            reason: Reason for denial
+            current_user: Current user from JWT token (if available)
+            ip_address: Client IP address
+            user_agent: Client user agent
+            endpoint: API endpoint being accessed
+        """
+        event = TokenVerificationEvent(
+            timestamp=datetime.utcnow().isoformat(),
+            event_type="message_quality_denied",
+            user_id=current_user.get("sub") if current_user else None,
+            username=current_user.get("username") if current_user else None,
+            role=current_user.get("role") if current_user else None,
+            source=current_user.get("source") if current_user else None,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            endpoint=endpoint,
+            session_id=current_user.get("session_id") if current_user else None,
+            error_message=reason,
+            action=action,
+            resource_type="message_quality",
+        )
+
+        self.logger.warning(
+            f"Message quality access denied: {action} - {reason}",
+            extra={
+                "event": event.dict(exclude_none=True),
+                "event_type": "message_quality_denied",
+                "user_id": event.user_id,
+                "action": action,
+                "reason": reason,
             },
         )
 
