@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import invalidate_cache
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas.webhook import (
@@ -33,6 +34,9 @@ async def process_care_activity_event(
 ) -> str:
     """Process care activity webhook events.
 
+    When activities are created, updated, or deleted, we need to invalidate
+    the activity catalog cache to ensure the catalog reflects current data.
+
     Args:
         event_type: The type of care activity event
         entity_id: The ID of the care activity
@@ -42,15 +46,16 @@ async def process_care_activity_event(
     Returns:
         Status message describing the processing result
     """
-    # Currently just acknowledge receipt - actual processing can be
-    # implemented based on specific business requirements
+    # Invalidate activity catalog cache on any activity change
+    await invalidate_cache("activity_catalog")
+
     if event_type == WebhookEventType.CARE_ACTIVITY_CREATED:
-        return f"Care activity {entity_id} creation acknowledged"
+        return f"Care activity {entity_id} creation acknowledged and cache invalidated"
     elif event_type == WebhookEventType.CARE_ACTIVITY_UPDATED:
-        return f"Care activity {entity_id} update acknowledged"
+        return f"Care activity {entity_id} update acknowledged and cache invalidated"
     elif event_type == WebhookEventType.CARE_ACTIVITY_DELETED:
-        return f"Care activity {entity_id} deletion acknowledged"
-    return f"Care activity event {event_type} for {entity_id} acknowledged"
+        return f"Care activity {entity_id} deletion acknowledged and cache invalidated"
+    return f"Care activity event {event_type} for {entity_id} acknowledged and cache invalidated"
 
 
 async def process_meal_event(
@@ -120,6 +125,9 @@ async def process_attendance_event(
 ) -> str:
     """Process attendance webhook events.
 
+    When attendance events occur (check-in/check-out), we need to invalidate
+    the analytics dashboard cache since attendance affects KPI calculations.
+
     Args:
         event_type: The type of attendance event (check-in or check-out)
         entity_id: The ID of the attendance record
@@ -131,7 +139,11 @@ async def process_attendance_event(
     """
     child_id = payload.get("child_id", "unknown")
     action = "checked in" if event_type == WebhookEventType.ATTENDANCE_CHECKED_IN else "checked out"
-    return f"Child {child_id} {action}, attendance record ID {entity_id}"
+
+    # Invalidate analytics dashboard cache since attendance affects metrics
+    await invalidate_cache("analytics_dashboard")
+
+    return f"Child {child_id} {action}, attendance record ID {entity_id}, cache invalidated"
 
 
 async def process_child_profile_event(
@@ -141,6 +153,9 @@ async def process_child_profile_event(
 ) -> str:
     """Process child profile update webhook events.
 
+    When a child profile is updated in Gibbon, we need to invalidate
+    the cached child profile data to ensure fresh data is fetched.
+
     Args:
         entity_id: The ID of the child
         payload: Event payload with profile details
@@ -149,7 +164,10 @@ async def process_child_profile_event(
     Returns:
         Status message describing the processing result
     """
-    return f"Child profile {entity_id} update acknowledged"
+    # Invalidate child profile cache for this specific child
+    await invalidate_cache("child_profile", f"*{entity_id}*")
+
+    return f"Child profile {entity_id} update acknowledged and cache invalidated"
 
 
 @router.post(

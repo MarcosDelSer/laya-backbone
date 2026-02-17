@@ -9,10 +9,7 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
-    pagination: Standardized pagination schemas
-    search: Full-text search schemas
-    filters: Filter schemas for list endpoints
-    sorting: Sort option schemas for list endpoints
+    child: Child profile schemas
 """
 
 from app.schemas.activity import (
@@ -76,30 +73,11 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
-from app.schemas.pagination import (
-    PaginatedRequest,
-    SortOrder,
-)
-from app.schemas.search import (
-    SearchRequest,
-    SearchResponse,
-    SearchResult,
-    SearchResultType,
-    SearchType,
-)
-from app.schemas.filters import (
-    ActivityFilters,
-    CoachingFilters,
-    DateRangeFilter,
-    StatusFilter,
-    TypeFilter,
-)
-from app.schemas.sorting import (
-    ActivitySortField,
-    CoachingSortField,
-    MultiSortOptions,
-    SearchSortField,
-    SortOptions,
+from app.schemas.child import (
+    ChildProfileSchema,
+    EmergencyContact,
+    Gender,
+    SpecialNeedInfo,
 )
 
 __all__ = [
@@ -159,25 +137,9 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
-    # Pagination schemas
-    "PaginatedRequest",
-    "SortOrder",
-    # Search schemas
-    "SearchType",
-    "SearchRequest",
-    "SearchResultType",
-    "SearchResult",
-    "SearchResponse",
-    # Filter schemas
-    "DateRangeFilter",
-    "StatusFilter",
-    "TypeFilter",
-    "ActivityFilters",
-    "CoachingFilters",
-    # Sort schemas
-    "ActivitySortField",
-    "CoachingSortField",
-    "SearchSortField",
-    "SortOptions",
-    "MultiSortOptions",
+    # Child schemas
+    "Gender",
+    "SpecialNeedInfo",
+    "EmergencyContact",
+    "ChildProfileSchema",
 ]

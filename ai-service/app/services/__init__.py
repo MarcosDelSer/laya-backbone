@@ -7,7 +7,7 @@ Modules:
     coaching_service: Service for RAG-based special needs coaching guidance
     activity_service: Service for activity intelligence and recommendations
     analytics_service: Service for business intelligence and analytics
-    portfolio_service: Service for educational portfolio management
+    child_service: Service for child profile data with caching
 """
 
 from app.services.activity_service import ActivityService
@@ -21,13 +21,10 @@ from app.services.coaching_service import (
 )
 from app.services.activity_service import ActivityService
 from app.services.analytics_service import AnalyticsService
-from app.services.portfolio_service import (
-    MilestoneNotFoundError,
-    ObservationNotFoundError,
-    PortfolioItemNotFoundError,
-    PortfolioService,
-    PortfolioServiceError,
-    WorkSampleNotFoundError,
+from app.services.child_service import (
+    ChildService,
+    ChildServiceError,
+    ChildNotFoundError,
 )
 
 __all__: list[str] = [
@@ -45,11 +42,8 @@ __all__: list[str] = [
     "ActivityService",
     # Analytics
     "AnalyticsService",
-    # Portfolio
-    "PortfolioService",
-    "PortfolioServiceError",
-    "PortfolioItemNotFoundError",
-    "ObservationNotFoundError",
-    "MilestoneNotFoundError",
-    "WorkSampleNotFoundError",
+    # Child
+    "ChildService",
+    "ChildServiceError",
+    "ChildNotFoundError",
 ]

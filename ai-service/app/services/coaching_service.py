@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache, invalidate_cache
 from app.models.coaching import (
     CoachingRecommendation,
     CoachingSession,
@@ -248,6 +249,7 @@ class CoachingService:
             disclaimer=SAFETY_DISCLAIMER,
         )
 
+    @cache(ttl=86400, key_prefix="llm_response")
     async def _retrieve_evidence_based_guidance(
         self,
         special_need_types: list[SpecialNeedType],
@@ -260,6 +262,9 @@ class CoachingService:
         Queries the RAG database for relevant coaching guidance based on
         the specified special needs and situation. Returns guidance items
         with their supporting evidence sources.
+
+        This method is cached with a 24-hour TTL (86400 seconds) to improve
+        performance for repeated queries with the same parameters.
 
         Args:
             special_need_types: Types of special needs to address
@@ -796,84 +801,67 @@ class CoachingService:
         await self.db.commit()
         return session
 
-    async def get_sessions_for_child(
+    async def invalidate_llm_response_cache(
         self,
-        child_id: UUID,
-        limit: int = 10,
-        skip: int = 0,
-    ) -> list[CoachingSession]:
-        """Retrieve coaching sessions for a child with eager loading.
+        pattern: str = "*",
+    ) -> int:
+        """Invalidate cached LLM responses.
 
-        Prevents N+1 queries by loading all relationships upfront:
-        - session.recommendations
-        - recommendation.evidence_sources
+        Invalidates LLM response cache entries matching the specified pattern.
+        This is useful when the underlying knowledge base is updated or when
+        you need to force fresh guidance generation.
 
         Args:
-            child_id: ID of the child to get sessions for
-            limit: Maximum number of sessions to return
-            skip: Number of sessions to skip (for pagination)
+            pattern: Pattern to match for cache invalidation (default: "*" for all)
 
         Returns:
-            List of CoachingSession objects with relationships loaded
+            int: Number of cache entries deleted
+
+        Example:
+            # Invalidate all LLM response caches
+            await service.invalidate_llm_response_cache()
+
+            # Invalidate specific pattern
+            await service.invalidate_llm_response_cache("*autism*")
         """
-        query = (
-            select(CoachingSession)
-            .where(CoachingSession.child_id == child_id)
-            .order_by(CoachingSession.created_at.desc())
-            .offset(skip)
-            .limit(limit)
+        return await invalidate_cache("llm_response", pattern)
+
+    async def refresh_llm_response_cache(
+        self,
+        special_need_types: list[SpecialNeedType],
+        situation_description: Optional[str] = None,
+        category: Optional[CoachingCategory] = None,
+        max_recommendations: int = 3,
+    ) -> tuple[list[CoachingGuidance], list[EvidenceSourceSchema]]:
+        """Refresh LLM response cache by invalidating and refetching.
+
+        Invalidates the cache for the given parameters and fetches fresh
+        guidance, which will then be cached with a new 24-hour TTL.
+
+        Args:
+            special_need_types: Types of special needs to address
+            situation_description: Description of the situation or challenge
+            category: Optional category filter
+            max_recommendations: Maximum number of recommendations to return
+
+        Returns:
+            Tuple of (guidance_items, citations) with fresh data
+
+        Example:
+            # Refresh cache for specific query
+            guidance, citations = await service.refresh_llm_response_cache(
+                special_need_types=[SpecialNeedType.AUTISM],
+                situation_description="transition strategies",
+                category=CoachingCategory.ACTIVITY_ADAPTATION,
+            )
+        """
+        # Invalidate existing cache for these parameters
+        await self.invalidate_llm_response_cache()
+
+        # Fetch fresh data (which will be cached)
+        return await self._retrieve_evidence_based_guidance(
+            special_need_types=special_need_types,
+            situation_description=situation_description,
+            category=category,
+            max_recommendations=max_recommendations,
         )
-
-        # Apply eager loading to prevent N+1 queries
-        query = eager_load_coaching_session_relationships(query)
-
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
-
-    async def get_session_by_id(
-        self,
-        session_id: UUID,
-    ) -> Optional[CoachingSession]:
-        """Retrieve a single coaching session by ID with eager loading.
-
-        Prevents N+1 queries by loading all relationships upfront.
-
-        Args:
-            session_id: ID of the session to retrieve
-
-        Returns:
-            CoachingSession if found, None otherwise
-        """
-        query = select(CoachingSession).where(CoachingSession.id == session_id)
-
-        # Apply eager loading to prevent N+1 queries
-        query = eager_load_coaching_session_relationships(query)
-
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
-
-    async def get_recommendations_for_session(
-        self,
-        session_id: UUID,
-    ) -> list[CoachingRecommendation]:
-        """Retrieve recommendations for a session with eager loading.
-
-        Prevents N+1 queries by loading all relationships upfront.
-
-        Args:
-            session_id: ID of the session
-
-        Returns:
-            List of CoachingRecommendation objects with relationships loaded
-        """
-        query = (
-            select(CoachingRecommendation)
-            .where(CoachingRecommendation.session_id == session_id)
-            .order_by(CoachingRecommendation.relevance_score.desc())
-        )
-
-        # Apply eager loading to prevent N+1 queries
-        query = eager_load_coaching_recommendation_relationships(query)
-
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
