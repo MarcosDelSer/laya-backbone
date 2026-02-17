@@ -1,21 +1,30 @@
 """FastAPI application entry point for LAYA AI Service."""
 
+import asyncio
+import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Any
 
+import redis.asyncio as redis
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_limiter import FastAPILimiter
 from pydantic import ValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
+from app.core.cache_warming import warm_all_caches
 from app.core.context import get_correlation_id, get_request_id
 from app.core.logging import configure_logging, get_logger
 from app.dependencies import get_current_user
 from app.middleware.correlation import CorrelationMiddleware
 from app.middleware.error_handler import ErrorHandlerMiddleware
+from app.middleware.rate_limit import get_auth_limit, limiter
+from app.middleware.security import get_cors_origins
+from app.redis_client import close_redis
 from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
@@ -25,8 +34,6 @@ from app.routers.health import router as health_router
 from app.routers.webhooks import router as webhooks_router
 from app.security import generate_csrf_token
 from app.security.csrf import CSRFProtectionMiddleware
-
-logger = logging.getLogger(__name__)
 
 # Configure logging on application startup
 # Use JSON logs in production, human-readable in development
@@ -49,10 +56,63 @@ configure_logging(
 
 logger = get_logger(__name__, service="ai-service")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan context manager.
+
+    Manages resource initialization on startup and cleanup on shutdown.
+    Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown").
+
+    Startup tasks:
+    - Initialize Redis connection for rate limiting
+    - Initialize FastAPILimiter with Redis
+    - Warm frequently accessed caches
+
+    Shutdown tasks:
+    - Close FastAPILimiter
+    - Close Redis connections
+    """
+    logger.info("LAYA AI Service starting up...")
+
+    # Initialize Redis connection for rate limiting
+    redis_connection = redis.from_url(
+        settings.rate_limit_storage_uri,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+
+    # Initialize FastAPILimiter with Redis connection
+    await FastAPILimiter.init(redis_connection)
+    logger.info("FastAPILimiter initialized with Redis")
+
+    # Warm caches in the background (non-blocking)
+    # This ensures the app starts quickly even if cache warming is slow
+    asyncio.create_task(warm_all_caches())
+
+    logger.info("LAYA AI Service startup complete")
+
+    yield  # Application runs here
+
+    # Shutdown: cleanup resources
+    logger.info("LAYA AI Service shutting down...")
+
+    # Close FastAPILimiter
+    await FastAPILimiter.close()
+    logger.info("FastAPILimiter closed")
+
+    # Close Redis connections
+    await redis_connection.close()
+    await close_redis()
+
+    logger.info("LAYA AI Service shutdown complete")
+
+
 app = FastAPI(
     title="LAYA AI Service",
     description="AI-powered features for LAYA platform including activity recommendations, coaching guidance, and analytics",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 logger.info("Starting LAYA AI Service", version="0.1.0", log_level=log_level)
@@ -83,37 +143,6 @@ app.include_router(cache_router, prefix="/api/v1/cache", tags=["cache"])
 app.include_router(communication_router, prefix="/api/v1/communication", tags=["communication"])
 app.include_router(search_router)
 app.include_router(webhooks_router, prefix="/api/v1/webhook", tags=["webhooks"])
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Application startup event handler.
-
-    Performs initialization tasks:
-    - Warms frequently accessed caches
-    """
-    logger.info("LAYA AI Service starting up...")
-
-    # Warm caches in the background (non-blocking)
-    # This ensures the app starts quickly even if cache warming is slow
-    asyncio.create_task(warm_all_caches())
-
-    logger.info("LAYA AI Service startup complete")
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    """Application shutdown event handler.
-
-    Performs cleanup tasks:
-    - Closes Redis connection
-    """
-    logger.info("LAYA AI Service shutting down...")
-
-    # Close Redis connection
-    await close_redis()
-
-    logger.info("LAYA AI Service shutdown complete")
 
 
 @app.get("/")
