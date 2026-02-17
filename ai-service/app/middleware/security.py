@@ -1,13 +1,15 @@
 """Security middleware for LAYA AI Service.
 
 This module provides security-related middleware including CORS configuration
-with environment-based origin whitelisting for production security and XSS
-protection headers to prevent cross-site scripting attacks.
+with environment-based origin whitelisting for production security, XSS
+protection headers to prevent cross-site scripting attacks, and HTTPS redirect
+for production deployments.
 """
 
 from typing import Callable, Dict, List
 
 from fastapi import Request, Response
+from fastapi.responses import RedirectResponse
 
 from app.config import settings
 
@@ -107,3 +109,121 @@ def get_xss_protection_middleware() -> Callable:
         return response
 
     return xss_protection_middleware
+
+
+def get_https_redirect_middleware() -> Callable:
+    """Get HTTPS redirect middleware for the FastAPI application.
+
+    This middleware enforces HTTPS in production by redirecting all HTTP
+    requests to HTTPS. This ensures all traffic is encrypted in production
+    deployments.
+
+    The middleware only enforces HTTPS when:
+    1. enforce_https setting is True (from ENFORCE_HTTPS env var)
+    2. The request is using HTTP (not HTTPS)
+    3. The request is not already being proxied with HTTPS (checks X-Forwarded-Proto header)
+
+    Returns:
+        Callable: Middleware function for FastAPI application
+    """
+    async def https_redirect_middleware(request: Request, call_next: Callable) -> Response:
+        """Middleware to redirect HTTP requests to HTTPS in production.
+
+        This middleware checks if the request is using HTTP and redirects to HTTPS
+        if HTTPS enforcement is enabled. It respects the X-Forwarded-Proto header
+        for deployments behind reverse proxies (nginx, load balancers).
+
+        Args:
+            request: The incoming request
+            call_next: The next middleware/handler in the chain
+
+        Returns:
+            Response: Redirect response to HTTPS or the original response
+        """
+        # Skip HTTPS enforcement if disabled
+        if not settings.enforce_https:
+            return await call_next(request)
+
+        # Check if request is already HTTPS
+        # Handle both direct HTTPS connections and proxied requests
+        is_https = (
+            request.url.scheme == "https"
+            or request.headers.get("X-Forwarded-Proto") == "https"
+            or request.headers.get("X-Forwarded-Ssl") == "on"
+        )
+
+        # If request is HTTP and not proxied with HTTPS, redirect to HTTPS
+        if not is_https:
+            # Build HTTPS URL
+            https_url = request.url.replace(scheme="https")
+
+            # Return 301 Permanent Redirect for SEO and browser caching
+            return RedirectResponse(url=str(https_url), status_code=301)
+
+        # Request is already HTTPS, continue processing
+        return await call_next(request)
+
+    return https_redirect_middleware
+
+
+def get_hsts_headers() -> Dict[str, str]:
+    """Get HTTP Strict Transport Security (HSTS) headers.
+
+    HSTS tells browsers to always use HTTPS for this domain, even if the user
+    types http:// or clicks an HTTP link. This provides additional security
+    after the first HTTPS connection.
+
+    Returns:
+        Dict[str, str]: Dictionary with HSTS header
+    """
+    # max-age: How long (seconds) browsers should remember to use HTTPS
+    # includeSubDomains: Apply HSTS to all subdomains
+    # preload: Allow inclusion in browser HSTS preload lists (requires 2+ year max-age)
+    return {
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
+    }
+
+
+def get_hsts_middleware() -> Callable:
+    """Get HSTS middleware for the FastAPI application.
+
+    This middleware adds the Strict-Transport-Security header to all HTTPS
+    responses, instructing browsers to always use HTTPS for future requests.
+
+    Returns:
+        Callable: Middleware function for FastAPI application
+    """
+    async def hsts_middleware(request: Request, call_next: Callable) -> Response:
+        """Middleware to add HSTS header to HTTPS responses.
+
+        HSTS is only added to HTTPS responses to prevent security warnings.
+        It instructs browsers to automatically use HTTPS for all future requests
+        to this domain.
+
+        Args:
+            request: The incoming request
+            call_next: The next middleware/handler in the chain
+
+        Returns:
+            Response: The response with HSTS header if HTTPS
+        """
+        # Process the request and get the response
+        response = await call_next(request)
+
+        # Only add HSTS header to HTTPS responses
+        # Check both direct HTTPS and proxied HTTPS connections
+        is_https = (
+            request.url.scheme == "https"
+            or request.headers.get("X-Forwarded-Proto") == "https"
+            or request.headers.get("X-Forwarded-Ssl") == "on"
+        )
+
+        # Add HSTS header to HTTPS responses when enforcement is enabled
+        if is_https and settings.enforce_https:
+            headers = get_hsts_headers()
+            for header_name, header_value in headers.items():
+                response.headers[header_name] = header_value
+
+        return response
+
+    return hsts_middleware

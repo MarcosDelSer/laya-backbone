@@ -11,7 +11,12 @@ from slowapi.errors import RateLimitExceeded
 
 from app.dependencies import get_current_user
 from app.middleware.rate_limit import get_auth_limit, limiter
-from app.middleware.security import get_cors_origins, get_xss_protection_middleware
+from app.middleware.security import (
+    get_cors_origins,
+    get_hsts_middleware,
+    get_https_redirect_middleware,
+    get_xss_protection_middleware,
+)
 from app.middleware.validation import validation_exception_handler
 from app.routers import coaching
 from app.routers.activities import router as activities_router
@@ -34,6 +39,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Configure validation exception handler for strict mode
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(ValidationError, validation_exception_handler)
+
+# Configure HTTPS redirect middleware (must be first to redirect HTTP to HTTPS)
+# Redirects all HTTP requests to HTTPS in production for encrypted traffic
+# Respects X-Forwarded-Proto header for reverse proxy deployments
+app.middleware("http")(get_https_redirect_middleware())
+
+# Configure HSTS middleware to enforce HTTPS in browsers
+# Adds Strict-Transport-Security header to HTTPS responses
+# Tells browsers to always use HTTPS for future requests
+app.middleware("http")(get_hsts_middleware())
 
 # Configure CSRF protection middleware
 # Validates CSRF tokens on state-changing requests (POST, PUT, DELETE, PATCH)

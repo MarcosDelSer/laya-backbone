@@ -107,6 +107,92 @@ This document describes the security-related configuration options for the LAYA 
 - No string concatenation in SQL queries
 - Type validation prevents type confusion attacks
 
+### 7. HTTPS Enforcement
+- Automatic HTTP to HTTPS redirect in production
+- HTTP Strict Transport Security (HSTS) headers
+- Tells browsers to always use HTTPS
+- Configured via `ENFORCE_HTTPS` environment variable
+- nginx reverse proxy configuration for SSL/TLS termination
+- See `nginx/https.conf.example` for production setup
+
+## HTTPS Configuration
+
+### Environment Variable
+
+- **`ENFORCE_HTTPS`**: Enable HTTPS redirect and HSTS headers
+  - Default: `false` (for local development)
+  - **Production**: Set to `true` to enforce encrypted traffic
+  - When enabled:
+    - All HTTP requests are redirected to HTTPS (301 Permanent Redirect)
+    - Strict-Transport-Security header is added to HTTPS responses
+    - Browsers remember to use HTTPS for 1 year (31,536,000 seconds)
+    - Respects X-Forwarded-Proto header for reverse proxy deployments
+
+### Production HTTPS Setup
+
+For production deployment with HTTPS, follow these steps:
+
+1. **Configure Environment:**
+   ```bash
+   ENFORCE_HTTPS=true
+   ```
+
+2. **Set up SSL/TLS certificates:**
+   - **Recommended**: Use Let's Encrypt for free SSL certificates
+   - Install certbot: `apt-get install certbot python3-certbot-nginx`
+   - Obtain certificate: `certbot --nginx -d api.yourdomain.com`
+   - Certificates auto-renew automatically
+
+3. **Configure nginx reverse proxy:**
+   - Copy `nginx/https.conf.example` to `/etc/nginx/sites-available/laya-ai-service`
+   - Update `server_name` with your domain
+   - Update SSL certificate paths
+   - Enable site: `ln -s /etc/nginx/sites-available/laya-ai-service /etc/nginx/sites-enabled/`
+   - Test: `nginx -t`
+   - Reload: `systemctl reload nginx`
+
+4. **Verify HTTPS configuration:**
+   - Test redirect: `curl -I http://api.yourdomain.com` (should return 301)
+   - Test HSTS: `curl -I https://api.yourdomain.com` (should include Strict-Transport-Security)
+   - SSL Labs test: https://www.ssllabs.com/ssltest/ (target: A+ rating)
+
+5. **Important**: Ensure your nginx configuration sets the `X-Forwarded-Proto` header:
+   ```nginx
+   proxy_set_header X-Forwarded-Proto $scheme;
+   proxy_set_header X-Forwarded-Ssl on;
+   ```
+
+### How It Works
+
+The HTTPS enforcement middleware works in two layers:
+
+1. **HTTPS Redirect Middleware** (application layer):
+   - Checks if request is using HTTP
+   - Checks X-Forwarded-Proto header (for reverse proxy deployments)
+   - Redirects HTTP to HTTPS with 301 status code
+   - Only active when ENFORCE_HTTPS=true
+
+2. **HSTS Middleware** (browser layer):
+   - Adds Strict-Transport-Security header to HTTPS responses
+   - Tells browsers to always use HTTPS for future requests
+   - max-age=31536000 (1 year)
+   - includeSubDomains directive for comprehensive protection
+
+### Development vs Production
+
+**Development (local):**
+- `ENFORCE_HTTPS=false` (default)
+- No HTTPS redirect
+- No HSTS header
+- Works with http://localhost:8000
+
+**Production (deployed):**
+- `ENFORCE_HTTPS=true`
+- All HTTP traffic redirected to HTTPS
+- HSTS header tells browsers to use HTTPS
+- nginx handles SSL/TLS termination
+- FastAPI receives X-Forwarded-Proto header
+
 ## Production Deployment Checklist
 
 Before deploying to production, ensure:
@@ -117,13 +203,19 @@ Before deploying to production, ensure:
 - [ ] `DEBUG` set to `false`
 - [ ] `CORS_ORIGINS` configured with specific allowed origins (no wildcards)
 - [ ] `RATE_LIMIT_STORAGE_URI` configured to use Redis
+- [ ] `ENFORCE_HTTPS` set to `true` to enforce encrypted traffic
+- [ ] SSL/TLS certificates configured (use Let's Encrypt)
+- [ ] nginx reverse proxy configured with HTTPS (see nginx/https.conf.example)
+- [ ] X-Forwarded-Proto header configured in nginx
+- [ ] HTTPS redirect tested (curl -I http://yourdomain.com)
+- [ ] HSTS header verified (curl -I https://yourdomain.com)
+- [ ] SSL Labs test passed with A+ rating
 - [ ] `.env` file is in `.gitignore` and never committed
 - [ ] All external API keys configured (OpenAI, etc.)
 - [ ] Webhook secrets configured if using webhooks
 - [ ] SMTP settings configured if sending emails
 - [ ] Monitoring/logging services configured (Sentry, etc.)
 - [ ] All security headers reviewed
-- [ ] SSL/TLS certificates configured
 - [ ] Firewall rules configured
 - [ ] Database backups configured
 

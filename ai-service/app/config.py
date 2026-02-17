@@ -29,6 +29,7 @@ class Settings(BaseSettings):
         rate_limit_storage_uri: Storage backend for rate limiting (memory:// or redis://)
         rate_limit_general: Rate limit for general endpoints (requests per minute)
         rate_limit_auth: Rate limit for auth endpoints (requests per minute)
+        enforce_https: Enforce HTTPS in production (redirect HTTP to HTTPS)
     """
 
     # Application settings
@@ -58,6 +59,9 @@ class Settings(BaseSettings):
     rate_limit_storage_uri: str = "memory://"
     rate_limit_general: int = 100  # requests per minute
     rate_limit_auth: int = 10  # requests per minute
+
+    # HTTPS configuration
+    enforce_https: bool = False  # Set to True in production to enforce HTTPS
 
     @property
     def database_url(self) -> str:
