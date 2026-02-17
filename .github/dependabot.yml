@@ -1,0 +1,349 @@
+# Dependabot configuration for LAYA daycare management system
+# Automatically checks for dependency vulnerabilities and creates PRs for updates
+#
+# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # ============================================================================
+  # GitHub Actions Dependencies
+  # ============================================================================
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laya-devops-team"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "security"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+
+  # ============================================================================
+  # Python Dependencies - AI Service
+  # ============================================================================
+  - package-ecosystem: "pip"
+    directory: "/ai-service"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "laya-backend-team"
+    labels:
+      - "dependencies"
+      - "python"
+      - "ai-service"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    # Allow both direct and indirect dependency updates
+    allow:
+      - dependency-type: "all"
+    # Group minor and patch updates to reduce PR noise
+    groups:
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ============================================================================
+  # npm Dependencies - Parent Portal
+  # ============================================================================
+  - package-ecosystem: "npm"
+    directory: "/parent-portal"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "10:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "laya-frontend-team"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "parent-portal"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    # Ignore specific packages if needed (example)
+    # ignore:
+    #   - dependency-name: "eslint"
+    #     update-types: ["version-update:semver-major"]
+    versioning-strategy: increase
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ============================================================================
+  # npm Dependencies - Parent App
+  # ============================================================================
+  - package-ecosystem: "npm"
+    directory: "/parent-app"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "11:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "laya-frontend-team"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "parent-app"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    versioning-strategy: increase
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ============================================================================
+  # npm Dependencies - Teacher App
+  # ============================================================================
+  - package-ecosystem: "npm"
+    directory: "/teacher-app"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "12:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "laya-frontend-team"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "teacher-app"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    versioning-strategy: increase
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ============================================================================
+  # npm Dependencies - Desktop App
+  # ============================================================================
+  - package-ecosystem: "npm"
+    directory: "/desktop-app"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "13:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "laya-frontend-team"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "desktop-app"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    versioning-strategy: increase
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ============================================================================
+  # Composer Dependencies - Gibbon Core
+  # ============================================================================
+  - package-ecosystem: "composer"
+    directory: "/gibbon"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "10:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "laya-backend-team"
+    labels:
+      - "dependencies"
+      - "php"
+      - "gibbon"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    versioning-strategy: increase
+    groups:
+      composer-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ============================================================================
+  # Composer Dependencies - Custom Modules
+  # ============================================================================
+  - package-ecosystem: "composer"
+    directory: "/modules"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "11:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "laya-backend-team"
+    labels:
+      - "dependencies"
+      - "php"
+      - "modules"
+      - "security"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    versioning-strategy: increase
+    groups:
+      composer-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ============================================================================
+  # Docker Dependencies
+  # ============================================================================
+  - package-ecosystem: "docker"
+    directory: "/ai-service"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "10:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laya-devops-team"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "ai-service"
+      - "security"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+
+  - package-ecosystem: "docker"
+    directory: "/parent-portal"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "11:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laya-devops-team"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "parent-portal"
+      - "security"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+
+  - package-ecosystem: "docker"
+    directory: "/gibbon"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "12:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "laya-devops-team"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "gibbon"
+      - "security"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+
+# ============================================================================
+# Configuration Notes
+# ============================================================================
+#
+# Schedule:
+# - GitHub Actions: Monday 9:00 AM
+# - Python (ai-service): Monday 10:00 AM
+# - npm (all apps): Tuesday 10:00-13:00 (staggered)
+# - Composer (gibbon/modules): Wednesday 10:00-11:00
+# - Docker (all services): Thursday 10:00-12:00
+#
+# PR Limits:
+# - GitHub Actions: 5 PRs max
+# - Python/npm/Composer: 10 PRs max
+# - Docker: 5 PRs max
+#
+# Grouping Strategy:
+# - Minor and patch updates are grouped to reduce PR noise
+# - Major updates create individual PRs for careful review
+# - Security updates always create individual PRs
+#
+# Labels:
+# - All PRs tagged with "dependencies" and "security"
+# - Ecosystem-specific labels (python, npm, php, docker, github-actions)
+# - Service-specific labels (ai-service, parent-portal, etc.)
+#
+# Reviewers:
+# - GitHub teams must be configured in repository settings
+# - Update team names to match your organization's structure
+#
+# Integration with CI/CD:
+# - All Dependabot PRs trigger CI workflows automatically
+# - PR checks workflow validates the updates
+# - Branch protection rules ensure tests pass before merge
+#
+# Security:
+# - Dependabot Security Updates are enabled by default
+# - Creates PRs for vulnerabilities in GitHub Advisory Database
+# - Configure in Settings > Security > Code security and analysis
+#
+# Best Practices:
+# 1. Review and merge Dependabot PRs regularly (weekly recommended)
+# 2. Test thoroughly before merging, especially major updates
+# 3. Enable auto-merge for minor/patch updates after CI passes
+# 4. Keep dependencies up-to-date to reduce security risks
+# 5. Monitor Dependabot alerts in Security tab
+#
+# ============================================================================
