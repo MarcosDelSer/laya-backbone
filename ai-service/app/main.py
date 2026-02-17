@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.dependencies import get_current_user
+from app.middleware.error_handler import ErrorHandlerMiddleware
 from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
@@ -17,6 +18,9 @@ app = FastAPI(
     description="AI-powered features for LAYA platform including activity recommendations, coaching guidance, and analytics",
     version="0.1.0",
 )
+
+# Configure error handler middleware (should be first to catch all exceptions)
+app.add_middleware(ErrorHandlerMiddleware)
 
 # Configure CORS middleware for frontend integration
 app.add_middleware(
