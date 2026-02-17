@@ -275,7 +275,7 @@ async def create_monthly_snapshot_in_db(
     session: AsyncSession,
     profile_id: UUID,
     snapshot_month: date,
-    overall_progress: str = "ON_TRACK",
+    overall_progress: str = "on_track",
     generated_by_id: Optional[UUID] = None,
 ) -> UUID:
     """Helper function to create a monthly snapshot in SQLite database."""
@@ -402,7 +402,7 @@ async def sample_snapshot(
         db_session,
         profile_id=sample_profile,
         snapshot_month=date(2024, 1, 1),
-        overall_progress="ON_TRACK",
+        overall_progress="on_track",
         generated_by_id=test_educator_id,
     )
 
@@ -969,7 +969,7 @@ class TestIDORPrevention:
             db_session,
             profile_id=profile_id,
             snapshot_month=date(2024, 2, 1),
-            overall_progress="EXCELLING",
+            overall_progress="excelling",
         )
 
         # Try to access with educator 2 (should fail)
