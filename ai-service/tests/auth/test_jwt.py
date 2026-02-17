@@ -497,10 +497,12 @@ class TestJWTSecurityProperties:
             pass
 
     def test_expiration_is_required(self):
-        """Test that tokens without expiration are handled."""
+        """Test that tokens without expiration claim are rejected."""
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
             # No 'exp' claim
         }
         token = jwt.encode(
@@ -508,10 +510,11 @@ class TestJWTSecurityProperties:
             settings.jwt_secret_key,
             algorithm=settings.jwt_algorithm,
         )
-        # PyJWT by default doesn't require exp, so this should work
-        # but you might want to add require=["exp"] to your decoder
-        decoded = decode_token(token)
-        assert decoded["sub"] == "user123"
+        # Tokens without exp claim should be rejected
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "exp" in exc_info.value.detail.lower()
 
     def test_token_contains_all_standard_claims(self):
         """Test that created tokens have standard JWT claims."""
@@ -537,3 +540,63 @@ class TestJWTSecurityProperties:
         before_seconds = before.replace(microsecond=0)
         after_seconds = after.replace(microsecond=0) + timedelta(seconds=1)
         assert before_seconds <= iat <= after_seconds
+
+    def test_token_missing_exp_claim_raises_401(self):
+        """Test that tokens missing exp claim are rejected."""
+        # Create token without exp claim
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing exp claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "exp" in exc_info.value.detail.lower()
+
+    def test_token_missing_iat_claim_raises_401(self):
+        """Test that tokens missing iat claim are rejected."""
+        # Create token without iat claim
+        payload = {
+            "sub": "user123",
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing iat claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "iat" in exc_info.value.detail.lower()
+
+    def test_token_missing_sub_claim_raises_401(self):
+        """Test that tokens missing sub claim are rejected."""
+        # Create token without sub claim
+        payload = {
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing sub claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "sub" in exc_info.value.detail.lower()
