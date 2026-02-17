@@ -410,3 +410,155 @@ export interface ApiErrorResponse {
   detail: string;
   statusCode?: number;
 }
+
+// ============================================================================
+// RBAC Types
+// ============================================================================
+
+/**
+ * Predefined role types for the RBAC system.
+ */
+export type RoleType = 'director' | 'teacher' | 'assistant' | 'staff' | 'parent';
+
+/**
+ * Types of audit log actions.
+ */
+export type AuditAction =
+  | 'role_assigned'
+  | 'role_revoked'
+  | 'permission_granted'
+  | 'permission_revoked'
+  | 'access_granted'
+  | 'access_denied'
+  | 'login'
+  | 'logout'
+  | 'data_modified'
+  | 'data_deleted';
+
+/**
+ * Types of permission actions.
+ */
+export type PermissionAction = 'read' | 'write' | 'delete' | 'manage';
+
+/**
+ * Permission assigned to a role.
+ */
+export interface Permission {
+  id: string;
+  roleId: string;
+  resource: string;
+  action: string;
+  conditions?: Record<string, unknown>;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+/**
+ * Role with assigned permissions.
+ */
+export interface Role {
+  id: string;
+  name: string;
+  displayName: string;
+  description?: string;
+  isSystemRole: boolean;
+  isActive: boolean;
+  permissions: Permission[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * User role assignment.
+ */
+export interface UserRole {
+  id: string;
+  userId: string;
+  roleId: string;
+  organizationId?: string;
+  groupId?: string;
+  expiresAt?: string;
+  assignedBy?: string;
+  assignedAt: string;
+  isActive: boolean;
+  role?: Role;
+}
+
+/**
+ * Request payload for assigning a role to a user.
+ */
+export interface AssignRoleRequest {
+  userId: string;
+  roleId: string;
+  organizationId?: string;
+  groupId?: string;
+  expiresAt?: string;
+}
+
+/**
+ * Request payload for revoking a role from a user.
+ */
+export interface RevokeRoleRequest {
+  userId: string;
+  roleId: string;
+  organizationId?: string;
+  groupId?: string;
+}
+
+/**
+ * Request payload for checking user permissions.
+ */
+export interface PermissionCheckRequest {
+  userId: string;
+  resource: string;
+  action: string;
+  organizationId?: string;
+  groupId?: string;
+}
+
+/**
+ * Response for permission check results.
+ */
+export interface PermissionCheckResponse {
+  allowed: boolean;
+  userId: string;
+  resource: string;
+  action: string;
+  matchedRole?: string;
+  reason?: string;
+}
+
+/**
+ * Response for getting all permissions for a user.
+ */
+export interface UserPermissionsResponse {
+  userId: string;
+  roles: Role[];
+  permissions: Permission[];
+}
+
+/**
+ * Audit log entry.
+ */
+export interface AuditLog {
+  id: string;
+  userId: string;
+  action: AuditAction;
+  resourceType: string;
+  resourceId?: string;
+  details?: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+}
+
+/**
+ * Filter parameters for querying audit logs.
+ */
+export interface AuditLogFilter {
+  userId?: string;
+  action?: AuditAction;
+  resourceType?: string;
+  startDate?: string;
+  endDate?: string;
+}
