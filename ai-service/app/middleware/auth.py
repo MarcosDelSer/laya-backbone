@@ -29,6 +29,7 @@ from app.auth.audit_logger import (
     get_endpoint,
     get_user_agent,
 )
+from app.auth.blacklist import TokenBlacklistService
 from app.config import settings
 
 # HTTPBearer security scheme for multi-source authentication
@@ -128,6 +129,25 @@ async def verify_token_from_any_source(
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
+
+        # Check if token is blacklisted
+        blacklist_service = TokenBlacklistService()
+        try:
+            is_blacklisted = await blacklist_service.is_token_blacklisted(token)
+            if is_blacklisted:
+                audit_logger.log_verification_failed(
+                    error_message="Token has been revoked (blacklisted)",
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    endpoint=endpoint,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token has been revoked",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        finally:
+            await blacklist_service.close()
 
         # Validate required fields
         if not payload.get("sub"):
