@@ -4,7 +4,7 @@ Loads environment variables with sensible defaults for local development.
 All configuration values can be overridden via environment variables or .env file.
 """
 
-from typing import Literal
+from typing import Optional
 
 from pydantic_settings import BaseSettings
 
@@ -67,6 +67,19 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
+
+    # Logging configuration
+    log_level: str = "INFO"
+    json_logs: bool = True
+    log_file: Optional[str] = None
+
+    # Log rotation configuration
+    log_rotation_enabled: bool = True
+    log_rotation_type: str = "size"  # "size" or "time"
+    log_max_bytes: int = 10 * 1024 * 1024  # 10 MB
+    log_backup_count: int = 5
+    log_rotation_when: str = "midnight"  # For time-based: "S", "M", "H", "D", "midnight"
+    log_rotation_interval: int = 1  # For time-based rotation interval
 
     @property
     def database_url(self) -> str:

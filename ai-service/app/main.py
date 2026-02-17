@@ -1,7 +1,6 @@
 """FastAPI application entry point for LAYA AI Service."""
 
-import asyncio
-import logging
+import os
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
@@ -11,16 +10,12 @@ from pydantic import ValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.core.cache_warming import warm_all_caches
+from app.config import settings
+from app.core.context import get_correlation_id, get_request_id
+from app.core.logging import configure_logging, get_logger
 from app.dependencies import get_current_user
-from app.middleware.rate_limit import get_auth_limit, limiter
-from app.middleware.security import (
-    get_cors_origins,
-    get_hsts_middleware,
-    get_https_redirect_middleware,
-    get_xss_protection_middleware,
-)
-from app.middleware.validation import validation_exception_handler
+from app.middleware.correlation import CorrelationMiddleware
+from app.middleware.error_handler import ErrorHandlerMiddleware
 from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
@@ -33,42 +28,43 @@ from app.security.csrf import CSRFProtectionMiddleware
 
 logger = logging.getLogger(__name__)
 
+# Configure logging on application startup
+# Use JSON logs in production, human-readable in development
+log_level = os.getenv("LOG_LEVEL", settings.log_level)
+json_logs = os.getenv("JSON_LOGS", str(settings.json_logs)).lower() == "true"
+log_file = os.getenv("LOG_FILE", settings.log_file)
+
+# Configure with log rotation support
+configure_logging(
+    log_level=log_level,
+    json_logs=json_logs,
+    log_file=log_file,
+    rotation_enabled=settings.log_rotation_enabled,
+    rotation_type=settings.log_rotation_type,
+    max_bytes=settings.log_max_bytes,
+    backup_count=settings.log_backup_count,
+    when=settings.log_rotation_when,
+    interval=settings.log_rotation_interval,
+)
+
+logger = get_logger(__name__, service="ai-service")
+
 app = FastAPI(
     title="LAYA AI Service",
     description="AI-powered features for LAYA platform including activity recommendations, coaching guidance, and analytics",
     version="0.1.0",
 )
 
-# Configure rate limiting
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+logger.info("Starting LAYA AI Service", version="0.1.0", log_level=log_level)
 
-# Configure validation exception handler for strict mode
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(ValidationError, validation_exception_handler)
+# Configure middleware (order matters - first added is last executed)
+# 1. Correlation middleware sets request/correlation IDs in context
+app.add_middleware(CorrelationMiddleware)
 
-# Configure HTTPS redirect middleware (must be first to redirect HTTP to HTTPS)
-# Redirects all HTTP requests to HTTPS in production for encrypted traffic
-# Respects X-Forwarded-Proto header for reverse proxy deployments
-app.middleware("http")(get_https_redirect_middleware())
+# 2. Error handler middleware uses IDs from context for error responses
+app.add_middleware(ErrorHandlerMiddleware)
 
-# Configure HSTS middleware to enforce HTTPS in browsers
-# Adds Strict-Transport-Security header to HTTPS responses
-# Tells browsers to always use HTTPS for future requests
-app.middleware("http")(get_hsts_middleware())
-
-# Configure CSRF protection middleware
-# Validates CSRF tokens on state-changing requests (POST, PUT, DELETE, PATCH)
-# to prevent Cross-Site Request Forgery attacks
-app.add_middleware(CSRFProtectionMiddleware)
-
-# Configure XSS protection middleware to add security headers
-# Adds Content-Security-Policy, X-Content-Type-Options, and X-Frame-Options
-# to all responses for defense-in-depth protection against XSS attacks
-app.middleware("http")(get_xss_protection_middleware())
-
-# Configure CORS middleware with security lockdown for production
-# Only allows whitelisted origins from environment configuration
+# Configure CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
@@ -131,12 +127,14 @@ async def health_check(request: Request) -> dict:
         request: The incoming request (required for rate limiting)
 
     Returns:
-        dict: Basic service status information
+        dict: Service status information with request tracking IDs
     """
     return {
         "status": "healthy",
         "service": "ai-service",
         "version": "0.1.0",
+        "request_id": get_request_id(),
+        "correlation_id": get_correlation_id(),
     }
 
 
