@@ -115,6 +115,17 @@ This document describes the security-related configuration options for the LAYA 
 - nginx reverse proxy configuration for SSL/TLS termination
 - See `nginx/https.conf.example` for production setup
 
+### 8. Password Complexity Validation
+- Enforces strong password requirements:
+  - Minimum 8 characters
+  - At least one uppercase letter (A-Z)
+  - At least one lowercase letter (a-z)
+  - At least one number (0-9)
+- Available via `validate_password_complexity()` function
+- Provides detailed error messages for validation failures
+- Password strength checking with `get_password_strength()`
+- Prevents common weak passwords
+
 ## HTTPS Configuration
 
 ### Environment Variable
@@ -228,7 +239,9 @@ Before deploying to production, ensure:
    - Use different secrets for each environment
 
 2. **Access Control**
-   - Use strong passwords (min 8 chars, mixed case, numbers)
+   - Use strong passwords (enforced via password complexity validation)
+   - Password requirements: min 8 chars, uppercase, lowercase, number
+   - Use `validate_password_complexity()` in user registration/password change flows
    - Implement least-privilege access
    - Review and audit access logs regularly
 
