@@ -64,38 +64,43 @@ if (!isActionAccessible($guid, $connection2, '/modules/DevelopmentProfile/develo
     $action = $_POST['action'] ?? '';
 
     if ($action === 'addObservation') {
-        $profileID = $_POST['gibbonDevelopmentProfileID'] ?? null;
-        $domain = $_POST['domain'] ?? '';
-        $observedAt = !empty($_POST['observedAt']) ? Format::dateConvert($_POST['observedAt']) : date('Y-m-d H:i:s');
-        $observerType = $_POST['observerType'] ?? 'educator';
-        $behaviorDescription = $_POST['behaviorDescription'] ?? '';
-        $context = !empty($_POST['context']) ? $_POST['context'] : null;
-        $isMilestone = isset($_POST['isMilestone']) && $_POST['isMilestone'] === 'Y';
-        $isConcern = isset($_POST['isConcern']) && $_POST['isConcern'] === 'Y';
-
-        if (!empty($profileID) && !empty($domain) && !empty($behaviorDescription)) {
-            $result = $observationGateway->logObservation(
-                $profileID,
-                $domain,
-                $observedAt,
-                $gibbonPersonID,
-                $observerType,
-                $behaviorDescription,
-                $context,
-                $isMilestone,
-                $isConcern,
-                null // attachments
-            );
-
-            if ($result !== false) {
-                $page->addSuccess(__('Observation has been recorded successfully.'));
-                // Clear form data on success
-                $gibbonDevelopmentProfileID = null;
-            } else {
-                $page->addError(__('Failed to record observation.'));
-            }
+        // CSRF check
+        if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $session->get('csrf_token')) {
+            $page->addError(__('Your request failed because you do not have access to this action.'));
         } else {
-            $page->addError(__('Please fill in all required fields.'));
+            $profileID = $_POST['gibbonDevelopmentProfileID'] ?? null;
+            $domain = $_POST['domain'] ?? '';
+            $observedAt = !empty($_POST['observedAt']) ? Format::dateConvert($_POST['observedAt']) : date('Y-m-d H:i:s');
+            $observerType = $_POST['observerType'] ?? 'educator';
+            $behaviorDescription = $_POST['behaviorDescription'] ?? '';
+            $context = !empty($_POST['context']) ? $_POST['context'] : null;
+            $isMilestone = isset($_POST['isMilestone']) && $_POST['isMilestone'] === 'Y';
+            $isConcern = isset($_POST['isConcern']) && $_POST['isConcern'] === 'Y';
+
+            if (!empty($profileID) && !empty($domain) && !empty($behaviorDescription)) {
+                $result = $observationGateway->logObservation(
+                    $profileID,
+                    $domain,
+                    $observedAt,
+                    $gibbonPersonID,
+                    $observerType,
+                    $behaviorDescription,
+                    $context,
+                    $isMilestone,
+                    $isConcern,
+                    null // attachments
+                );
+
+                if ($result !== false) {
+                    $page->addSuccess(__('Observation has been recorded successfully.'));
+                    // Clear form data on success
+                    $gibbonDevelopmentProfileID = null;
+                } else {
+                    $page->addError(__('Failed to record observation.'));
+                }
+            } else {
+                $page->addError(__('Please fill in all required fields.'));
+            }
         }
     }
 
@@ -124,6 +129,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/DevelopmentProfile/develo
         $form = Form::create('addObservation', $session->get('absoluteURL') . '/index.php?q=/modules/DevelopmentProfile/developmentProfile_add.php');
         $form->setDescription(__('Record an observation about a child\'s developmental behavior. Observations help build a comprehensive picture of each child\'s growth across the 6 Quebec developmental domains.'));
         $form->addHiddenValue('action', 'addObservation');
+        $form->addHiddenValue('csrf_token', $session->get('csrf_token'));
 
         // Child selection
         $row = $form->addRow();
