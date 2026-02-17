@@ -603,6 +603,52 @@ class InterventionPlanService:
 
         return [VersionResponse.model_validate(v) for v in versions]
 
+    async def get_version(
+        self,
+        plan_id: UUID,
+        version_number: int,
+    ) -> VersionResponse:
+        """Get a specific version snapshot of the plan.
+
+        Retrieves a specific version record by version number.
+
+        Args:
+            plan_id: ID of the intervention plan
+            version_number: The version number to retrieve
+
+        Returns:
+            VersionResponse with the version snapshot
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            PlanVersionError: When the version is not found
+        """
+        # Verify plan exists
+        query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
+        result = await self.db.execute(query)
+        plan = result.scalar_one_or_none()
+
+        if not plan:
+            raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Get the specific version
+        version_query = (
+            select(InterventionVersion)
+            .where(
+                InterventionVersion.plan_id == plan_id,
+                InterventionVersion.version_number == version_number,
+            )
+        )
+        version_result = await self.db.execute(version_query)
+        version = version_result.scalar_one_or_none()
+
+        if not version:
+            raise PlanVersionError(
+                f"Version {version_number} not found for plan {plan_id}"
+            )
+
+        return VersionResponse.model_validate(version)
+
     async def get_plans_for_review(
         self,
         user_id: UUID,
