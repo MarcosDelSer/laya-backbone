@@ -30,6 +30,23 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
 
+    # Redis configuration
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str = ""
+
+    @property
+    def redis_url(self) -> str:
+        """Construct the Redis URL.
+
+        Returns:
+            str: Redis connection URL
+        """
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
     @property
     def database_url(self) -> str:
         """Construct the async database URL.
