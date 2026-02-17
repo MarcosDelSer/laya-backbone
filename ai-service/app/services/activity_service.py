@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache, invalidate_cache
 from app.models.activity import (
     Activity,
     ActivityParticipation,
@@ -483,3 +484,145 @@ class ActivityService:
         await self.db.commit()
         await self.db.refresh(recommendation)
         return recommendation
+
+    @cache(ttl=3600, key_prefix="activity_catalog")
+    async def get_activity_catalog(
+        self,
+        activity_type: Optional[str] = None,
+    ) -> list[dict]:
+        """Fetch the complete activity catalog with caching.
+
+        This method fetches all active activities from the database and caches
+        them in Redis with a 1-hour (3600 seconds) TTL. Subsequent requests
+        within 1 hour will be served from cache.
+
+        The catalog can be optionally filtered by activity type.
+
+        Args:
+            activity_type: Optional filter for specific activity type
+
+        Returns:
+            list[dict]: List of activity data as dictionaries
+        """
+        # Build query for all active activities
+        query = select(Activity).where(Activity.is_active == True)
+
+        # Apply activity type filter if specified
+        if activity_type:
+            try:
+                type_value = ActivityType(activity_type)
+                query = query.where(Activity.activity_type == type_value)
+            except ValueError:
+                # Invalid activity type, return empty list
+                return []
+
+        # Order by name for consistent ordering
+        query = query.order_by(Activity.name)
+
+        # Execute query
+        result = await self.db.execute(query)
+        activities = result.scalars().all()
+
+        # Convert to dictionaries for caching
+        catalog = []
+        for activity in activities:
+            catalog.append({
+                "id": str(activity.id),
+                "name": activity.name,
+                "description": activity.description,
+                "activity_type": activity.activity_type.value,
+                "difficulty": activity.difficulty.value,
+                "duration_minutes": activity.duration_minutes,
+                "materials_needed": activity.materials_needed or [],
+                "min_age_months": activity.min_age_months,
+                "max_age_months": activity.max_age_months,
+                "special_needs_adaptations": activity.special_needs_adaptations,
+                "is_active": activity.is_active,
+                "created_at": activity.created_at.isoformat(),
+                "updated_at": activity.updated_at.isoformat(),
+            })
+
+        return catalog
+
+    async def get_activity_catalog_validated(
+        self,
+        activity_type: Optional[str] = None,
+    ) -> list[ActivityResponse]:
+        """Fetch and validate the activity catalog.
+
+        This method fetches the activity catalog and validates it against
+        the ActivityResponse schema.
+
+        Args:
+            activity_type: Optional filter for specific activity type
+
+        Returns:
+            list[ActivityResponse]: List of validated activity data
+        """
+        catalog_data = await self.get_activity_catalog(activity_type)
+
+        validated_catalog: list[ActivityResponse] = []
+        for activity_data in catalog_data:
+            # Convert back from dict to ActivityResponse
+            age_range = None
+            if activity_data.get("min_age_months") is not None or activity_data.get("max_age_months") is not None:
+                age_range = AgeRange(
+                    min_months=activity_data.get("min_age_months") or 0,
+                    max_months=activity_data.get("max_age_months") or 144,
+                )
+
+            validated_catalog.append(ActivityResponse(
+                id=UUID(activity_data["id"]),
+                name=activity_data["name"],
+                description=activity_data["description"],
+                activity_type=activity_data["activity_type"],
+                difficulty=activity_data["difficulty"],
+                duration_minutes=activity_data["duration_minutes"],
+                materials_needed=activity_data["materials_needed"],
+                age_range=age_range,
+                special_needs_adaptations=activity_data.get("special_needs_adaptations"),
+                is_active=activity_data["is_active"],
+                created_at=datetime.fromisoformat(activity_data["created_at"]),
+                updated_at=datetime.fromisoformat(activity_data["updated_at"]),
+            ))
+
+        return validated_catalog
+
+    async def invalidate_activity_catalog_cache(
+        self,
+        activity_type: Optional[str] = None,
+    ) -> int:
+        """Invalidate cached activity catalog.
+
+        Args:
+            activity_type: Specific activity type to invalidate, or None to invalidate all
+
+        Returns:
+            int: Number of cache entries deleted
+        """
+        if activity_type:
+            # Invalidate specific activity type catalog cache
+            pattern = f"*{activity_type}*"
+        else:
+            # Invalidate all activity catalog caches
+            pattern = "*"
+
+        return await invalidate_cache("activity_catalog", pattern)
+
+    async def refresh_activity_catalog_cache(
+        self,
+        activity_type: Optional[str] = None,
+    ) -> list[dict]:
+        """Refresh activity catalog cache by invalidating and refetching.
+
+        Args:
+            activity_type: Optional filter for specific activity type
+
+        Returns:
+            list[dict]: Fresh activity catalog data
+        """
+        # Invalidate existing cache
+        await self.invalidate_activity_catalog_cache(activity_type)
+
+        # Fetch fresh data (which will be cached)
+        return await self.get_activity_catalog(activity_type)
