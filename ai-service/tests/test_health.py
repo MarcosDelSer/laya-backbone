@@ -689,3 +689,373 @@ async def test_health_check_critical_pool(
                 # Overall status should be unhealthy due to critical pool
                 assert data["status"] == "unhealthy"
                 assert data["checks"]["database_pool"]["status"] == "critical"
+
+
+# =============================================================================
+# Notification Queue Monitoring Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_check_notification_queues_healthy() -> None:
+    """Test notification queue check with healthy queues."""
+    from app.routers.health import check_notification_queues
+
+    # Mock Redis client
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock()
+    mock_client.llen = AsyncMock(side_effect=[10, 5, 2])  # email, push, sms
+    mock_client.close = AsyncMock()
+
+    with patch("redis.asyncio.Redis") as mock_redis_class:
+        mock_redis_class.return_value = mock_client
+
+        result = await check_notification_queues()
+
+        assert result["status"] == "healthy"
+        assert result["connected"] is True
+        assert result["total_depth"] == 17
+
+        # Verify individual queues
+        queues = result["queues"]
+        assert "email" in queues
+        assert "push" in queues
+        assert "sms" in queues
+
+        # Email queue
+        assert queues["email"]["depth"] == 10
+        assert queues["email"]["status"] == "healthy"
+        assert queues["email"]["warning_threshold"] == 1000
+        assert queues["email"]["critical_threshold"] == 5000
+
+        # Push queue
+        assert queues["push"]["depth"] == 5
+        assert queues["push"]["status"] == "healthy"
+        assert queues["push"]["warning_threshold"] == 500
+        assert queues["push"]["critical_threshold"] == 2000
+
+        # SMS queue
+        assert queues["sms"]["depth"] == 2
+        assert queues["sms"]["status"] == "healthy"
+        assert queues["sms"]["warning_threshold"] == 100
+        assert queues["sms"]["critical_threshold"] == 500
+
+
+@pytest.mark.asyncio
+async def test_check_notification_queues_degraded() -> None:
+    """Test notification queue check with degraded queues."""
+    from app.routers.health import check_notification_queues
+
+    # Mock Redis client with email queue at warning threshold
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock()
+    mock_client.llen = AsyncMock(side_effect=[1200, 50, 10])  # email warning, push ok, sms ok
+    mock_client.close = AsyncMock()
+
+    with patch("redis.asyncio.Redis") as mock_redis_class:
+        mock_redis_class.return_value = mock_client
+
+        result = await check_notification_queues()
+
+        assert result["status"] == "degraded"
+        assert result["connected"] is True
+        assert result["total_depth"] == 1260
+
+        # Email queue should be degraded
+        assert result["queues"]["email"]["status"] == "degraded"
+        assert result["queues"]["email"]["depth"] == 1200
+
+        # Other queues should be healthy
+        assert result["queues"]["push"]["status"] == "healthy"
+        assert result["queues"]["sms"]["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_check_notification_queues_critical() -> None:
+    """Test notification queue check with critical queues."""
+    from app.routers.health import check_notification_queues
+
+    # Mock Redis client with email queue at critical threshold
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock()
+    mock_client.llen = AsyncMock(side_effect=[6000, 50, 10])  # email critical, push ok, sms ok
+    mock_client.close = AsyncMock()
+
+    with patch("redis.asyncio.Redis") as mock_redis_class:
+        mock_redis_class.return_value = mock_client
+
+        result = await check_notification_queues()
+
+        assert result["status"] == "critical"
+        assert result["connected"] is True
+        assert result["total_depth"] == 6060
+
+        # Email queue should be critical
+        assert result["queues"]["email"]["status"] == "critical"
+        assert result["queues"]["email"]["depth"] == 6000
+
+
+@pytest.mark.asyncio
+async def test_check_notification_queues_multiple_critical() -> None:
+    """Test notification queue check with multiple critical queues."""
+    from app.routers.health import check_notification_queues
+
+    # Mock Redis client with multiple queues at critical
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock()
+    mock_client.llen = AsyncMock(side_effect=[6000, 2500, 600])  # all critical
+    mock_client.close = AsyncMock()
+
+    with patch("redis.asyncio.Redis") as mock_redis_class:
+        mock_redis_class.return_value = mock_client
+
+        result = await check_notification_queues()
+
+        assert result["status"] == "critical"
+        assert result["total_depth"] == 9100
+
+        # All queues should be critical
+        assert result["queues"]["email"]["status"] == "critical"
+        assert result["queues"]["push"]["status"] == "critical"
+        assert result["queues"]["sms"]["status"] == "critical"
+
+
+@pytest.mark.asyncio
+async def test_check_notification_queues_connection_error() -> None:
+    """Test notification queue check with Redis connection error."""
+    from app.routers.health import check_notification_queues
+
+    # Mock Redis client to raise exception
+    mock_client = AsyncMock()
+    mock_client.ping.side_effect = Exception("Connection refused")
+
+    with patch("redis.asyncio.Redis") as mock_redis_class:
+        mock_redis_class.return_value = mock_client
+
+        result = await check_notification_queues()
+
+        assert result["status"] == "unhealthy"
+        assert result["connected"] is False
+        assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_check_notification_queues_empty() -> None:
+    """Test notification queue check with empty queues."""
+    from app.routers.health import check_notification_queues
+
+    # Mock Redis client with empty queues
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock()
+    mock_client.llen = AsyncMock(side_effect=[0, 0, 0])  # all empty
+    mock_client.close = AsyncMock()
+
+    with patch("redis.asyncio.Redis") as mock_redis_class:
+        mock_redis_class.return_value = mock_client
+
+        result = await check_notification_queues()
+
+        assert result["status"] == "healthy"
+        assert result["total_depth"] == 0
+
+        # All queues should be healthy and empty
+        assert result["queues"]["email"]["depth"] == 0
+        assert result["queues"]["email"]["status"] == "healthy"
+        assert result["queues"]["push"]["depth"] == 0
+        assert result["queues"]["push"]["status"] == "healthy"
+        assert result["queues"]["sms"]["depth"] == 0
+        assert result["queues"]["sms"]["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_notification_queues_endpoint(client: AsyncClient) -> None:
+    """Test notification queues monitoring endpoint.
+
+    Args:
+        client: Async HTTP client fixture
+    """
+    # Mock queue check
+    with patch("app.routers.health.check_notification_queues") as mock_queues:
+        mock_queues.return_value = {
+            "status": "healthy",
+            "total_depth": 42,
+            "connected": True,
+            "queues": {
+                "email": {
+                    "depth": 25,
+                    "status": "healthy",
+                    "queue_name": "laya:notifications:email",
+                    "warning_threshold": 1000,
+                    "critical_threshold": 5000,
+                },
+                "push": {
+                    "depth": 15,
+                    "status": "healthy",
+                    "queue_name": "laya:notifications:push",
+                    "warning_threshold": 500,
+                    "critical_threshold": 2000,
+                },
+                "sms": {
+                    "depth": 2,
+                    "status": "healthy",
+                    "queue_name": "laya:notifications:sms",
+                    "warning_threshold": 100,
+                    "critical_threshold": 500,
+                },
+            },
+        }
+
+        response = await client.get("/api/v1/health/queues")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify response structure
+        assert "timestamp" in data
+        assert "status" in data
+        assert "total_depth" in data
+        assert "queues" in data
+
+        # Verify timestamp format
+        assert data["timestamp"].endswith("Z")
+
+        # Verify queue data
+        assert data["status"] == "healthy"
+        assert data["total_depth"] == 42
+
+        queues = data["queues"]
+        assert "email" in queues
+        assert "push" in queues
+        assert "sms" in queues
+
+        # Verify email queue data
+        assert queues["email"]["depth"] == 25
+        assert queues["email"]["status"] == "healthy"
+        assert queues["email"]["queue_name"] == "laya:notifications:email"
+
+
+@pytest.mark.asyncio
+async def test_health_check_includes_notification_queues(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test that comprehensive health check includes notification queue metrics.
+
+    Args:
+        client: Async HTTP client fixture
+        db_session: Database session fixture
+    """
+    with patch("app.routers.health.check_redis_health") as mock_redis:
+        with patch("app.routers.health.check_redis_pool") as mock_redis_pool:
+            with patch("app.routers.health.check_notification_queues") as mock_queues:
+                mock_redis.return_value = {
+                    "status": "healthy",
+                    "connected": True,
+                }
+
+                mock_redis_pool.return_value = {
+                    "status": "healthy",
+                    "max_connections": 10,
+                }
+
+                mock_queues.return_value = {
+                    "status": "healthy",
+                    "total_depth": 42,
+                    "connected": True,
+                    "queues": {},
+                }
+
+                response = await client.get("/api/v1/health")
+
+                assert response.status_code == 200
+                data = response.json()
+
+                # Verify queue checks are included
+                checks = data["checks"]
+                assert "notification_queues" in checks
+
+                # Verify queue data structure
+                assert checks["notification_queues"]["status"] == "healthy"
+                assert checks["notification_queues"]["total_depth"] == 42
+
+
+@pytest.mark.asyncio
+async def test_health_check_degraded_queues(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test health check with degraded notification queues.
+
+    Args:
+        client: Async HTTP client fixture
+        db_session: Database session fixture
+    """
+    with patch("app.routers.health.check_redis_health") as mock_redis:
+        with patch("app.routers.health.check_redis_pool") as mock_redis_pool:
+            with patch("app.routers.health.check_notification_queues") as mock_queues:
+                mock_redis.return_value = {
+                    "status": "healthy",
+                    "connected": True,
+                }
+
+                mock_redis_pool.return_value = {
+                    "status": "healthy",
+                    "max_connections": 10,
+                }
+
+                mock_queues.return_value = {
+                    "status": "degraded",
+                    "total_depth": 1500,
+                    "connected": True,
+                    "queues": {},
+                }
+
+                response = await client.get("/api/v1/health")
+
+                assert response.status_code == 200
+                data = response.json()
+
+                # Overall status should be degraded due to queues
+                assert data["status"] == "degraded"
+                assert data["checks"]["notification_queues"]["status"] == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_health_check_critical_queues(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test health check with critical notification queues.
+
+    Args:
+        client: Async HTTP client fixture
+        db_session: Database session fixture
+    """
+    with patch("app.routers.health.check_redis_health") as mock_redis:
+        with patch("app.routers.health.check_redis_pool") as mock_redis_pool:
+            with patch("app.routers.health.check_notification_queues") as mock_queues:
+                mock_redis.return_value = {
+                    "status": "healthy",
+                    "connected": True,
+                }
+
+                mock_redis_pool.return_value = {
+                    "status": "healthy",
+                    "max_connections": 10,
+                }
+
+                mock_queues.return_value = {
+                    "status": "critical",
+                    "total_depth": 7000,
+                    "connected": True,
+                    "queues": {},
+                }
+
+                response = await client.get("/api/v1/health")
+
+                assert response.status_code == 200
+                data = response.json()
+
+                # Overall status should be degraded (not unhealthy) due to critical queues
+                assert data["status"] == "degraded"
+                assert data["checks"]["notification_queues"]["status"] == "critical"

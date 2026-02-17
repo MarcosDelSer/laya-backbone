@@ -276,10 +276,118 @@ async def check_redis_pool() -> Dict[str, Any]:
         }
 
 
+async def check_notification_queues() -> Dict[str, Any]:
+    """Check notification queue depth and health.
+
+    Monitors Redis-based notification queues for email, push notifications,
+    and SMS. Provides depth metrics and health status based on queue size.
+
+    Returns:
+        Dict containing notification queue statistics and health status
+    """
+    try:
+        # Try to import and use redis
+        import redis.asyncio as redis
+        from app.config import settings
+
+        # Get Redis connection details from settings
+        redis_host = getattr(settings, 'redis_host', 'localhost')
+        redis_port = getattr(settings, 'redis_port', 6379)
+        redis_db = getattr(settings, 'redis_db', 0)
+
+        # Create Redis client
+        client = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            db=redis_db,
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+
+        # Ping to ensure connection
+        await client.ping()
+
+        # Define notification queue names
+        # These are standard queue names used for different notification types
+        queue_names = {
+            "email": "laya:notifications:email",
+            "push": "laya:notifications:push",
+            "sms": "laya:notifications:sms",
+        }
+
+        # Get queue depths
+        queues = {}
+        total_depth = 0
+
+        for queue_type, queue_name in queue_names.items():
+            # Get queue length (LLEN for Redis lists)
+            depth = await client.llen(queue_name)
+
+            # Determine queue health based on depth
+            # Warning thresholds:
+            # - email: >1000 messages (warning), >5000 (critical)
+            # - push: >500 messages (warning), >2000 (critical)
+            # - sms: >100 messages (warning), >500 (critical)
+            thresholds = {
+                "email": {"warning": 1000, "critical": 5000},
+                "push": {"warning": 500, "critical": 2000},
+                "sms": {"warning": 100, "critical": 500},
+            }
+
+            queue_thresholds = thresholds.get(queue_type, {"warning": 1000, "critical": 5000})
+
+            if depth >= queue_thresholds["critical"]:
+                queue_status = "critical"
+            elif depth >= queue_thresholds["warning"]:
+                queue_status = "degraded"
+            else:
+                queue_status = "healthy"
+
+            queues[queue_type] = {
+                "depth": depth,
+                "status": queue_status,
+                "queue_name": queue_name,
+                "warning_threshold": queue_thresholds["warning"],
+                "critical_threshold": queue_thresholds["critical"],
+            }
+            total_depth += depth
+
+        # Determine overall queue health
+        queue_statuses = [q["status"] for q in queues.values()]
+        if "critical" in queue_statuses:
+            overall_status = "critical"
+        elif "degraded" in queue_statuses:
+            overall_status = "degraded"
+        else:
+            overall_status = "healthy"
+
+        await client.close()
+
+        return {
+            "status": overall_status,
+            "total_depth": total_depth,
+            "queues": queues,
+            "connected": True,
+        }
+    except ImportError:
+        return {
+            "status": "unknown",
+            "connected": False,
+            "message": "Redis client not installed",
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "connected": False,
+            "error": str(e),
+        }
+
+
 @router.get(
     "",
     summary="Comprehensive health check",
-    description="Returns comprehensive health status including database, Redis, disk, and memory",
+    description="Returns comprehensive health status including database, Redis, disk, memory, and notification queues",
     response_model=None,
 )
 async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
@@ -292,6 +400,7 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     - Memory usage
     - Database connection pool status
     - Redis connection pool status
+    - Notification queue depth and status
 
     Args:
         db: Async database session (injected)
@@ -314,7 +423,8 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
                 "disk": {"status": "healthy", "percent_used": 45.2},
                 "memory": {"status": "healthy", "rss_mb": 256.5},
                 "database_pool": {"status": "healthy", "utilization_percent": 40.0},
-                "redis_pool": {"status": "healthy", "max_connections": 10}
+                "redis_pool": {"status": "healthy", "max_connections": 10},
+                "notification_queues": {"status": "healthy", "total_depth": 42}
             }
         }
     """
@@ -325,6 +435,7 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     memory_health = get_memory_usage()
     db_pool_health = check_database_pool()
     redis_pool_health = await check_redis_pool()
+    notification_queue_health = await check_notification_queues()
 
     # Determine overall health status
     checks = {
@@ -334,12 +445,17 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
         "memory": memory_health,
         "database_pool": db_pool_health,
         "redis_pool": redis_pool_health,
+        "notification_queues": notification_queue_health,
     }
 
     # Overall status is healthy only if all critical checks pass
     # Redis is optional, so we only consider it if it's configured
     # Pool status is important - degraded pools should make overall status degraded
+    # Notification queues are important - critical queues should make overall status degraded
     critical_checks = [database_health, disk_health, db_pool_health]
+
+    # Notification queues contribute to overall health but don't cause complete failure
+    queue_check = notification_queue_health
 
     # Check for any critical failures
     has_critical = any(
@@ -347,11 +463,11 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
         for check in critical_checks
     )
 
-    # Check for any degraded states
+    # Check for any degraded states (including critical queue status)
     has_degraded = any(
         check.get("status") == "degraded"
         for check in critical_checks
-    )
+    ) or queue_check.get("status") in ["degraded", "critical"]
 
     if has_critical:
         overall_status = "unhealthy"
@@ -471,4 +587,62 @@ async def connection_pools() -> Dict[str, Any]:
             "database": db_pool,
             "redis": redis_pool,
         },
+    }
+
+
+@router.get(
+    "/queues",
+    summary="Notification queue monitoring",
+    description="Monitor notification queue depth and health status",
+    response_model=None,
+)
+async def notification_queues() -> Dict[str, Any]:
+    """Notification queue monitoring endpoint.
+
+    Provides detailed metrics about notification queues including email,
+    push notifications, and SMS. Monitors queue depth and provides health
+    status based on configurable thresholds.
+
+    Returns:
+        Dict containing queue statistics and health status
+
+    Example:
+        GET /health/queues
+
+        Response:
+        {
+            "timestamp": "2024-02-15T10:30:00Z",
+            "status": "healthy",
+            "total_depth": 42,
+            "queues": {
+                "email": {
+                    "depth": 25,
+                    "status": "healthy",
+                    "queue_name": "laya:notifications:email",
+                    "warning_threshold": 1000,
+                    "critical_threshold": 5000
+                },
+                "push": {
+                    "depth": 15,
+                    "status": "healthy",
+                    "queue_name": "laya:notifications:push",
+                    "warning_threshold": 500,
+                    "critical_threshold": 2000
+                },
+                "sms": {
+                    "depth": 2,
+                    "status": "healthy",
+                    "queue_name": "laya:notifications:sms",
+                    "warning_threshold": 100,
+                    "critical_threshold": 500
+                }
+            }
+        }
+    """
+    # Get notification queue statistics
+    queue_stats = await check_notification_queues()
+
+    return {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        **queue_stats,
     }
