@@ -31,22 +31,27 @@ const MIN_INTERVAL_HOURS = 4;
  */
 const CONCENTRATION_INFO: Record<
   AcetaminophenConcentration,
-  { label: string; description: string; icon: 'drops' | 'syrup' | 'concentrated' }
+  { label: string; description: string; icon: 'drops' | 'syrup' | 'concentrated' | 'tablet' }
 > = {
   '80mg/mL': {
     label: 'Infant Drops',
     description: '80 mg per 1 mL',
     icon: 'drops',
   },
-  '80mg/5mL': {
-    label: "Children's Syrup",
-    description: '80 mg per 5 mL',
-    icon: 'syrup',
-  },
   '160mg/5mL': {
-    label: 'Concentrated Syrup',
+    label: 'Children\'s Suspension',
     description: '160 mg per 5 mL',
     icon: 'concentrated',
+  },
+  '325mg': {
+    label: '325mg Tablet',
+    description: '325 mg per tablet',
+    icon: 'tablet',
+  },
+  '500mg': {
+    label: '500mg Tablet',
+    description: '500 mg per tablet',
+    icon: 'tablet',
   },
 };
 
@@ -78,10 +83,10 @@ function calculateDosing(weightKg: number): DosingInfo[] {
     return [];
   }
 
-  const minDoseMg = Math.round(weightKg * 10);
-  const maxDoseMg = Math.round(weightKg * 15);
+  const minDoseMg = Math.round(weightKg * MIN_MG_PER_KG); // 10 mg/kg
+  const maxDoseMg = Math.round(weightKg * MAX_MG_PER_KG); // 15 mg/kg
 
-  const concentrations: AcetaminophenConcentration[] = ['80mg/mL', '80mg/5mL', '160mg/5mL'];
+  const concentrations: AcetaminophenConcentration[] = ['80mg/mL', '160mg/5mL', '325mg', '500mg'];
 
   return concentrations.map((concentration) => {
     let minDoseMl: number;
@@ -89,19 +94,24 @@ function calculateDosing(weightKg: number): DosingInfo[] {
 
     switch (concentration) {
       case '80mg/mL':
-        // 80 mg per 1 mL
+        // Infant drops: 80 mg per 1 mL
         minDoseMl = minDoseMg / 80;
         maxDoseMl = maxDoseMg / 80;
         break;
-      case '80mg/5mL':
-        // 80 mg per 5 mL = 16 mg per 1 mL
-        minDoseMl = (minDoseMg / 80) * 5;
-        maxDoseMl = (maxDoseMg / 80) * 5;
-        break;
       case '160mg/5mL':
-        // 160 mg per 5 mL = 32 mg per 1 mL
+        // Children's suspension: 160 mg per 5 mL = 32 mg per 1 mL
         minDoseMl = (minDoseMg / 160) * 5;
         maxDoseMl = (maxDoseMg / 160) * 5;
+        break;
+      case '325mg':
+        // 325mg tablet: show as fraction of tablet
+        minDoseMl = minDoseMg / 325;
+        maxDoseMl = maxDoseMg / 325;
+        break;
+      case '500mg':
+        // 500mg tablet: show as fraction of tablet
+        minDoseMl = minDoseMg / 500;
+        maxDoseMl = maxDoseMg / 500;
         break;
     }
 
@@ -112,7 +122,7 @@ function calculateDosing(weightKg: number): DosingInfo[] {
       maxWeightKg: weightKg,
       minDoseMg,
       maxDoseMg,
-      minDoseMl: Math.round(minDoseMl * 10) / 10,
+      minDoseMl: Math.round(minDoseMl * 10) / 10, // Round to 1 decimal place
       maxDoseMl: Math.round(maxDoseMl * 10) / 10,
       displayLabel: CONCENTRATION_INFO[concentration].label,
     };
@@ -122,7 +132,7 @@ function calculateDosing(weightKg: number): DosingInfo[] {
 /**
  * Get icon for concentration type.
  */
-function getConcentrationIcon(type: 'drops' | 'syrup' | 'concentrated'): React.ReactNode {
+function getConcentrationIcon(type: 'drops' | 'syrup' | 'concentrated' | 'tablet'): React.ReactNode {
   switch (type) {
     case 'drops':
       return (
@@ -169,6 +179,22 @@ function getConcentrationIcon(type: 'drops' | 'syrup' | 'concentrated'): React.R
             strokeLinejoin="round"
             strokeWidth={2}
             d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
+          />
+        </svg>
+      );
+    case 'tablet':
+      return (
+        <svg
+          className="h-5 w-5 text-green-600"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
           />
         </svg>
       );
@@ -259,7 +285,7 @@ export function DosingChart({
   weightKg,
   ageMonths,
   dosingOptions,
-  recommendedConcentration = '80mg/5mL',
+  recommendedConcentration = '80mg/mL',
   showDailyDoseWarning = true,
   onConcentrationSelect,
   selectedConcentration,
