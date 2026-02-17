@@ -307,6 +307,7 @@ def get_client_ip(request: Any) -> Optional[str]:
     """Extract client IP address from request.
 
     Handles various proxy headers in order of reliability.
+    Robust to None request or missing attributes.
 
     Args:
         request: FastAPI Request object
@@ -314,6 +315,9 @@ def get_client_ip(request: Any) -> Optional[str]:
     Returns:
         Optional[str]: Client IP address or None
     """
+    if request is None:
+        return None
+
     # Check headers in order of preference
     headers_to_check = [
         "cf-connecting-ip",  # Cloudflare
@@ -321,19 +325,25 @@ def get_client_ip(request: Any) -> Optional[str]:
         "x-forwarded-for",  # Standard proxy
     ]
 
-    for header in headers_to_check:
-        if value := request.headers.get(header):
-            # Handle comma-separated list (X-Forwarded-For)
-            if "," in value:
-                return value.split(",")[0].strip()
-            return value
+    if hasattr(request, "headers") and request.headers is not None:
+        for header in headers_to_check:
+            if value := request.headers.get(header):
+                # Handle comma-separated list (X-Forwarded-For)
+                if "," in value:
+                    return value.split(",")[0].strip()
+                return value
 
     # Fallback to direct client
-    return request.client.host if hasattr(request, "client") else None
+    # Handle cases where request.client may be None (e.g., test environments, certain proxies)
+    if hasattr(request, "client") and request.client is not None:
+        return getattr(request.client, "host", None)
+    return None
 
 
 def get_user_agent(request: Any) -> Optional[str]:
     """Extract user agent from request.
+
+    Handles cases where request or headers may be None/unavailable.
 
     Args:
         request: FastAPI Request object
@@ -341,16 +351,29 @@ def get_user_agent(request: Any) -> Optional[str]:
     Returns:
         Optional[str]: User agent string or None
     """
+    if request is None:
+        return None
+    if not hasattr(request, "headers") or request.headers is None:
+        return None
     return request.headers.get("user-agent")
 
 
 def get_endpoint(request: Any) -> str:
     """Extract endpoint path from request.
 
+    Handles cases where request, method, or url may be None/unavailable.
+
     Args:
         request: FastAPI Request object
 
     Returns:
-        str: Endpoint path
+        str: Endpoint path or empty string if unavailable
     """
-    return f"{request.method} {request.url.path}" if hasattr(request, "url") else ""
+    if request is None:
+        return ""
+    method = getattr(request, "method", None) or ""
+    url = getattr(request, "url", None)
+    path = getattr(url, "path", "") if url is not None else ""
+    if method and path:
+        return f"{method} {path}"
+    return path or method or ""

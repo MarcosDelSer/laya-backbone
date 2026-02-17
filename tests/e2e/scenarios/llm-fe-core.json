@@ -1,0 +1,785 @@
+{
+  "$schema": "./scenario-schema.json",
+  "version": "1.0.0",
+  "name": "LLM Frontend Core Scenarios",
+  "description": "Core user journeys for LLM-guided exploratory frontend review of AISync module",
+  "target_app": "gibbon/modules/AISync",
+  "base_url": "${GIBBON_URL:-http://localhost:8080}",
+  "auth": {
+    "username_env": "ADMIN_USERNAME",
+    "password_env": "ADMIN_PASSWORD",
+    "login_url": "/index.php",
+    "username_selector": "input[name=\"username\"]",
+    "password_selector": "input[name=\"password\"]",
+    "submit_selector": "input[type=\"submit\"], button[type=\"submit\"]"
+  },
+  "scenarios": [
+    {
+      "id": "core-001",
+      "name": "First-Time Admin Login",
+      "category": "authentication",
+      "severity": "critical",
+      "description": "Verify admin can log in and access AISync module",
+      "tags": ["onboarding", "auth", "critical-path"],
+      "prerequisites": [],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php",
+          "description": "Navigate to Gibbon login page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "input[name=\"username\"]",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"username\"]",
+          "value": "${ADMIN_USERNAME}",
+          "description": "Enter admin username"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"password\"]",
+          "value": "${ADMIN_PASSWORD}",
+          "description": "Enter admin password"
+        },
+        {
+          "action": "click",
+          "selector": "input[type=\"submit\"], button[type=\"submit\"]",
+          "description": "Submit login form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_not_contains",
+          "target": "page_content",
+          "value": "Login failed",
+          "description": "Verify no login error message"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Login form loads without errors",
+        "Form fields are visible and interactive",
+        "Login completes without error messages",
+        "User is redirected to dashboard"
+      ]
+    },
+    {
+      "id": "core-002",
+      "name": "Navigate to AISync Settings",
+      "category": "navigation",
+      "severity": "high",
+      "description": "Navigate to and verify the AISync settings page loads correctly",
+      "tags": ["navigation", "settings", "core"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to AISync settings page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_visible",
+          "selector": "form#aiSyncSettings",
+          "description": "Verify settings form is visible"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "AISync",
+          "description": "Verify page contains AISync heading"
+        },
+        {
+          "action": "screenshot",
+          "filename": "settings-page-loaded.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Settings page loads without errors",
+        "Form elements are visible",
+        "All required fields are present",
+        "No console errors"
+      ]
+    },
+    {
+      "id": "core-003",
+      "name": "Configure AISync Settings",
+      "category": "settings",
+      "severity": "high",
+      "description": "Verify settings form fields can be filled and saved successfully",
+      "tags": ["settings", "configuration", "core"],
+      "prerequisites": ["core-002"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Navigate to settings page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#aiSyncSettings",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "assert_visible",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "description": "Verify AI Service URL field is present"
+        },
+        {
+          "action": "assert_visible",
+          "selector": "input[name=\"webhookTimeout\"]",
+          "description": "Verify Webhook Timeout field is present"
+        },
+        {
+          "action": "assert_visible",
+          "selector": "select[name=\"syncEnabled\"]",
+          "description": "Verify Sync Enabled toggle is present"
+        },
+        {
+          "action": "assert_visible",
+          "selector": "input[name=\"maxRetryAttempts\"]",
+          "description": "Verify Max Retry Attempts field is present"
+        },
+        {
+          "action": "assert_visible",
+          "selector": "input[name=\"retryDelaySeconds\"]",
+          "description": "Verify Retry Delay Seconds field is present"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "value": "http://test-ai-service:8000",
+          "description": "Enter test AI service URL"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"webhookTimeout\"]",
+          "value": "60",
+          "description": "Enter webhook timeout"
+        },
+        {
+          "action": "click",
+          "selector": "form#aiSyncSettings input[type=\"submit\"]",
+          "description": "Submit settings form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "screenshot",
+          "filename": "settings-saved.png"
+        },
+        {
+          "action": "assert_input_value",
+          "selector": "input[name=\"aiServiceURL\"]",
+          "expected": "http://test-ai-service:8000",
+          "description": "Verify URL was saved"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "All form fields accept input",
+        "Form submits without errors",
+        "Settings are persisted correctly",
+        "Success message displayed or values retained"
+      ]
+    },
+    {
+      "id": "core-004",
+      "name": "View Health Dashboard",
+      "category": "monitoring",
+      "severity": "high",
+      "description": "Navigate to health monitoring page and verify metrics display",
+      "tags": ["health", "monitoring", "dashboard", "core"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_health.php",
+          "description": "Navigate to health monitoring page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Webhook Health",
+          "description": "Verify health page title"
+        },
+        {
+          "action": "assert_visible",
+          "selector": ".grid",
+          "description": "Verify metrics grid is visible"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Total Syncs",
+          "description": "Verify Total Syncs metric is present"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Pending",
+          "description": "Verify Pending metric is present"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Successful",
+          "description": "Verify Successful metric is present"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Failed",
+          "description": "Verify Failed metric is present"
+        },
+        {
+          "action": "screenshot",
+          "filename": "health-dashboard.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Health dashboard loads without errors",
+        "All 5 metric cards are visible",
+        "Status banner displays correctly",
+        "No console errors"
+      ]
+    },
+    {
+      "id": "core-005",
+      "name": "Health Dashboard Status Indicator",
+      "category": "monitoring",
+      "severity": "medium",
+      "description": "Verify health status indicator displays correct state",
+      "tags": ["health", "status", "monitoring"],
+      "prerequisites": ["core-004"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_health.php",
+          "description": "Navigate to health page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_visible",
+          "selector": ".rounded-lg.p-4.mb-6",
+          "description": "Verify status banner is present"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Webhook Health Status",
+          "description": "Verify status heading"
+        },
+        {
+          "action": "llm_evaluate",
+          "instruction": "Check that the status indicator shows one of: healthy (green/checkmark), warning (yellow/warning icon), or critical (red/X icon). Report which status is displayed and whether styling is correct.",
+          "evidence_selectors": [".rounded-lg.p-4.mb-6", ".bg-green-50", ".bg-yellow-50", ".bg-red-50"]
+        },
+        {
+          "action": "screenshot",
+          "filename": "health-status-indicator.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": false
+      },
+      "success_criteria": [
+        "Status banner is visible",
+        "Shows one of: healthy, warning, or critical",
+        "Correct color coding applied",
+        "Status icon visible"
+      ]
+    },
+    {
+      "id": "core-006",
+      "name": "Health Dashboard Date Filtering",
+      "category": "filtering",
+      "severity": "medium",
+      "description": "Test date range filtering on health dashboard",
+      "tags": ["health", "filtering", "date-range"],
+      "prerequisites": ["core-004"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_health.php",
+          "description": "Navigate to health page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#filter",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "assert_visible",
+          "selector": "input[name=\"dateFrom\"]",
+          "description": "Verify date from input is present"
+        },
+        {
+          "action": "assert_visible",
+          "selector": "input[name=\"dateTo\"]",
+          "description": "Verify date to input is present"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"dateFrom\"]",
+          "value": "2026-01-01",
+          "description": "Enter start date"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=\"dateTo\"]",
+          "value": "2026-01-31",
+          "description": "Enter end date"
+        },
+        {
+          "action": "click",
+          "selector": "form#filter input[type=\"submit\"]",
+          "description": "Submit filter form"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_url_contains",
+          "value": "dateFrom",
+          "description": "Verify URL contains date filter"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Total Syncs",
+          "description": "Verify metrics still visible after filter"
+        },
+        {
+          "action": "screenshot",
+          "filename": "health-filtered.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Filter form is present and functional",
+        "Date inputs accept values",
+        "Filter parameters added to URL",
+        "Metrics update based on filter"
+      ]
+    },
+    {
+      "id": "core-007",
+      "name": "View Sync Logs",
+      "category": "logs",
+      "severity": "high",
+      "description": "Navigate to logs page and verify log table displays",
+      "tags": ["logs", "viewing", "core"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_logs.php",
+          "description": "Navigate to sync logs page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Sync Logs",
+          "description": "Verify page title"
+        },
+        {
+          "action": "assert_visible",
+          "selector": "table",
+          "description": "Verify logs table is visible"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Timestamp",
+          "description": "Verify Timestamp column header"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Event Type",
+          "description": "Verify Event Type column header"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Status",
+          "description": "Verify Status column header"
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Quick Statistics",
+          "description": "Verify quick stats section"
+        },
+        {
+          "action": "screenshot",
+          "filename": "logs-page.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Logs page loads without errors",
+        "Data table is visible",
+        "Column headers present",
+        "Quick statistics section visible"
+      ]
+    },
+    {
+      "id": "core-008",
+      "name": "Filter Logs by Status",
+      "category": "filtering",
+      "severity": "medium",
+      "description": "Test status filter on logs page",
+      "tags": ["logs", "filtering", "status"],
+      "prerequisites": ["core-007"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_logs.php",
+          "description": "Navigate to logs page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#filters",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "assert_visible",
+          "selector": "select[name=\"status\"]",
+          "description": "Verify status filter dropdown"
+        },
+        {
+          "action": "select",
+          "selector": "select[name=\"status\"]",
+          "value": "success",
+          "description": "Select success status"
+        },
+        {
+          "action": "click",
+          "selector": "form#filters input[type=\"submit\"]",
+          "description": "Submit filter"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_url_contains",
+          "value": "status=success",
+          "description": "Verify URL contains status filter"
+        },
+        {
+          "action": "screenshot",
+          "filename": "logs-filtered-by-status.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Status dropdown is functional",
+        "Filter applies correctly",
+        "URL updated with filter parameter",
+        "Table updates to show filtered results"
+      ]
+    },
+    {
+      "id": "core-009",
+      "name": "Filter Logs by Event Type",
+      "category": "filtering",
+      "severity": "medium",
+      "description": "Test event type filter on logs page",
+      "tags": ["logs", "filtering", "event-type"],
+      "prerequisites": ["core-007"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_logs.php",
+          "description": "Navigate to logs page"
+        },
+        {
+          "action": "wait_visible",
+          "selector": "form#filters",
+          "timeout_ms": 5000
+        },
+        {
+          "action": "assert_visible",
+          "selector": "select[name=\"eventType\"]",
+          "description": "Verify event type filter dropdown"
+        },
+        {
+          "action": "select",
+          "selector": "select[name=\"eventType\"]",
+          "value": "care_activity_created",
+          "description": "Select care activity created event"
+        },
+        {
+          "action": "click",
+          "selector": "form#filters input[type=\"submit\"]",
+          "description": "Submit filter"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_url_contains",
+          "value": "eventType=care_activity_created",
+          "description": "Verify URL contains event type filter"
+        },
+        {
+          "action": "screenshot",
+          "filename": "logs-filtered-by-event-type.png"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "Event type dropdown is functional",
+        "Filter applies correctly",
+        "URL updated with filter parameter",
+        "Table updates to show filtered results"
+      ]
+    },
+    {
+      "id": "core-010",
+      "name": "View Log Details Modal",
+      "category": "logs",
+      "severity": "medium",
+      "description": "Test log details modal opens correctly",
+      "tags": ["logs", "modal", "details"],
+      "prerequisites": ["core-007"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_logs.php",
+          "description": "Navigate to logs page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "conditional_check",
+          "selector": "a[href*=\"aiSync_logsDetails\"]",
+          "if_exists": [
+            {
+              "action": "click_new_window",
+              "selector": "a[href*=\"aiSync_logsDetails\"]:first-of-type",
+              "description": "Click view details link"
+            },
+            {
+              "action": "wait_popup_load",
+              "timeout_ms": 10000
+            },
+            {
+              "action": "assert_popup_contains",
+              "value": "gibbonAISyncLogID",
+              "description": "Verify details modal shows log ID"
+            },
+            {
+              "action": "screenshot_popup",
+              "filename": "log-details-modal.png"
+            },
+            {
+              "action": "close_popup"
+            }
+          ],
+          "if_not_exists": [
+            {
+              "action": "llm_note",
+              "message": "No logs available to test details modal - this is acceptable for empty state"
+            },
+            {
+              "action": "screenshot",
+              "filename": "logs-empty-state.png"
+            }
+          ]
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": false
+      },
+      "success_criteria": [
+        "If logs exist: details modal opens correctly",
+        "If logs exist: modal displays log information",
+        "If no logs: page handles empty state gracefully",
+        "No JavaScript errors"
+      ]
+    },
+    {
+      "id": "core-011",
+      "name": "Cross-Page Navigation Flow",
+      "category": "navigation",
+      "severity": "medium",
+      "description": "Test navigation between all AISync pages",
+      "tags": ["navigation", "integration", "flow"],
+      "prerequisites": ["core-001"],
+      "steps": [
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_settings.php",
+          "description": "Start at settings page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "AISync",
+          "description": "Verify settings page loaded"
+        },
+        {
+          "action": "screenshot",
+          "filename": "nav-flow-1-settings.png"
+        },
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_health.php",
+          "description": "Navigate to health page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Webhook Health",
+          "description": "Verify health page loaded"
+        },
+        {
+          "action": "screenshot",
+          "filename": "nav-flow-2-health.png"
+        },
+        {
+          "action": "navigate",
+          "target": "/index.php?q=/modules/AISync/aiSync_logs.php",
+          "description": "Navigate to logs page"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Sync Logs",
+          "description": "Verify logs page loaded"
+        },
+        {
+          "action": "screenshot",
+          "filename": "nav-flow-3-logs.png"
+        },
+        {
+          "action": "go_back",
+          "description": "Test browser back button"
+        },
+        {
+          "action": "wait_network_idle",
+          "timeout_ms": 10000
+        },
+        {
+          "action": "assert_contains",
+          "target": "page_content",
+          "value": "Webhook Health",
+          "description": "Verify back navigation works"
+        }
+      ],
+      "evidence": {
+        "screenshot": true,
+        "console_logs": true,
+        "network_capture": true
+      },
+      "success_criteria": [
+        "All pages load correctly",
+        "No navigation errors",
+        "Browser back button works",
+        "No console errors during navigation"
+      ]
+    }
+  ],
+  "llm_instructions": {
+    "exploratory_guidance": [
+      "Look for visual inconsistencies in the UI",
+      "Check for responsive design issues",
+      "Verify form validation messages are clear",
+      "Note any slow-loading elements",
+      "Report unexpected console errors or warnings",
+      "Check that error states are handled gracefully",
+      "Verify accessibility (keyboard navigation, focus states)"
+    ],
+    "evidence_collection": {
+      "screenshots": "Capture at page load and after each significant action",
+      "console_logs": "Capture all errors and warnings",
+      "network_capture": "Log failed requests with status code and response"
+    },
+    "severity_guidelines": {
+      "critical": "Authentication failures, data loss, page crashes",
+      "high": "Core functionality broken, major UI issues",
+      "medium": "Minor functional issues, cosmetic problems",
+      "low": "Enhancement suggestions, minor inconsistencies"
+    }
+  }
+}

@@ -219,140 +219,6 @@ export interface SignDocumentRequest {
 }
 
 // ============================================================================
-// Government Document Types
-// ============================================================================
-
-/**
- * Categories of government documents.
- */
-export type GovernmentDocumentCategory =
-  | 'child_identity'
-  | 'parent_identity'
-  | 'health'
-  | 'immigration';
-
-/**
- * Types of government documents for Quebec childcare compliance.
- */
-export type GovernmentDocumentType =
-  | 'birth_certificate'
-  | 'citizenship_proof'
-  | 'health_card'
-  | 'immunization_record'
-  | 'parent_id'
-  | 'custody_agreement'
-  | 'immigration_document'
-  | 'work_permit'
-  | 'study_permit';
-
-/**
- * Verification status of a government document.
- */
-export type GovernmentDocumentStatus =
-  | 'missing'
-  | 'pending_verification'
-  | 'verified'
-  | 'rejected'
-  | 'expired';
-
-/**
- * Government document type definition.
- */
-export interface GovernmentDocumentTypeDefinition {
-  id: string;
-  name: string;
-  description: string;
-  category: GovernmentDocumentCategory;
-  isRequired: boolean;
-  appliesToChild: boolean;
-  appliesToParent: boolean;
-  hasExpiration: boolean;
-}
-
-/**
- * Government document record.
- */
-export interface GovernmentDocument {
-  id: string;
-  familyId: string;
-  personId: string;
-  personName: string;
-  documentTypeId: string;
-  documentTypeName: string;
-  category: GovernmentDocumentCategory;
-  status: GovernmentDocumentStatus;
-  documentNumber?: string;
-  issueDate?: string;
-  expirationDate?: string;
-  fileUrl?: string;
-  fileName?: string;
-  uploadedAt?: string;
-  verifiedAt?: string;
-  verifiedBy?: string;
-  rejectionReason?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Request payload for uploading a government document.
- */
-export interface GovernmentDocumentUploadRequest {
-  personId: string;
-  documentTypeId: string;
-  documentNumber?: string;
-  issueDate?: string;
-  expirationDate?: string;
-  notes?: string;
-  file: File;
-}
-
-/**
- * Family document checklist item.
- */
-export interface GovernmentDocumentChecklistItem {
-  documentType: GovernmentDocumentTypeDefinition;
-  personId: string;
-  personName: string;
-  status: GovernmentDocumentStatus;
-  document?: GovernmentDocument;
-  daysUntilExpiration?: number;
-}
-
-/**
- * Family document checklist grouped by member.
- */
-export interface GovernmentDocumentChecklist {
-  familyId: string;
-  children: {
-    personId: string;
-    personName: string;
-    items: GovernmentDocumentChecklistItem[];
-  }[];
-  parents: {
-    personId: string;
-    personName: string;
-    items: GovernmentDocumentChecklistItem[];
-  }[];
-  complianceRate: number;
-  criticalDocumentsMissing: boolean;
-  missingCriticalDocuments: string[];
-}
-
-/**
- * Summary statistics for government documents.
- */
-export interface GovernmentDocumentStats {
-  total: number;
-  verified: number;
-  pendingVerification: number;
-  missing: number;
-  expired: number;
-  expiringWithin30Days: number;
-}
-
-// ============================================================================
 // Child Types
 // ============================================================================
 
@@ -543,4 +409,241 @@ export interface HealthCheckResponse {
 export interface ApiErrorResponse {
   detail: string;
   statusCode?: number;
+}
+
+// ============================================================================
+// Development Profile Types
+// ============================================================================
+
+/**
+ * Quebec-aligned developmental domains for early childhood education.
+ */
+export type DevelopmentalDomain =
+  | 'affective'
+  | 'social'
+  | 'language'
+  | 'cognitive'
+  | 'gross_motor'
+  | 'fine_motor';
+
+/**
+ * Status levels for skill assessment tracking.
+ */
+export type SkillStatus = 'can' | 'learning' | 'not_yet' | 'na';
+
+/**
+ * Types of observers who can document child behavior.
+ */
+export type ObserverType = 'educator' | 'parent' | 'specialist';
+
+/**
+ * Overall developmental progress indicators.
+ */
+export type OverallProgress = 'on_track' | 'needs_support' | 'excelling';
+
+/**
+ * Summary of developmental progress for a single domain.
+ */
+export interface DomainSummary {
+  domain: DevelopmentalDomain;
+  skillsCan: number;
+  skillsLearning: number;
+  skillsNotYet: number;
+  progressPercentage: number;
+  keyObservations: string[];
+}
+
+/**
+ * Development profile for a child with Quebec-aligned tracking.
+ */
+export interface DevelopmentProfile {
+  id: string;
+  childId: string;
+  educatorId?: string;
+  birthDate?: string;
+  notes?: string;
+  isActive: boolean;
+  skillAssessments: SkillAssessment[];
+  observations: Observation[];
+  monthlySnapshots: MonthlySnapshot[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Summary response for development profile (without nested relations).
+ */
+export interface DevelopmentProfileSummary {
+  id: string;
+  childId: string;
+  educatorId?: string;
+  birthDate?: string;
+  notes?: string;
+  isActive: boolean;
+  assessmentCount: number;
+  observationCount: number;
+  snapshotCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Individual skill assessment within a developmental domain.
+ */
+export interface SkillAssessment {
+  id: string;
+  profileId: string;
+  domain: DevelopmentalDomain;
+  skillName: string;
+  skillNameFr?: string;
+  status: SkillStatus;
+  evidence?: string;
+  assessedAt: string;
+  assessedById?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Observable behavior observation for a child.
+ */
+export interface Observation {
+  id: string;
+  profileId: string;
+  domain: DevelopmentalDomain;
+  behaviorDescription: string;
+  context?: string;
+  isMilestone: boolean;
+  isConcern: boolean;
+  observedAt: string;
+  observerId?: string;
+  observerType: ObserverType;
+  attachments?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Monthly developmental snapshot summarizing progress.
+ */
+export interface MonthlySnapshot {
+  id: string;
+  profileId: string;
+  snapshotMonth: string;
+  ageMonths?: number;
+  overallProgress: OverallProgress;
+  domainSummaries?: Record<string, DomainSummary>;
+  strengths?: string[];
+  growthAreas?: string[];
+  recommendations?: string;
+  generatedById?: string;
+  isParentShared: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * A single data point in the growth trajectory.
+ */
+export interface GrowthDataPoint {
+  month: string;
+  ageMonths?: number;
+  domainScores: Record<string, number>;
+  overallScore: number;
+}
+
+/**
+ * Growth trajectory analysis for a child's development over time.
+ */
+export interface GrowthTrajectory {
+  profileId: string;
+  childId: string;
+  dataPoints: GrowthDataPoint[];
+  trendAnalysis?: string;
+  alerts: string[];
+}
+
+/**
+ * Request payload for creating a development profile.
+ */
+export interface CreateDevelopmentProfileRequest {
+  childId: string;
+  educatorId?: string;
+  birthDate?: string;
+  notes?: string;
+}
+
+/**
+ * Request payload for creating a skill assessment.
+ */
+export interface CreateSkillAssessmentRequest {
+  profileId: string;
+  domain: DevelopmentalDomain;
+  skillName: string;
+  skillNameFr?: string;
+  status: SkillStatus;
+  evidence?: string;
+  assessedById?: string;
+}
+
+/**
+ * Request payload for updating a skill assessment.
+ */
+export interface UpdateSkillAssessmentRequest {
+  status?: SkillStatus;
+  evidence?: string;
+  assessedById?: string;
+}
+
+/**
+ * Request payload for creating an observation.
+ */
+export interface CreateObservationRequest {
+  profileId: string;
+  domain: DevelopmentalDomain;
+  behaviorDescription: string;
+  context?: string;
+  isMilestone?: boolean;
+  isConcern?: boolean;
+  observedAt?: string;
+  observerId?: string;
+  observerType?: ObserverType;
+  attachments?: Record<string, unknown>;
+}
+
+/**
+ * Request payload for updating an observation.
+ */
+export interface UpdateObservationRequest {
+  behaviorDescription?: string;
+  context?: string;
+  isMilestone?: boolean;
+  isConcern?: boolean;
+  attachments?: Record<string, unknown>;
+}
+
+/**
+ * Request payload for creating a monthly snapshot.
+ */
+export interface CreateMonthlySnapshotRequest {
+  profileId: string;
+  snapshotMonth: string;
+  ageMonths?: number;
+  overallProgress?: OverallProgress;
+  domainSummaries?: Record<string, DomainSummary>;
+  strengths?: string[];
+  growthAreas?: string[];
+  recommendations?: string;
+  generatedById?: string;
+}
+
+/**
+ * Request payload for updating a monthly snapshot.
+ */
+export interface UpdateMonthlySnapshotRequest {
+  overallProgress?: OverallProgress;
+  recommendations?: string;
+  strengths?: string[];
+  growthAreas?: string[];
+  isParentShared?: boolean;
 }

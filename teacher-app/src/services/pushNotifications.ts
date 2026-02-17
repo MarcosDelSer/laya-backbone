@@ -131,8 +131,11 @@ function mapAuthStatusToPermissionStatus(
 function parseRemoteMessage(
   remoteMessage: FirebaseMessagingTypes.RemoteMessage,
 ): NotificationPayload {
+  const rawType = remoteMessage.data?.type;
+  const type = typeof rawType === 'string' && rawType.length > 0 ? rawType : 'general';
+
   return {
-    type: remoteMessage.data?.type || 'general',
+    type,
     title: remoteMessage.notification?.title || '',
     body: remoteMessage.notification?.body || '',
     data: remoteMessage.data as Record<string, string> | undefined,

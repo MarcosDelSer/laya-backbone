@@ -1,15 +1,9 @@
-"""Middleware modules for LAYA AI Service.
+"""Middleware package for LAYA AI Service.
 
-This package contains middleware components for request processing,
-authentication, and cross-service integration.
+This package contains middleware components for request/response processing.
 """
 
-from app.middleware.auth import (
-    verify_token_from_any_source,
-    get_current_user_multi_source,
-)
+from app.middleware.cache_headers import CacheHeadersMiddleware
+from app.middleware.compression import GzipCompressionMiddleware
 
-__all__ = [
-    "verify_token_from_any_source",
-    "get_current_user_multi_source",
-]
+__all__ = ["CacheHeadersMiddleware", "GzipCompressionMiddleware"]

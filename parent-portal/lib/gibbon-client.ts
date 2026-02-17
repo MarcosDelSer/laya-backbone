@@ -8,21 +8,25 @@
 import { gibbonClient, ApiError } from './api';
 import type {
   Child,
+  ChildProtocolOverview,
+  CreateProtocolAuthorizationRequest,
   DailyReport,
   Document,
-  GovernmentDocument,
-  GovernmentDocumentChecklist,
-  GovernmentDocumentStats,
-  GovernmentDocumentTypeDefinition,
-  GovernmentDocumentUploadRequest,
+  DosingCalculationRequest,
+  DosingCalculationResponse,
   Invoice,
+  MedicalProtocol,
   Message,
   MessageThread,
   PaginatedResponse,
   PaginationParams,
+  ProtocolAdministration,
+  ProtocolAuthorization,
+  ProtocolAuthorizationStatus,
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
+  UpdateWeightRequest,
 } from './types';
 
 // ============================================================================
@@ -56,14 +60,19 @@ const ENDPOINTS = {
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
 
-  // Government Documents
-  GOVERNMENT_DOCUMENTS: '/api/v1/government-documents',
-  GOVERNMENT_DOCUMENT: (id: string) => `/api/v1/government-documents/${id}`,
-  GOVERNMENT_DOCUMENT_TYPES: '/api/v1/government-documents/types',
-  GOVERNMENT_DOCUMENT_CHECKLIST: '/api/v1/government-documents/checklist',
-  GOVERNMENT_DOCUMENT_STATS: '/api/v1/government-documents/stats',
-  GOVERNMENT_DOCUMENT_UPLOAD: '/api/v1/government-documents/upload',
-  GOVERNMENT_DOCUMENT_FILE: (id: string) => `/api/v1/government-documents/${id}/file`,
+  // Medical Protocols
+  MEDICAL_PROTOCOLS: '/api/v1/medical-protocols',
+  MEDICAL_PROTOCOL: (id: string) => `/api/v1/medical-protocols/${id}`,
+  PROTOCOL_AUTHORIZATIONS: '/api/v1/medical-protocols/authorizations',
+  PROTOCOL_AUTHORIZATION: (id: string) => `/api/v1/medical-protocols/authorizations/${id}`,
+  CHILD_AUTHORIZATIONS: (childId: string) => `/api/v1/medical-protocols/children/${childId}/authorizations`,
+  CHILD_PROTOCOL_OVERVIEW: (childId: string) => `/api/v1/medical-protocols/children/${childId}/overview`,
+  PROTOCOL_ADMINISTRATIONS: '/api/v1/medical-protocols/administrations',
+  CHILD_ADMINISTRATIONS: (childId: string) => `/api/v1/medical-protocols/children/${childId}/administrations`,
+  CALCULATE_DOSING: '/api/v1/medical-protocols/calculate-dosing',
+  UPDATE_WEIGHT: '/api/v1/medical-protocols/update-weight',
+  REVOKE_AUTHORIZATION: (id: string) => `/api/v1/medical-protocols/authorizations/${id}/revoke`,
+  ACKNOWLEDGE_ADMINISTRATION: (id: string) => `/api/v1/medical-protocols/administrations/${id}/acknowledge`,
 } as const;
 
 // ============================================================================
@@ -343,115 +352,200 @@ export async function getPendingDocumentsCount(): Promise<number> {
 }
 
 // ============================================================================
-// Government Documents API
+// Medical Protocols API
 // ============================================================================
 
 /**
- * Parameters for fetching government documents.
+ * Fetch all available medical protocols.
  */
-export interface GovernmentDocumentParams extends PaginationParams {
-  personId?: string;
-  status?: 'missing' | 'pending_verification' | 'verified' | 'rejected' | 'expired';
-  category?: 'child_identity' | 'parent_identity' | 'health' | 'immigration';
+export async function getMedicalProtocols(): Promise<MedicalProtocol[]> {
+  return gibbonClient.get<MedicalProtocol[]>(ENDPOINTS.MEDICAL_PROTOCOLS);
 }
 
 /**
- * Fetch government documents with optional filters.
+ * Fetch a specific medical protocol by ID.
  */
-export async function getGovernmentDocuments(
-  params?: GovernmentDocumentParams
-): Promise<PaginatedResponse<GovernmentDocument>> {
-  return gibbonClient.get<PaginatedResponse<GovernmentDocument>>(ENDPOINTS.GOVERNMENT_DOCUMENTS, {
+export async function getMedicalProtocol(protocolId: string): Promise<MedicalProtocol> {
+  return gibbonClient.get<MedicalProtocol>(ENDPOINTS.MEDICAL_PROTOCOL(protocolId));
+}
+
+/**
+ * Parameters for fetching protocol authorizations.
+ */
+export interface ProtocolAuthorizationParams extends PaginationParams {
+  childId?: string;
+  protocolId?: string;
+  status?: ProtocolAuthorizationStatus;
+}
+
+/**
+ * Fetch protocol authorizations with optional filters.
+ */
+export async function getProtocolAuthorizations(
+  params?: ProtocolAuthorizationParams
+): Promise<PaginatedResponse<ProtocolAuthorization>> {
+  return gibbonClient.get<PaginatedResponse<ProtocolAuthorization>>(ENDPOINTS.PROTOCOL_AUTHORIZATIONS, {
     params: {
       skip: params?.skip,
       limit: params?.limit,
-      person_id: params?.personId,
+      child_id: params?.childId,
+      protocol_id: params?.protocolId,
       status: params?.status,
-      category: params?.category,
     },
   });
 }
 
 /**
- * Fetch a specific government document by ID.
+ * Fetch a specific protocol authorization by ID.
  */
-export async function getGovernmentDocument(documentId: string): Promise<GovernmentDocument> {
-  return gibbonClient.get<GovernmentDocument>(ENDPOINTS.GOVERNMENT_DOCUMENT(documentId));
+export async function getProtocolAuthorization(authorizationId: string): Promise<ProtocolAuthorization> {
+  return gibbonClient.get<ProtocolAuthorization>(ENDPOINTS.PROTOCOL_AUTHORIZATION(authorizationId));
 }
 
 /**
- * Fetch all available government document types.
+ * Fetch all protocol authorizations for a specific child.
  */
-export async function getGovernmentDocumentTypes(): Promise<GovernmentDocumentTypeDefinition[]> {
-  return gibbonClient.get<GovernmentDocumentTypeDefinition[]>(ENDPOINTS.GOVERNMENT_DOCUMENT_TYPES);
+export async function getChildAuthorizations(childId: string): Promise<ProtocolAuthorization[]> {
+  return gibbonClient.get<ProtocolAuthorization[]>(ENDPOINTS.CHILD_AUTHORIZATIONS(childId));
 }
 
 /**
- * Fetch the family document checklist.
+ * Fetch the protocol overview for a specific child.
  */
-export async function getGovernmentDocumentChecklist(): Promise<GovernmentDocumentChecklist> {
-  return gibbonClient.get<GovernmentDocumentChecklist>(ENDPOINTS.GOVERNMENT_DOCUMENT_CHECKLIST);
+export async function getChildProtocolOverview(childId: string): Promise<ChildProtocolOverview> {
+  return gibbonClient.get<ChildProtocolOverview>(ENDPOINTS.CHILD_PROTOCOL_OVERVIEW(childId));
 }
 
 /**
- * Fetch government document statistics.
+ * Create a new protocol authorization.
  */
-export async function getGovernmentDocumentStats(): Promise<GovernmentDocumentStats> {
-  return gibbonClient.get<GovernmentDocumentStats>(ENDPOINTS.GOVERNMENT_DOCUMENT_STATS);
+export async function createProtocolAuthorization(
+  request: CreateProtocolAuthorizationRequest
+): Promise<ProtocolAuthorization> {
+  return gibbonClient.post<ProtocolAuthorization>(ENDPOINTS.PROTOCOL_AUTHORIZATIONS, {
+    child_id: request.childId,
+    protocol_id: request.protocolId,
+    weight_kg: request.weightKg,
+    signature_data: request.signatureData,
+    agreement_text: request.agreementText,
+  });
 }
 
 /**
- * Upload a government document.
+ * Update a child's weight for a protocol authorization.
  */
-export async function uploadGovernmentDocument(
-  request: GovernmentDocumentUploadRequest
-): Promise<GovernmentDocument> {
-  const formData = new FormData();
-  formData.append('person_id', request.personId);
-  formData.append('document_type_id', request.documentTypeId);
-  formData.append('file', request.file);
-
-  if (request.documentNumber) {
-    formData.append('document_number', request.documentNumber);
-  }
-  if (request.issueDate) {
-    formData.append('issue_date', request.issueDate);
-  }
-  if (request.expirationDate) {
-    formData.append('expiration_date', request.expirationDate);
-  }
-  if (request.notes) {
-    formData.append('notes', request.notes);
-  }
-
-  return gibbonClient.post<GovernmentDocument>(ENDPOINTS.GOVERNMENT_DOCUMENT_UPLOAD, formData);
+export async function updateChildWeight(request: UpdateWeightRequest): Promise<ProtocolAuthorization> {
+  return gibbonClient.post<ProtocolAuthorization>(ENDPOINTS.UPDATE_WEIGHT, {
+    child_id: request.childId,
+    protocol_id: request.protocolId,
+    weight_kg: request.weightKg,
+  });
 }
 
 /**
- * Get the file download URL for a government document.
+ * Revoke request payload.
  */
-export function getGovernmentDocumentFileUrl(documentId: string): string {
-  return `${process.env.NEXT_PUBLIC_GIBBON_URL || 'http://localhost:8080/gibbon'}${ENDPOINTS.GOVERNMENT_DOCUMENT_FILE(documentId)}`;
+export interface RevokeAuthorizationRequest {
+  authorizationId: string;
+  reason?: string;
 }
 
 /**
- * Delete a government document.
+ * Revoke a protocol authorization.
  */
-export async function deleteGovernmentDocument(documentId: string): Promise<void> {
-  return gibbonClient.delete<void>(ENDPOINTS.GOVERNMENT_DOCUMENT(documentId));
+export async function revokeProtocolAuthorization(
+  request: RevokeAuthorizationRequest
+): Promise<ProtocolAuthorization> {
+  return gibbonClient.post<ProtocolAuthorization>(ENDPOINTS.REVOKE_AUTHORIZATION(request.authorizationId), {
+    reason: request.reason,
+  });
 }
 
 /**
- * Get documents requiring attention (missing, expired, or expiring soon).
+ * Calculate dosing information for a given weight.
  */
-export async function getGovernmentDocumentsRequiringAttention(): Promise<GovernmentDocument[]> {
-  const [missing, expired, pendingVerification] = await Promise.all([
-    getGovernmentDocuments({ status: 'missing' }),
-    getGovernmentDocuments({ status: 'expired' }),
-    getGovernmentDocuments({ status: 'pending_verification' }),
-  ]);
+export async function calculateDosing(
+  request: DosingCalculationRequest
+): Promise<DosingCalculationResponse> {
+  return gibbonClient.post<DosingCalculationResponse>(ENDPOINTS.CALCULATE_DOSING, {
+    protocol_id: request.protocolId,
+    weight_kg: request.weightKg,
+    concentration: request.concentration,
+  });
+}
 
-  return [...missing.items, ...expired.items, ...pendingVerification.items];
+/**
+ * Parameters for fetching protocol administrations.
+ */
+export interface ProtocolAdministrationParams extends PaginationParams {
+  childId?: string;
+  protocolId?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * Fetch protocol administrations with optional filters.
+ */
+export async function getProtocolAdministrations(
+  params?: ProtocolAdministrationParams
+): Promise<PaginatedResponse<ProtocolAdministration>> {
+  return gibbonClient.get<PaginatedResponse<ProtocolAdministration>>(ENDPOINTS.PROTOCOL_ADMINISTRATIONS, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      child_id: params?.childId,
+      protocol_id: params?.protocolId,
+      start_date: params?.startDate,
+      end_date: params?.endDate,
+    },
+  });
+}
+
+/**
+ * Fetch all protocol administrations for a specific child.
+ */
+export async function getChildAdministrations(
+  childId: string,
+  params?: PaginationParams
+): Promise<PaginatedResponse<ProtocolAdministration>> {
+  return gibbonClient.get<PaginatedResponse<ProtocolAdministration>>(ENDPOINTS.CHILD_ADMINISTRATIONS(childId), {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+    },
+  });
+}
+
+/**
+ * Acknowledge a protocol administration as a parent.
+ */
+export async function acknowledgeAdministration(administrationId: string): Promise<ProtocolAdministration> {
+  return gibbonClient.post<ProtocolAdministration>(ENDPOINTS.ACKNOWLEDGE_ADMINISTRATION(administrationId));
+}
+
+/**
+ * Get the count of active protocol authorizations for the current parent.
+ */
+export async function getActiveAuthorizationsCount(): Promise<number> {
+  const response = await getProtocolAuthorizations({ status: 'active', limit: 1 });
+  return response.total;
+}
+
+/**
+ * Get the count of pending protocol authorizations requiring action.
+ */
+export async function getPendingAuthorizationsCount(): Promise<number> {
+  const response = await getProtocolAuthorizations({ status: 'pending', limit: 1 });
+  return response.total;
+}
+
+/**
+ * Get the count of unacknowledged administrations for a child.
+ */
+export async function getUnacknowledgedAdministrationsCount(childId: string): Promise<number> {
+  const response = await getChildAdministrations(childId, { limit: 100 });
+  return response.items.filter((admin) => admin.parentNotified && !admin.parentAcknowledged).length;
 }
 
 // ============================================================================

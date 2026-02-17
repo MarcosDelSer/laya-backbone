@@ -1,0 +1,1160 @@
+{
+  "$schema": "./scenarios.schema.json",
+  "platform": "macos",
+  "app": {
+    "name": "LAYA Admin",
+    "type": "native",
+    "bundle_id": "com.laya.admin",
+    "description": "macOS admin application for childcare center management (staff/admin operations)"
+  },
+  "automation": {
+    "framework": "xcuitest",
+    "capabilities": {
+      "app": "com.laya.admin",
+      "platformName": "macOS",
+      "automationName": "XCUITest"
+    }
+  },
+  "suites": {
+    "smoke": {
+      "description": "Critical path validation for installed macOS admin app",
+      "timeout_seconds": 300,
+      "scenarios": [
+        {
+          "id": "smoke-001",
+          "name": "Application Launch",
+          "category": "launch",
+          "priority": "critical",
+          "steps": [
+            {
+              "action": "launch_app",
+              "bundle_id": "com.laya.admin",
+              "description": "Launch LAYA Admin application"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='app-window']",
+              "timeout_ms": 10000,
+              "description": "Wait for main application window to appear"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "app_launched"
+            }
+          ],
+          "expected_outcomes": [
+            "Application launches without crash",
+            "Login screen or dashboard is displayed",
+            "No error alerts appear",
+            "Menu bar is populated correctly"
+          ]
+        },
+        {
+          "id": "smoke-002",
+          "name": "Admin Login with Valid Credentials",
+          "category": "authentication",
+          "priority": "critical",
+          "preconditions": ["Application is launched", "User is on login screen"],
+          "steps": [
+            {
+              "action": "input_text",
+              "selector": "[data-testid='email-input']",
+              "value": "{{TEST_ADMIN_EMAIL}}",
+              "description": "Enter admin email"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='password-input']",
+              "value": "{{TEST_ADMIN_PASSWORD}}",
+              "description": "Enter admin password"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='login-button']",
+              "description": "Click login button"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='admin-dashboard']",
+              "timeout_ms": 15000,
+              "description": "Wait for admin dashboard to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "login_success"
+            }
+          ],
+          "expected_outcomes": [
+            "Admin is redirected to dashboard",
+            "Admin name is displayed in header",
+            "Navigation sidebar is visible",
+            "Center/facility info is displayed"
+          ]
+        },
+        {
+          "id": "smoke-003",
+          "name": "View Children Roster",
+          "category": "navigation",
+          "priority": "critical",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-children']",
+              "description": "Navigate to Children section"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='children-roster']",
+              "timeout_ms": 10000,
+              "description": "Wait for children roster to load"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "children_roster_view"
+            }
+          ],
+          "expected_outcomes": [
+            "Children roster page loads",
+            "Child list is displayed",
+            "Search/filter functionality is visible",
+            "Child cards show name and status"
+          ]
+        },
+        {
+          "id": "smoke-004",
+          "name": "Logout",
+          "category": "authentication",
+          "priority": "critical",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='user-menu']",
+              "description": "Open user menu"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='logout-button']",
+              "description": "Click logout button"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='login-screen']",
+              "timeout_ms": 10000,
+              "description": "Wait for login screen"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "logout_success"
+            }
+          ],
+          "expected_outcomes": [
+            "Admin is redirected to login screen",
+            "Session is cleared",
+            "Dashboard is no longer accessible"
+          ]
+        }
+      ]
+    },
+    "full": {
+      "description": "Comprehensive feature coverage for macOS admin application",
+      "timeout_seconds": 600,
+      "scenarios": [
+        {
+          "id": "full-001",
+          "name": "Login with Invalid Credentials",
+          "category": "authentication",
+          "priority": "high",
+          "steps": [
+            {
+              "action": "launch_app",
+              "bundle_id": "com.laya.admin",
+              "description": "Launch application"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='email-input']",
+              "value": "invalid@example.com",
+              "description": "Enter invalid email"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='password-input']",
+              "value": "wrongpassword123",
+              "description": "Enter wrong password"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='login-button']",
+              "description": "Click login button"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='error-alert']",
+              "timeout_ms": 5000,
+              "description": "Wait for error message"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "login_error"
+            }
+          ],
+          "expected_outcomes": [
+            "Error alert is displayed",
+            "Admin remains on login screen",
+            "Password field is cleared",
+            "Login button remains enabled for retry"
+          ]
+        },
+        {
+          "id": "full-002",
+          "name": "Create Daily Report",
+          "category": "daily_reports",
+          "priority": "high",
+          "preconditions": ["Admin is logged in", "Children are enrolled"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-daily-reports']",
+              "description": "Navigate to Daily Reports"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='create-report-button']",
+              "description": "Click create new report"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='report-form']",
+              "timeout_ms": 5000,
+              "description": "Wait for report form"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='child-selector']",
+              "description": "Open child selector"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='child-option']:first-child",
+              "description": "Select first child"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "daily_report_form"
+            }
+          ],
+          "expected_outcomes": [
+            "Report creation form is displayed",
+            "Child selector works correctly",
+            "Activity type options are available",
+            "Date defaults to today"
+          ]
+        },
+        {
+          "id": "full-003",
+          "name": "Check-In Child",
+          "category": "attendance",
+          "priority": "high",
+          "preconditions": ["Admin is logged in", "Child is enrolled but not checked in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-attendance']",
+              "description": "Navigate to Attendance"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='attendance-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for attendance list"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='child-row'][data-status='not-checked-in']:first-child [data-testid='check-in-button']",
+              "description": "Click check-in button for first available child"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='check-in-confirmation']",
+              "timeout_ms": 5000,
+              "description": "Wait for check-in confirmation"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "child_checked_in"
+            }
+          ],
+          "expected_outcomes": [
+            "Child status changes to checked-in",
+            "Check-in time is recorded",
+            "Check-out button becomes available",
+            "Attendance count is updated"
+          ]
+        },
+        {
+          "id": "full-004",
+          "name": "Check-Out Child",
+          "category": "attendance",
+          "priority": "high",
+          "preconditions": ["Admin is logged in", "Child is currently checked in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-attendance']",
+              "description": "Navigate to Attendance"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='attendance-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for attendance list"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='child-row'][data-status='checked-in']:first-child [data-testid='check-out-button']",
+              "description": "Click check-out button"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='check-out-confirmation']",
+              "timeout_ms": 5000,
+              "description": "Wait for check-out confirmation"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "child_checked_out"
+            }
+          ],
+          "expected_outcomes": [
+            "Child status changes to checked-out",
+            "Check-out time is recorded",
+            "Total hours are calculated",
+            "Attendance count is updated"
+          ]
+        },
+        {
+          "id": "full-005",
+          "name": "View Staff Schedule",
+          "category": "navigation",
+          "priority": "medium",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-staff']",
+              "description": "Navigate to Staff"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='staff-schedule-tab']",
+              "description": "Click on schedule tab"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='schedule-calendar']",
+              "timeout_ms": 10000,
+              "description": "Wait for schedule calendar"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "staff_schedule_view"
+            }
+          ],
+          "expected_outcomes": [
+            "Staff schedule calendar is displayed",
+            "Current week is shown by default",
+            "Staff members are listed",
+            "Shift assignments are visible"
+          ]
+        },
+        {
+          "id": "full-006",
+          "name": "Send Message to Parent",
+          "category": "messaging",
+          "priority": "high",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-messages']",
+              "description": "Navigate to Messages"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='compose-message']",
+              "description": "Click compose new message"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='message-composer']",
+              "timeout_ms": 5000,
+              "description": "Wait for message composer"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='recipient-selector']",
+              "description": "Open recipient selector"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='parent-option']:first-child",
+              "description": "Select first parent"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='message-subject']",
+              "value": "Test Message Subject",
+              "description": "Enter message subject"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='message-body']",
+              "value": "This is a test message for QA purposes.",
+              "description": "Enter message body"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "message_composed"
+            }
+          ],
+          "expected_outcomes": [
+            "Message composer is displayed",
+            "Recipient can be selected",
+            "Subject and body fields are editable",
+            "Send button is available"
+          ]
+        },
+        {
+          "id": "full-007",
+          "name": "View Billing Summary",
+          "category": "billing",
+          "priority": "medium",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-billing']",
+              "description": "Navigate to Billing"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='billing-dashboard']",
+              "timeout_ms": 10000,
+              "description": "Wait for billing dashboard"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "billing_dashboard"
+            }
+          ],
+          "expected_outcomes": [
+            "Billing dashboard loads",
+            "Revenue summary is displayed",
+            "Outstanding invoices are listed",
+            "Payment history is accessible"
+          ]
+        },
+        {
+          "id": "full-008",
+          "name": "Generate Attendance Report",
+          "category": "reports",
+          "priority": "medium",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-reports']",
+              "description": "Navigate to Reports"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='report-type-attendance']",
+              "description": "Select attendance report type"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='date-range-picker']",
+              "description": "Open date range picker"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='preset-this-month']",
+              "description": "Select this month preset"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='generate-report-button']",
+              "description": "Generate report"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='report-preview']",
+              "timeout_ms": 15000,
+              "description": "Wait for report to generate"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "attendance_report"
+            }
+          ],
+          "expected_outcomes": [
+            "Report generates successfully",
+            "Date range is applied correctly",
+            "Export options are available",
+            "Data is formatted properly"
+          ]
+        },
+        {
+          "id": "full-009",
+          "name": "Manage Classroom Assignment",
+          "category": "classrooms",
+          "priority": "medium",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-classrooms']",
+              "description": "Navigate to Classrooms"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='classroom-list']",
+              "timeout_ms": 10000,
+              "description": "Wait for classroom list"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='classroom-card']:first-child",
+              "description": "Select first classroom"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='classroom-details']",
+              "timeout_ms": 5000,
+              "description": "Wait for classroom details"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "classroom_details"
+            }
+          ],
+          "expected_outcomes": [
+            "Classroom list is displayed",
+            "Classroom details show enrolled children",
+            "Assigned teachers are listed",
+            "Capacity information is shown"
+          ]
+        },
+        {
+          "id": "full-010",
+          "name": "Access Preferences/Settings",
+          "category": "settings",
+          "priority": "low",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click_menu",
+              "menu": "LAYA Admin",
+              "item": "Preferences...",
+              "description": "Open app preferences via menu bar"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='preferences-window']",
+              "timeout_ms": 5000,
+              "description": "Wait for preferences window"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "preferences_window"
+            },
+            {
+              "action": "press_key",
+              "key": "Escape",
+              "description": "Close preferences"
+            }
+          ],
+          "expected_outcomes": [
+            "Preferences window opens",
+            "Settings categories are visible",
+            "Changes can be made",
+            "Window closes properly"
+          ]
+        },
+        {
+          "id": "full-011",
+          "name": "Upload Document",
+          "category": "documents",
+          "priority": "medium",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-documents']",
+              "description": "Navigate to Documents"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='upload-document-button']",
+              "description": "Click upload document"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='file-picker-dialog']",
+              "timeout_ms": 5000,
+              "description": "Wait for file picker dialog"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "document_upload_dialog"
+            }
+          ],
+          "expected_outcomes": [
+            "File picker dialog opens",
+            "Supported file types are indicated",
+            "Upload progress would be shown",
+            "Cancel option is available"
+          ]
+        },
+        {
+          "id": "full-012",
+          "name": "Search for Child",
+          "category": "search",
+          "priority": "high",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "click",
+              "selector": "[data-testid='global-search']",
+              "description": "Click on global search"
+            },
+            {
+              "action": "input_text",
+              "selector": "[data-testid='search-input']",
+              "value": "{{TEST_CHILD_NAME}}",
+              "description": "Enter child name to search"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='search-results']",
+              "timeout_ms": 5000,
+              "description": "Wait for search results"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "search_results"
+            }
+          ],
+          "expected_outcomes": [
+            "Search results appear",
+            "Matching children are listed",
+            "Results are clickable",
+            "No results state handles empty search"
+          ]
+        }
+      ]
+    },
+    "exploratory": {
+      "description": "Edge cases, error states, and unusual user journeys for macOS admin app",
+      "timeout_seconds": 900,
+      "llm_guidance": {
+        "objective": "Discover unexpected behaviors and edge cases in the macOS admin application",
+        "focus_areas": [
+          "Network disconnection handling",
+          "Session timeout behavior",
+          "Concurrent admin operations",
+          "macOS-specific behaviors (Dock, menu bar, notifications)",
+          "Data validation edge cases",
+          "Accessibility compliance"
+        ]
+      },
+      "scenarios": [
+        {
+          "id": "exp-001",
+          "name": "Network Disconnection During Operation",
+          "category": "error_handling",
+          "priority": "high",
+          "steps": [
+            {
+              "action": "login",
+              "email": "{{TEST_ADMIN_EMAIL}}",
+              "password": "{{TEST_ADMIN_PASSWORD}}",
+              "description": "Login as admin"
+            },
+            {
+              "action": "navigate",
+              "target": "/attendance",
+              "description": "Navigate to attendance"
+            },
+            {
+              "action": "simulate_network",
+              "state": "offline",
+              "description": "Disable network connectivity"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='check-in-button']:first-child",
+              "description": "Attempt check-in while offline"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='network-error-alert']",
+              "timeout_ms": 10000,
+              "description": "Wait for network error handling"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "network_error_operation"
+            },
+            {
+              "action": "simulate_network",
+              "state": "online",
+              "description": "Restore network connectivity"
+            }
+          ],
+          "expected_outcomes": [
+            "Network error is displayed gracefully",
+            "Application does not crash",
+            "Retry option is available",
+            "Data integrity is maintained",
+            "App recovers when network returns"
+          ]
+        },
+        {
+          "id": "exp-002",
+          "name": "Session Timeout Handling",
+          "category": "error_handling",
+          "priority": "high",
+          "steps": [
+            {
+              "action": "login",
+              "email": "{{TEST_ADMIN_EMAIL}}",
+              "password": "{{TEST_ADMIN_PASSWORD}}",
+              "description": "Login as admin"
+            },
+            {
+              "action": "invalidate_session",
+              "description": "Simulate session expiration"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='nav-children']",
+              "description": "Attempt navigation requiring auth"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='session-expired-alert']",
+              "timeout_ms": 5000,
+              "description": "Wait for session expired handling"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "session_expired"
+            }
+          ],
+          "expected_outcomes": [
+            "Session expiration is handled gracefully",
+            "Admin is prompted to re-login",
+            "No sensitive data is exposed",
+            "Unsaved work warning if applicable"
+          ]
+        },
+        {
+          "id": "exp-003",
+          "name": "macOS Menu Bar Integration",
+          "category": "platform_specific",
+          "priority": "medium",
+          "preconditions": ["Application is running"],
+          "steps": [
+            {
+              "action": "click_menu",
+              "menu": "File",
+              "description": "Open File menu"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "file_menu"
+            },
+            {
+              "action": "press_key",
+              "key": "Escape",
+              "description": "Close menu"
+            },
+            {
+              "action": "click_menu",
+              "menu": "Edit",
+              "description": "Open Edit menu"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "edit_menu"
+            },
+            {
+              "action": "press_key",
+              "key": "Escape",
+              "description": "Close menu"
+            },
+            {
+              "action": "click_menu",
+              "menu": "Help",
+              "description": "Open Help menu"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "help_menu"
+            }
+          ],
+          "expected_outcomes": [
+            "All standard macOS menus are present",
+            "Menu items are appropriately enabled/disabled",
+            "Keyboard shortcuts are displayed",
+            "Help menu provides documentation access"
+          ]
+        },
+        {
+          "id": "exp-004",
+          "name": "Dock Icon Behavior",
+          "category": "platform_specific",
+          "priority": "low",
+          "preconditions": ["Application is running", "Admin is logged in"],
+          "steps": [
+            {
+              "action": "right_click",
+              "target": "dock_icon",
+              "description": "Right-click app icon in Dock"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "dock_context_menu"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='dock-menu-item']:first-child",
+              "description": "Click first dock menu item"
+            }
+          ],
+          "expected_outcomes": [
+            "Dock context menu appears",
+            "Quick actions are available",
+            "Badge count reflects notifications",
+            "Options menu is accessible"
+          ]
+        },
+        {
+          "id": "exp-005",
+          "name": "Keyboard Shortcuts",
+          "category": "accessibility",
+          "priority": "medium",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "press_key",
+              "key": "Cmd+,",
+              "description": "Open preferences with keyboard"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "shortcut_preferences"
+            },
+            {
+              "action": "press_key",
+              "key": "Escape",
+              "description": "Close preferences"
+            },
+            {
+              "action": "press_key",
+              "key": "Cmd+F",
+              "description": "Open search with keyboard"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "shortcut_search"
+            },
+            {
+              "action": "press_key",
+              "key": "Escape",
+              "description": "Close search"
+            },
+            {
+              "action": "press_key",
+              "key": "Cmd+N",
+              "description": "New item shortcut"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "shortcut_new"
+            }
+          ],
+          "expected_outcomes": [
+            "Standard macOS shortcuts work",
+            "App-specific shortcuts function",
+            "Shortcuts match menu bar hints",
+            "No conflicting shortcuts"
+          ]
+        },
+        {
+          "id": "exp-006",
+          "name": "VoiceOver Accessibility",
+          "category": "accessibility",
+          "priority": "high",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "enable_voiceover",
+              "description": "Enable VoiceOver accessibility"
+            },
+            {
+              "action": "voiceover_navigate",
+              "direction": "next",
+              "count": 5,
+              "description": "Navigate through elements with VoiceOver"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "voiceover_navigation"
+            },
+            {
+              "action": "voiceover_activate",
+              "description": "Activate focused element"
+            },
+            {
+              "action": "disable_voiceover",
+              "description": "Disable VoiceOver"
+            }
+          ],
+          "expected_outcomes": [
+            "All elements are accessible via VoiceOver",
+            "Labels are descriptive and accurate",
+            "Focus order is logical",
+            "Interactive elements are announced correctly"
+          ]
+        },
+        {
+          "id": "exp-007",
+          "name": "Window State Persistence",
+          "category": "window_management",
+          "priority": "medium",
+          "steps": [
+            {
+              "action": "login",
+              "email": "{{TEST_ADMIN_EMAIL}}",
+              "password": "{{TEST_ADMIN_PASSWORD}}",
+              "description": "Login as admin"
+            },
+            {
+              "action": "resize_window",
+              "width": 1200,
+              "height": 800,
+              "description": "Resize window"
+            },
+            {
+              "action": "move_window",
+              "x": 100,
+              "y": 100,
+              "description": "Move window position"
+            },
+            {
+              "action": "quit_app",
+              "description": "Quit application"
+            },
+            {
+              "action": "launch_app",
+              "bundle_id": "com.laya.admin",
+              "description": "Relaunch application"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='app-window']",
+              "timeout_ms": 10000,
+              "description": "Wait for app to launch"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "window_state_restored"
+            }
+          ],
+          "expected_outcomes": [
+            "Window size is restored",
+            "Window position is restored",
+            "Login state is preserved (if remember me)",
+            "Last viewed section is restored"
+          ]
+        },
+        {
+          "id": "exp-008",
+          "name": "Concurrent Edit Conflict",
+          "category": "data_integrity",
+          "priority": "high",
+          "preconditions": ["Admin is logged in"],
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/children/{{TEST_CHILD_ID}}",
+              "description": "Navigate to child profile"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='edit-button']",
+              "description": "Enter edit mode"
+            },
+            {
+              "action": "simulate_concurrent_edit",
+              "resource": "child",
+              "id": "{{TEST_CHILD_ID}}",
+              "description": "Simulate another user editing same record"
+            },
+            {
+              "action": "click",
+              "selector": "[data-testid='save-button']",
+              "description": "Attempt to save changes"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='conflict-alert']",
+              "timeout_ms": 5000,
+              "description": "Wait for conflict handling"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "edit_conflict"
+            }
+          ],
+          "expected_outcomes": [
+            "Conflict is detected",
+            "User is notified of conflict",
+            "Options to resolve are provided",
+            "Data is not corrupted"
+          ]
+        },
+        {
+          "id": "exp-009",
+          "name": "Large Data Set Loading",
+          "category": "performance",
+          "priority": "medium",
+          "preconditions": ["Admin is logged in", "Center has many children"],
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "/children",
+              "description": "Navigate to children list"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='children-roster']",
+              "timeout_ms": 30000,
+              "description": "Wait for full roster to load"
+            },
+            {
+              "action": "scroll",
+              "direction": "down",
+              "distance": 10000,
+              "description": "Scroll through entire list"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "large_list_scrolled"
+            }
+          ],
+          "expected_outcomes": [
+            "List loads within reasonable time",
+            "Scrolling is smooth",
+            "Pagination or virtualization works",
+            "Memory usage remains stable"
+          ]
+        },
+        {
+          "id": "exp-010",
+          "name": "System Notification Integration",
+          "category": "platform_specific",
+          "priority": "medium",
+          "preconditions": ["Admin is logged in", "Notifications are enabled"],
+          "steps": [
+            {
+              "action": "trigger_notification",
+              "type": "new_message",
+              "description": "Trigger a new message notification"
+            },
+            {
+              "action": "wait",
+              "duration_ms": 3000,
+              "description": "Wait for notification to appear"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "system_notification"
+            },
+            {
+              "action": "click_notification",
+              "description": "Click on the notification"
+            },
+            {
+              "action": "wait_for_element",
+              "selector": "[data-testid='messages-container']",
+              "timeout_ms": 5000,
+              "description": "Wait for app to navigate to messages"
+            },
+            {
+              "action": "capture_screenshot",
+              "name": "notification_clicked"
+            }
+          ],
+          "expected_outcomes": [
+            "System notifications appear",
+            "Clicking notification opens app",
+            "App navigates to relevant content",
+            "Notification badge updates correctly"
+          ]
+        }
+      ]
+    }
+  },
+  "test_data": {
+    "credentials": {
+      "admin_user": {
+        "email": "{{TEST_ADMIN_EMAIL}}",
+        "password": "{{TEST_ADMIN_PASSWORD}}"
+      },
+      "staff_user": {
+        "email": "{{TEST_STAFF_EMAIL}}",
+        "password": "{{TEST_STAFF_PASSWORD}}"
+      }
+    },
+    "children": {
+      "primary": {
+        "id": "{{TEST_CHILD_ID}}",
+        "name": "{{TEST_CHILD_NAME}}"
+      }
+    },
+    "center": {
+      "id": "{{TEST_CENTER_ID}}",
+      "name": "{{TEST_CENTER_NAME}}"
+    }
+  },
+  "evidence_capture": {
+    "screenshots": {
+      "on_failure": true,
+      "on_success": true,
+      "format": "png",
+      "directory": ".auto-claude/qa/runs/desktop/macos/{{timestamp}}/screenshots"
+    },
+    "logs": {
+      "console_logs": true,
+      "system_logs": true,
+      "directory": ".auto-claude/qa/runs/desktop/macos/{{timestamp}}/logs"
+    },
+    "video": {
+      "enabled": false,
+      "format": "mov",
+      "directory": ".auto-claude/qa/runs/desktop/macos/{{timestamp}}/video"
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "created": "2026-02-16",
+    "last_updated": "2026-02-16",
+    "author": "auto-claude",
+    "target_app_version": ">=0.1.0"
+  }
+}

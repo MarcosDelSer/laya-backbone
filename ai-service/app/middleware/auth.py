@@ -33,6 +33,8 @@ from app.config import settings
 
 # HTTPBearer security scheme for multi-source authentication
 security_multi_source = HTTPBearer()
+# Optional security scheme that returns None instead of raising when no token provided
+security_multi_source_optional = HTTPBearer(auto_error=False)
 
 
 class TokenSource:
@@ -242,7 +244,7 @@ async def verify_token_from_any_source(
 
 
 async def get_current_user_multi_source(
-    credentials: HTTPAuthorizationCredentials = HTTPBearer(),
+    credentials: HTTPAuthorizationCredentials,
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """FastAPI dependency to get current user from multi-source JWT token.
@@ -277,7 +279,7 @@ async def get_current_user_multi_source(
 
 
 async def get_optional_user_multi_source(
-    credentials: HTTPAuthorizationCredentials | None = HTTPBearer(auto_error=False),
+    credentials: HTTPAuthorizationCredentials | None,
     request: Optional[Request] = None,
 ) -> dict[str, Any] | None:
     """FastAPI dependency to optionally get current user from multi-source token.

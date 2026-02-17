@@ -360,6 +360,8 @@ export function isTokenExpired(token: string): boolean {
 
 /**
  * Get user information from a token.
+ * Note: This does NOT verify token expiration - use getValidatedUserFromToken
+ * for security-sensitive operations.
  *
  * @param token - The JWT token
  * @returns User information or null if invalid
@@ -375,6 +377,24 @@ export function getUserFromToken(token: string): User | null {
     email: payload.email,
     role: payload.role,
   };
+}
+
+/**
+ * Get user information from a token with full validation.
+ * This function verifies the token is not expired before returning user info.
+ * Use this for security-sensitive operations like /api/auth/me.
+ *
+ * @param token - The JWT token
+ * @returns User information or null if invalid or expired
+ */
+export function getValidatedUserFromToken(token: string): User | null {
+  // First check if token is expired
+  if (isTokenExpired(token)) {
+    return null;
+  }
+
+  // Get user from validated token
+  return getUserFromToken(token);
 }
 
 // ============================================================================

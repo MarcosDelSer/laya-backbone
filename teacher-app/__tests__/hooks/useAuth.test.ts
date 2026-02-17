@@ -5,9 +5,15 @@
  * login/logout flows, biometric authentication, and error handling.
  */
 
+import React from 'react';
 import {renderHook, act, waitFor} from '@testing-library/react-native';
-import {useAuth} from '../../src/hooks/useAuth';
+import {useAuth, AuthProvider} from '../../src/hooks/useAuth';
 import type {Teacher, LoginCredentials, LoginResponse} from '../../src/types';
+
+// Wrapper component for rendering hook with AuthProvider
+const wrapper = ({children}: {children: React.ReactNode}) => (
+  <AuthProvider>{children}</AuthProvider>
+);
 
 // Mock the authService module
 jest.mock('../../src/services/authService', () => ({
@@ -93,7 +99,7 @@ describe('useAuth hook', () => {
 
   describe('initial state', () => {
     it('should start with isLoading true', async () => {
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       // Initial state should have isLoading true
       expect(result.current.isLoading).toBe(true);
@@ -107,7 +113,7 @@ describe('useAuth hook', () => {
     it('should set isAuthenticated to false when not authenticated', async () => {
       mockCheckAuth.mockReturnValue(false);
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -121,7 +127,7 @@ describe('useAuth hook', () => {
       mockCheckAuth.mockReturnValue(true);
       mockGetCurrentUser.mockReturnValue(mockTeacher);
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -135,7 +141,7 @@ describe('useAuth hook', () => {
       mockIsBiometricLoginEnabled.mockReturnValue(true);
       mockGetStoredEmail.mockReturnValue('stored@email.com');
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -148,7 +154,7 @@ describe('useAuth hook', () => {
     });
 
     it('should have null error initially', async () => {
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -158,7 +164,7 @@ describe('useAuth hook', () => {
     });
 
     it('should have isLoggingIn false initially', async () => {
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       expect(result.current.isLoggingIn).toBe(false);
 
@@ -176,7 +182,7 @@ describe('useAuth hook', () => {
         () => new Promise(resolve => setTimeout(() => resolve({success: true, data: mockLoginResponse}), 100)),
       );
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -196,7 +202,7 @@ describe('useAuth hook', () => {
     it('should successfully login and update state', async () => {
       mockAuthLogin.mockResolvedValue({success: true, data: mockLoginResponse});
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -216,7 +222,7 @@ describe('useAuth hook', () => {
     it('should call authLogin with credentials and rememberMe', async () => {
       mockAuthLogin.mockResolvedValue({success: true, data: mockLoginResponse});
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -232,7 +238,7 @@ describe('useAuth hook', () => {
     it('should enable biometric when rememberMe is true on successful login', async () => {
       mockAuthLogin.mockResolvedValue({success: true, data: mockLoginResponse});
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -253,7 +259,7 @@ describe('useAuth hook', () => {
       };
       mockAuthLogin.mockResolvedValue(errorResponse);
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -279,7 +285,7 @@ describe('useAuth hook', () => {
         data: mockLoginResponse,
       });
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -301,7 +307,7 @@ describe('useAuth hook', () => {
     it('should handle thrown error during login', async () => {
       mockAuthLogin.mockRejectedValue(new Error('Unexpected error'));
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -326,7 +332,7 @@ describe('useAuth hook', () => {
         error: {code: 'INVALID_CREDENTIALS' as const, message: 'Invalid'},
       });
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -351,7 +357,7 @@ describe('useAuth hook', () => {
     it('should set default error when response has no error object', async () => {
       mockAuthLogin.mockResolvedValue({success: false});
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -372,7 +378,7 @@ describe('useAuth hook', () => {
     it('should fail when biometric is not enabled', async () => {
       mockIsBiometricLoginEnabled.mockReturnValue(false);
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -398,7 +404,7 @@ describe('useAuth hook', () => {
         data: mockLoginResponse,
       });
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -421,7 +427,7 @@ describe('useAuth hook', () => {
         () => new Promise(resolve => setTimeout(() => resolve({success: true, data: mockLoginResponse}), 100)),
       );
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -448,7 +454,7 @@ describe('useAuth hook', () => {
         data: mockLoginResponse,
       });
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -473,7 +479,7 @@ describe('useAuth hook', () => {
         error: {code: 'BIOMETRIC_FAILED' as const, message: 'Biometric verification failed'},
       });
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -496,7 +502,7 @@ describe('useAuth hook', () => {
       mockIsBiometricLoginEnabled.mockReturnValue(true);
       mockAuthLoginBiometrics.mockRejectedValue(new Error('Biometric error'));
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -523,7 +529,7 @@ describe('useAuth hook', () => {
       mockGetCurrentUser.mockReturnValue(mockTeacher);
       mockAuthLogout.mockResolvedValue({success: true});
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -547,7 +553,7 @@ describe('useAuth hook', () => {
       });
       mockAuthLogout.mockResolvedValue({success: true});
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -574,7 +580,7 @@ describe('useAuth hook', () => {
       mockAuthEnableBiometrics.mockResolvedValue({success: true});
       mockGetStoredEmail.mockReturnValue('test@email.com');
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -596,7 +602,7 @@ describe('useAuth hook', () => {
         error: {code: 'BIOMETRIC_NOT_AVAILABLE' as const, message: 'Biometrics not available'},
       });
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -620,7 +626,7 @@ describe('useAuth hook', () => {
         error: {code: 'BIOMETRIC_NOT_AVAILABLE' as const, message: 'Error'},
       });
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -649,7 +655,7 @@ describe('useAuth hook', () => {
       mockGetStoredEmail.mockReturnValue('test@email.com');
       mockAuthDisableBiometrics.mockResolvedValue({success: true});
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -673,7 +679,7 @@ describe('useAuth hook', () => {
         error: {code: 'INVALID_CREDENTIALS' as const, message: 'Invalid'},
       });
 
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -697,7 +703,7 @@ describe('useAuth hook', () => {
 
   describe('refreshBiometricStatus', () => {
     it('should update biometric status', async () => {
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -725,7 +731,7 @@ describe('useAuth hook', () => {
 
   describe('return value structure', () => {
     it('should return all expected state properties', async () => {
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -743,7 +749,7 @@ describe('useAuth hook', () => {
     });
 
     it('should return all expected action functions', async () => {
-      const {result} = renderHook(() => useAuth());
+      const {result} = renderHook(() => useAuth(), {wrapper});
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);

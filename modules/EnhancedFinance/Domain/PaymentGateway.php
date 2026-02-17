@@ -435,6 +435,55 @@ class PaymentGateway extends QueryableGateway
     }
 
     /**
+     * Get Year-to-Date (YTD) revenue for a calendar year.
+     *
+     * @param int $year Calendar year (YYYY format)
+     * @return array
+     */
+    public function selectYTDRevenue($year)
+    {
+        $data = [
+            'startDate' => $year . '-01-01',
+            'endDate' => $year . '-12-31'
+        ];
+        $sql = "SELECT
+                COUNT(*) AS paymentCount,
+                COALESCE(SUM(gibbonEnhancedFinancePayment.amount), 0) AS totalAmount,
+                COUNT(DISTINCT gibbonEnhancedFinanceInvoice.gibbonEnhancedFinanceInvoiceID) AS invoiceCount,
+                COUNT(DISTINCT gibbonEnhancedFinanceInvoice.gibbonFamilyID) AS familyCount
+            FROM gibbonEnhancedFinancePayment
+            INNER JOIN gibbonEnhancedFinanceInvoice ON gibbonEnhancedFinancePayment.gibbonEnhancedFinanceInvoiceID = gibbonEnhancedFinanceInvoice.gibbonEnhancedFinanceInvoiceID
+            WHERE gibbonEnhancedFinancePayment.paymentDate BETWEEN :startDate AND :endDate";
+
+        return $this->db()->selectOne($sql, $data);
+    }
+
+    /**
+     * Get YTD revenue by month for a calendar year.
+     *
+     * @param int $year Calendar year (YYYY format)
+     * @return Result
+     */
+    public function selectYTDRevenueByMonth($year)
+    {
+        $data = [
+            'startDate' => $year . '-01-01',
+            'endDate' => $year . '-12-31'
+        ];
+        $sql = "SELECT
+                MONTH(gibbonEnhancedFinancePayment.paymentDate) AS paymentMonth,
+                COUNT(*) AS paymentCount,
+                SUM(gibbonEnhancedFinancePayment.amount) AS totalAmount
+            FROM gibbonEnhancedFinancePayment
+            INNER JOIN gibbonEnhancedFinanceInvoice ON gibbonEnhancedFinancePayment.gibbonEnhancedFinanceInvoiceID = gibbonEnhancedFinanceInvoice.gibbonEnhancedFinanceInvoiceID
+            WHERE gibbonEnhancedFinancePayment.paymentDate BETWEEN :startDate AND :endDate
+            GROUP BY paymentMonth
+            ORDER BY paymentMonth ASC";
+
+        return $this->db()->select($sql, $data);
+    }
+
+    /**
      * Get filter rules for payment queries.
      *
      * @return array

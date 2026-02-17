@@ -79,17 +79,14 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_pa
     // Get settings
     $currency = $settingGateway->getSettingByScope('System', 'currency') ?: 'CAD';
 
-    // Payment method options
+    // Payment method options (must match ENUM values in database schema)
     $paymentMethods = [
-        'Cash'           => __('Cash'),
-        'Cheque'         => __('Cheque'),
-        'Credit Card'    => __('Credit Card'),
-        'Debit Card'     => __('Debit Card'),
-        'Bank Transfer'  => __('Bank Transfer'),
-        'E-Transfer'     => __('E-Transfer'),
-        'Direct Deposit' => __('Direct Deposit'),
-        'PayPal'         => __('PayPal'),
-        'Other'          => __('Other'),
+        'Cash'       => __('Cash'),
+        'Cheque'     => __('Cheque'),
+        'ETransfer'  => __('E-Transfer'),
+        'CreditCard' => __('Credit Card'),
+        'DebitCard'  => __('Debit Card'),
+        'Other'      => __('Other'),
     ];
 
     // Description

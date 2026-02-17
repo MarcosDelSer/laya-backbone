@@ -27,7 +27,7 @@ $description = 'Enhanced finance module for LAYA with Quebec RL-24 tax receipt g
 $entryURL    = 'releve24_pdf_batch.php';
 $type        = 'Additional';
 $category    = 'Finance';
-$version     = '1.0.00';
+$version     = '1.0.02';
 $author      = 'LAYA Development Team';
 $url         = 'https://laya.education';
 

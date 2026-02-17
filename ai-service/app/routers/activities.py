@@ -19,6 +19,7 @@ from app.schemas.activity import (
     ActivityType,
 )
 from app.services.activity_service import ActivityService
+from app.utils.field_selection import FieldSelector, get_field_selector
 
 router = APIRouter(prefix="/api/v1/activities", tags=["activities"])
 
@@ -113,28 +114,41 @@ async def get_recommendations(
 
 @router.get(
     "/{activity_id}",
-    response_model=ActivityResponse,
     summary="Get activity by ID",
-    description="Retrieve a single activity by its unique identifier.",
+    description="Retrieve a single activity by its unique identifier. "
+    "Supports field selection via ?fields= parameter to reduce payload size.",
 )
 async def get_activity(
     activity_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: dict[str, Any] = Depends(get_current_user),
-) -> ActivityResponse:
-    """Get a single activity by ID.
+    field_selector: FieldSelector = Depends(get_field_selector),
+) -> dict:
+    """Get a single activity by ID with optional field selection.
+
+    This endpoint supports field selection via the ?fields= query parameter,
+    allowing clients to request only the fields they need, reducing response
+    payload size and improving performance.
 
     Args:
         activity_id: Unique identifier of the activity.
         db: Async database session (injected).
         current_user: Authenticated user information (injected).
+        field_selector: Field selector for response filtering (injected).
 
     Returns:
-        ActivityResponse with activity details.
+        dict: Activity details (filtered if fields parameter is provided).
 
     Raises:
         HTTPException: 404 if activity not found.
         HTTPException: 401 if not authenticated.
+
+    Example:
+        # Get all fields
+        GET /api/v1/activities/123e4567-e89b-12d3-a456-426614174000
+
+        # Get only specific fields
+        GET /api/v1/activities/123e4567-e89b-12d3-a456-426614174000?fields=id,name,description
     """
     service = ActivityService(db)
     activity = await service.get_activity_by_id(activity_id)
@@ -145,7 +159,8 @@ async def get_activity(
             detail=f"Activity with id {activity_id} not found",
         )
 
-    return service._activity_to_response(activity)
+    response = service._activity_to_response(activity)
+    return field_selector.filter_fields(response, model_class=ActivityResponse)
 
 
 @router.get(

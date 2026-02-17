@@ -123,7 +123,12 @@ function getPhotoLibraryPermission(): Permission {
   // READ_MEDIA_IMAGES for accessing photos
   // For older versions, fall back to READ_EXTERNAL_STORAGE
   // Note: The library handles API level detection internally
-  return Platform.Version >= 33
+  const androidApiLevel =
+    typeof Platform.Version === 'number'
+      ? Platform.Version
+      : Number.parseInt(Platform.Version, 10) || 0;
+
+  return androidApiLevel >= 33
     ? PERMISSIONS.ANDROID.READ_MEDIA_IMAGES
     : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE;
 }

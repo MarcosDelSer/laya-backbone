@@ -48,12 +48,24 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/releve24_p
 
     // Handle email sending mode
     if ($displayMode === 'email') {
+        // Enforce POST-only semantics for email actions (CSRF protection)
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Content-Type: application/json');
+            http_response_code(405);
+            echo json_encode([
+                'success' => false,
+                'message' => __('Email sending requires POST method.'),
+                'error' => ['code' => 'METHOD_NOT_ALLOWED', 'message' => 'Email actions must use POST method'],
+            ]);
+            exit;
+        }
+
         try {
             // Initialize EmailService
             $emailService = $container->get(EmailService::class);
 
-            // Optional: get custom recipient email from POST/GET
-            $customEmail = $_REQUEST['email'] ?? null;
+            // Optional: get custom recipient email from POST only (no GET for security)
+            $customEmail = $_POST['email'] ?? null;
 
             // Send RL-24 via email
             $result = $emailService->sendRL24Email($releve24Id, $customEmail);
