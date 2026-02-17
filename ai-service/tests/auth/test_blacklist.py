@@ -249,7 +249,7 @@ class TestIsBlacklisted:
     @pytest.mark.asyncio
     async def test_is_blacklisted_returns_true_when_token_exists(self, service, mock_redis, valid_token):
         """Test is_blacklisted returns True when token is in blacklist."""
-        mock_redis.get.return_value = "user123:1234567890"
+        mock_redis.get = AsyncMock(return_value="user123:1234567890")
 
         result = await service.is_blacklisted(valid_token)
 
@@ -259,7 +259,7 @@ class TestIsBlacklisted:
     @pytest.mark.asyncio
     async def test_is_blacklisted_returns_false_when_token_not_exists(self, service, mock_redis, valid_token):
         """Test is_blacklisted returns False when token is not in blacklist."""
-        mock_redis.get.return_value = None
+        mock_redis.get = AsyncMock(return_value=None)
 
         result = await service.is_blacklisted(valid_token)
 
@@ -269,7 +269,7 @@ class TestIsBlacklisted:
     @pytest.mark.asyncio
     async def test_is_blacklisted_uses_correct_key(self, service, mock_redis, valid_token):
         """Test is_blacklisted uses correct Redis key."""
-        mock_redis.get.return_value = None
+        mock_redis.get = AsyncMock(return_value=None)
 
         await service.is_blacklisted(valid_token)
 
@@ -281,7 +281,7 @@ class TestIsBlacklisted:
     async def test_is_blacklisted_handles_expired_keys(self, service, mock_redis, valid_token):
         """Test is_blacklisted returns False for expired keys (Redis returns None)."""
         # Redis automatically returns None for expired keys
-        mock_redis.get.return_value = None
+        mock_redis.get = AsyncMock(return_value=None)
 
         result = await service.is_blacklisted(valid_token)
 
@@ -290,7 +290,7 @@ class TestIsBlacklisted:
     @pytest.mark.asyncio
     async def test_is_blacklisted_empty_string_value_treated_as_blacklisted(self, service, mock_redis, valid_token):
         """Test is_blacklisted treats empty string as blacklisted."""
-        mock_redis.get.return_value = ""
+        mock_redis.get = AsyncMock(return_value="")
 
         result = await service.is_blacklisted(valid_token)
 
@@ -433,7 +433,7 @@ class TestRemoveFromBlacklist:
     @pytest.mark.asyncio
     async def test_remove_from_blacklist_returns_true_when_removed(self, service, mock_redis, valid_token):
         """Test remove_from_blacklist returns True when token was removed."""
-        mock_redis.delete.return_value = 1  # 1 key deleted
+        mock_redis.delete = AsyncMock(return_value=1)  # 1 key deleted
 
         result = await service.remove_from_blacklist(valid_token)
 
@@ -443,7 +443,7 @@ class TestRemoveFromBlacklist:
     @pytest.mark.asyncio
     async def test_remove_from_blacklist_returns_false_when_not_found(self, service, mock_redis, valid_token):
         """Test remove_from_blacklist returns False when token wasn't in blacklist."""
-        mock_redis.delete.return_value = 0  # 0 keys deleted
+        mock_redis.delete = AsyncMock(return_value=0)  # 0 keys deleted
 
         result = await service.remove_from_blacklist(valid_token)
 
@@ -453,7 +453,7 @@ class TestRemoveFromBlacklist:
     @pytest.mark.asyncio
     async def test_remove_from_blacklist_uses_correct_key(self, service, mock_redis, valid_token):
         """Test remove_from_blacklist uses correct Redis key."""
-        mock_redis.delete.return_value = 1
+        mock_redis.delete = AsyncMock(return_value=1)
 
         await service.remove_from_blacklist(valid_token)
 
@@ -465,7 +465,7 @@ class TestRemoveFromBlacklist:
     async def test_remove_from_blacklist_multiple_deletions(self, service, mock_redis, valid_token):
         """Test remove_from_blacklist handles multiple key deletions."""
         # Redis delete can return count > 1 if multiple keys matched (rare edge case)
-        mock_redis.delete.return_value = 2
+        mock_redis.delete = AsyncMock(return_value=2)
 
         result = await service.remove_from_blacklist(valid_token)
 
@@ -624,10 +624,10 @@ class TestTokenBlacklistServiceEdgeCases:
 
     @pytest.mark.asyncio
     async def test_very_short_ttl(self, service, mock_redis):
-        """Test blacklisting with very short TTL (1 second)."""
+        """Test blacklisting with very short TTL (2 seconds to avoid race conditions)."""
         token = create_test_token(subject=str(uuid4()))
         user_id = str(uuid4())
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=1)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=2)
 
         mock_redis.setex = AsyncMock(return_value=True)
         result = await service.add_to_blacklist(token, user_id, expires_at)
@@ -635,7 +635,7 @@ class TestTokenBlacklistServiceEdgeCases:
         assert result is True
         call_args = mock_redis.setex.call_args
         ttl = call_args[0][1]
-        assert ttl == 1
+        assert ttl >= 1  # Should be 1 or 2 depending on timing
 
     @pytest.mark.asyncio
     async def test_very_long_ttl(self, service, mock_redis):

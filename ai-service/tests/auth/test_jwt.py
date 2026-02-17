@@ -307,32 +307,33 @@ class TestVerifyToken:
     @pytest.mark.asyncio
     async def test_verify_token_valid_not_blacklisted(self, mock_db_session, valid_credentials):
         """Test verify_token succeeds for valid, non-blacklisted token."""
-        # Mock the blacklist query to return no results
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db_session.execute.return_value = mock_result
+        # Mock the blacklist service to return False (not blacklisted)
+        with patch("app.auth.blacklist.TokenBlacklistService") as MockBlacklist:
+            mock_instance = AsyncMock()
+            mock_instance.is_blacklisted = AsyncMock(return_value=False)
+            MockBlacklist.return_value = mock_instance
 
-        payload = await verify_token(valid_credentials, mock_db_session)
+            payload = await verify_token(valid_credentials, mock_db_session)
 
-        assert payload["sub"] == "user123"
-        assert payload["role"] == "teacher"
-        mock_db_session.execute.assert_called_once()
+            assert payload["sub"] == "user123"
+            assert payload["role"] == "teacher"
+            mock_instance.is_blacklisted.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_verify_token_blacklisted_raises_401(self, mock_db_session, valid_credentials):
         """Test verify_token raises 401 for blacklisted token."""
-        # Mock the blacklist query to return a result (token is blacklisted)
-        mock_blacklist_entry = MagicMock()
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_blacklist_entry
-        mock_db_session.execute.return_value = mock_result
+        # Mock the blacklist service to return True (blacklisted)
+        with patch("app.auth.blacklist.TokenBlacklistService") as MockBlacklist:
+            mock_instance = AsyncMock()
+            mock_instance.is_blacklisted = AsyncMock(return_value=True)
+            MockBlacklist.return_value = mock_instance
 
-        with pytest.raises(HTTPException) as exc_info:
-            await verify_token(valid_credentials, mock_db_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_token(valid_credentials, mock_db_session)
 
-        assert exc_info.value.status_code == 401
-        assert exc_info.value.detail == "Token has been revoked"
-        assert exc_info.value.headers == {"WWW-Authenticate": "Bearer"}
+            assert exc_info.value.status_code == 401
+            assert exc_info.value.detail == "Token has been revoked"
+            assert exc_info.value.headers == {"WWW-Authenticate": "Bearer"}
 
     @pytest.mark.asyncio
     async def test_verify_token_expired_raises_401(self, mock_db_session, expired_credentials):
@@ -360,12 +361,13 @@ class TestVerifyToken:
         token = create_token(subject="extracted_user")
         credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db_session.execute.return_value = mock_result
+        with patch("app.auth.blacklist.TokenBlacklistService") as MockBlacklist:
+            mock_instance = AsyncMock()
+            mock_instance.is_blacklisted = AsyncMock(return_value=False)
+            MockBlacklist.return_value = mock_instance
 
-        payload = await verify_token(credentials, mock_db_session)
-        assert payload["sub"] == "extracted_user"
+            payload = await verify_token(credentials, mock_db_session)
+            assert payload["sub"] == "extracted_user"
 
     @pytest.mark.asyncio
     async def test_verify_token_checks_blacklist_with_correct_token(self, mock_db_session):
@@ -373,17 +375,15 @@ class TestVerifyToken:
         token = create_token(subject="user123")
         credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db_session.execute.return_value = mock_result
+        with patch("app.auth.blacklist.TokenBlacklistService") as MockBlacklist:
+            mock_instance = AsyncMock()
+            mock_instance.is_blacklisted = AsyncMock(return_value=False)
+            MockBlacklist.return_value = mock_instance
 
-        await verify_token(credentials, mock_db_session)
+            await verify_token(credentials, mock_db_session)
 
-        # Verify execute was called (checking the blacklist)
-        mock_db_session.execute.assert_called_once()
-        # The call should include a select statement
-        call_args = mock_db_session.execute.call_args
-        assert call_args is not None
+            # Verify is_blacklisted was called with the correct token
+            mock_instance.is_blacklisted.assert_called_once_with(token)
 
 
 class TestVerifyTokenIntegration:
@@ -398,10 +398,15 @@ class TestVerifyTokenIntegration:
         )
         credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
-        payload = await verify_token(credentials, auth_db_session)
+        with patch("app.auth.blacklist.TokenBlacklistService") as MockBlacklist:
+            mock_instance = AsyncMock()
+            mock_instance.is_blacklisted = AsyncMock(return_value=False)
+            MockBlacklist.return_value = mock_instance
 
-        assert payload["sub"] == "user123"
-        assert payload["role"] == "teacher"
+            payload = await verify_token(credentials, auth_db_session)
+
+            assert payload["sub"] == "user123"
+            assert payload["role"] == "teacher"
 
     @pytest.mark.asyncio
     async def test_verify_token_with_db_blacklisted(self, auth_db_session, teacher_user):
@@ -411,20 +416,18 @@ class TestVerifyTokenIntegration:
             additional_claims={"role": "teacher"},
         )
 
-        # Blacklist the token
-        await create_token_blacklist_in_db(
-            auth_db_session,
-            token=token,
-            user_id=teacher_user.id,
-        )
-
         credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
-        with pytest.raises(HTTPException) as exc_info:
-            await verify_token(credentials, auth_db_session)
+        with patch("app.auth.blacklist.TokenBlacklistService") as MockBlacklist:
+            mock_instance = AsyncMock()
+            mock_instance.is_blacklisted = AsyncMock(return_value=True)
+            MockBlacklist.return_value = mock_instance
 
-        assert exc_info.value.status_code == 401
-        assert exc_info.value.detail == "Token has been revoked"
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_token(credentials, auth_db_session)
+
+            assert exc_info.value.status_code == 401
+            assert exc_info.value.detail == "Token has been revoked"
 
     @pytest.mark.asyncio
     async def test_verify_token_different_token_not_affected(self, auth_db_session, teacher_user):
@@ -439,23 +442,25 @@ class TestVerifyTokenIntegration:
             additional_claims={"role": "teacher", "session": "2"},
         )
 
-        # Blacklist only token1
-        await create_token_blacklist_in_db(
-            auth_db_session,
-            token=token1,
-            user_id=teacher_user.id,
-        )
+        with patch("app.auth.blacklist.TokenBlacklistService") as MockBlacklist:
+            # Create a mock that returns True for token1 and False for token2
+            def is_blacklisted_side_effect(token):
+                return token == token1
 
-        # token1 should be rejected
-        credentials1 = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token1)
-        with pytest.raises(HTTPException):
-            await verify_token(credentials1, auth_db_session)
+            mock_instance = AsyncMock()
+            mock_instance.is_blacklisted = AsyncMock(side_effect=is_blacklisted_side_effect)
+            MockBlacklist.return_value = mock_instance
 
-        # token2 should still work
-        credentials2 = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token2)
-        payload = await verify_token(credentials2, auth_db_session)
-        assert payload["sub"] == str(teacher_user.id)
-        assert payload["session"] == "2"
+            # token1 should be rejected
+            credentials1 = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token1)
+            with pytest.raises(HTTPException):
+                await verify_token(credentials1, auth_db_session)
+
+            # token2 should still work
+            credentials2 = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token2)
+            payload = await verify_token(credentials2, auth_db_session)
+            assert payload["sub"] == str(teacher_user.id)
+            assert payload["session"] == "2"
 
 
 class TestJWTSecurityProperties:
