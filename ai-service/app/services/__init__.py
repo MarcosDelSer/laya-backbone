@@ -9,6 +9,7 @@ Modules:
     analytics_service: Service for business intelligence and analytics
     rbac_service: Service for role-based access control
     audit_service: Service for audit logging and tracking
+    notification_service: Service for unauthorized access notifications
 """
 
 from app.services.coaching_service import (
@@ -33,6 +34,12 @@ from app.services.audit_service import (
     AuditServiceError,
     AuditLogNotFoundError,
 )
+from app.services.notification_service import (
+    NotificationService,
+    NotificationServiceError,
+    NotificationDeliveryError,
+    NoRecipientsFoundError,
+)
 
 __all__: list[str] = [
     # Coaching
@@ -56,4 +63,9 @@ __all__: list[str] = [
     "AuditService",
     "AuditServiceError",
     "AuditLogNotFoundError",
+    # Notification
+    "NotificationService",
+    "NotificationServiceError",
+    "NotificationDeliveryError",
+    "NoRecipientsFoundError",
 ]
