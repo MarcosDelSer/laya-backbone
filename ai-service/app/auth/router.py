@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as redis
 
 from app.auth.schemas import (
     LoginRequest,
@@ -23,6 +24,7 @@ from app.auth.service import AuthService
 from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserRole
 from app.database import get_db
+from app.core.redis import get_redis
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 
@@ -147,6 +149,7 @@ async def refresh(
 async def logout(
     logout_request: LogoutRequest,
     db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> LogoutResponse:
     """Logout user by invalidating their tokens.
 
@@ -158,9 +161,13 @@ async def logout(
     the access token is provided, it will be blacklisted and the refresh token
     (if it exists) will remain valid until it's used or expires.
 
+    Tokens are blacklisted in both PostgreSQL (persistent) and Redis (fast cache)
+    with TTL matching the token expiration time.
+
     Args:
         logout_request: Request containing tokens to invalidate
         db: Async database session (injected)
+        redis_client: Async Redis client (injected)
 
     Returns:
         LogoutResponse containing:
@@ -186,7 +193,7 @@ async def logout(
             "tokens_invalidated": 2
         }
     """
-    service = AuthService(db)
+    service = AuthService(db, redis_client)
     return await service.logout(logout_request)
 
 

@@ -11,6 +11,7 @@ import secrets
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as redis
 
 from app.auth.models import User, TokenBlacklist, PasswordResetToken
 from app.auth.schemas import (
@@ -36,6 +37,7 @@ class AuthService:
 
     Attributes:
         db: Async database session for database operations.
+        redis_client: Optional async Redis client for token blacklist caching.
     """
 
     # Token expiration times (in seconds)
@@ -43,13 +45,15 @@ class AuthService:
     REFRESH_TOKEN_EXPIRE_SECONDS = 7 * 24 * 60 * 60  # 7 days
     PASSWORD_RESET_TOKEN_EXPIRE_SECONDS = 60 * 60  # 1 hour
 
-    def __init__(self, db: AsyncSession) -> None:
-        """Initialize AuthService with database session.
+    def __init__(self, db: AsyncSession, redis_client: Optional[redis.Redis] = None) -> None:
+        """Initialize AuthService with database session and optional Redis client.
 
         Args:
             db: Async database session for database operations.
+            redis_client: Optional async Redis client for token blacklist caching.
         """
         self.db = db
+        self.redis_client = redis_client
 
     async def authenticate_user(
         self, email: str, password: str
@@ -311,7 +315,7 @@ class AuthService:
         expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
         tokens_invalidated = 0
 
-        # Blacklist access token
+        # Blacklist access token in PostgreSQL
         access_blacklist = TokenBlacklist(
             token=logout_request.access_token,
             user_id=user_id,
@@ -319,6 +323,22 @@ class AuthService:
         )
         self.db.add(access_blacklist)
         tokens_invalidated += 1
+
+        # Blacklist access token in Redis with TTL
+        if self.redis_client:
+            try:
+                # Calculate TTL in seconds (time until token expires)
+                ttl_seconds = int((expires_at - datetime.now(timezone.utc)).total_seconds())
+                if ttl_seconds > 0:
+                    # Store token in Redis with key prefix for organization
+                    await self.redis_client.setex(
+                        f"blacklist:{logout_request.access_token}",
+                        ttl_seconds,
+                        "1"
+                    )
+            except Exception:
+                # If Redis fails, continue - PostgreSQL blacklist is still active
+                pass
 
         # Blacklist refresh token if provided
         if logout_request.refresh_token:
@@ -329,6 +349,8 @@ class AuthService:
                     refresh_expires_at = datetime.fromtimestamp(
                         refresh_exp_timestamp, tz=timezone.utc
                     )
+
+                    # Blacklist refresh token in PostgreSQL
                     refresh_blacklist = TokenBlacklist(
                         token=logout_request.refresh_token,
                         user_id=user_id,
@@ -336,6 +358,20 @@ class AuthService:
                     )
                     self.db.add(refresh_blacklist)
                     tokens_invalidated += 1
+
+                    # Blacklist refresh token in Redis with TTL
+                    if self.redis_client:
+                        try:
+                            refresh_ttl_seconds = int((refresh_expires_at - datetime.now(timezone.utc)).total_seconds())
+                            if refresh_ttl_seconds > 0:
+                                await self.redis_client.setex(
+                                    f"blacklist:{logout_request.refresh_token}",
+                                    refresh_ttl_seconds,
+                                    "1"
+                                )
+                        except Exception:
+                            # If Redis fails, continue - PostgreSQL blacklist is still active
+                            pass
             except HTTPException:
                 # If refresh token is invalid, we just skip blacklisting it
                 # The access token is still blacklisted, which is sufficient
