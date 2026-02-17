@@ -2,6 +2,7 @@
 
 Provides comprehensive health check endpoints for monitoring service health,
 including database connectivity, Redis cache, disk space, and memory usage.
+Automatically triggers alerts when critical issues are detected.
 """
 
 import os
@@ -15,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.services.alert_manager import AlertSeverity, get_alert_manager
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -476,6 +478,10 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     else:
         overall_status = "healthy"
 
+    # Trigger alerts for critical or degraded status
+    if overall_status in ["unhealthy", "degraded"]:
+        await _trigger_health_alert(overall_status, checks)
+
     return {
         "status": overall_status,
         "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -581,6 +587,10 @@ async def connection_pools() -> Dict[str, Any]:
     db_pool = check_database_pool()
     redis_pool = await check_redis_pool()
 
+    # Trigger alerts if pool status is critical or degraded
+    if db_pool.get("status") in ["critical", "degraded"]:
+        await _trigger_pool_alert("database", db_pool)
+
     return {
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "pools": {
@@ -588,6 +598,138 @@ async def connection_pools() -> Dict[str, Any]:
             "redis": redis_pool,
         },
     }
+
+
+async def _trigger_health_alert(
+    overall_status: str, checks: Dict[str, Any]
+) -> None:
+    """Trigger health alert when issues are detected.
+
+    Args:
+        overall_status: Overall health status (unhealthy/degraded)
+        checks: Dictionary of health check results
+    """
+    try:
+        alert_manager = get_alert_manager()
+
+        # Build alert message with details of failed checks
+        failed_checks = []
+        for check_name, check_data in checks.items():
+            check_status = check_data.get("status", "unknown")
+            if check_status in ["unhealthy", "critical", "degraded", "error"]:
+                failed_checks.append(f"{check_name}: {check_status}")
+
+        if not failed_checks:
+            return  # No issues to alert about
+
+        # Determine severity
+        severity = (
+            AlertSeverity.CRITICAL
+            if overall_status == "unhealthy"
+            else AlertSeverity.WARNING
+        )
+
+        # Send alert
+        await alert_manager.send_alert(
+            title=f"AI Service Health {overall_status.upper()}",
+            message=f"Service health is {overall_status}. Failed checks: {', '.join(failed_checks)}",
+            severity=severity,
+            context={
+                "overall_status": overall_status,
+                "failed_checks": failed_checks,
+                "checks": checks,
+            },
+        )
+
+    except Exception as e:
+        # Don't let alerting failures affect health checks
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to send health alert: %s", e)
+
+
+async def _trigger_pool_alert(pool_name: str, pool_data: Dict[str, Any]) -> None:
+    """Trigger alert when connection pool is degraded or critical.
+
+    Args:
+        pool_name: Name of the pool (database, redis)
+        pool_data: Pool statistics dictionary
+    """
+    try:
+        alert_manager = get_alert_manager()
+
+        pool_status = pool_data.get("status", "unknown")
+        utilization = pool_data.get("utilization_percent", 0)
+
+        severity = (
+            AlertSeverity.CRITICAL
+            if pool_status == "critical"
+            else AlertSeverity.WARNING
+        )
+
+        await alert_manager.send_alert(
+            title=f"{pool_name.title()} Connection Pool {pool_status.upper()}",
+            message=f"{pool_name} connection pool is {pool_status} with {utilization}% utilization",
+            severity=severity,
+            context={
+                "pool_name": pool_name,
+                "pool_status": pool_status,
+                "pool_data": pool_data,
+            },
+        )
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to send pool alert: %s", e)
+
+
+async def _trigger_queue_alert(queue_stats: Dict[str, Any]) -> None:
+    """Trigger alert when notification queues are degraded or critical.
+
+    Args:
+        queue_stats: Queue statistics dictionary
+    """
+    try:
+        alert_manager = get_alert_manager()
+
+        overall_status = queue_stats.get("status", "unknown")
+        total_depth = queue_stats.get("total_depth", 0)
+
+        if overall_status not in ["degraded", "critical"]:
+            return  # No alert needed
+
+        # Find critical/degraded queues
+        problem_queues = []
+        queues = queue_stats.get("queues", {})
+        for queue_type, queue_data in queues.items():
+            if queue_data.get("status") in ["degraded", "critical"]:
+                problem_queues.append(
+                    f"{queue_type}: {queue_data['depth']} messages"
+                )
+
+        severity = (
+            AlertSeverity.CRITICAL
+            if overall_status == "critical"
+            else AlertSeverity.WARNING
+        )
+
+        await alert_manager.send_alert(
+            title=f"Notification Queues {overall_status.upper()}",
+            message=f"Notification queues are {overall_status} with {total_depth} total messages. Problem queues: {', '.join(problem_queues)}",
+            severity=severity,
+            context={
+                "overall_status": overall_status,
+                "total_depth": total_depth,
+                "problem_queues": problem_queues,
+                "queue_stats": queue_stats,
+            },
+        )
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to send queue alert: %s", e)
 
 
 @router.get(
@@ -642,7 +784,112 @@ async def notification_queues() -> Dict[str, Any]:
     # Get notification queue statistics
     queue_stats = await check_notification_queues()
 
+    # Trigger alerts if queue status is critical or degraded
+    if queue_stats.get("status") in ["critical", "degraded"]:
+        await _trigger_queue_alert(queue_stats)
+
     return {
         "timestamp": datetime.utcnow().isoformat() + "Z",
         **queue_stats,
     }
+
+
+@router.get(
+    "/alerts",
+    summary="Alert configuration and history",
+    description="View alert configuration and recent alert history",
+    response_model=None,
+)
+async def alerts() -> Dict[str, Any]:
+    """Alert configuration and history endpoint.
+
+    Provides information about alert configuration status and recent alerts
+    that have been sent by the system.
+
+    Returns:
+        Dict containing alert configuration and history
+
+    Example:
+        GET /health/alerts
+
+        Response:
+        {
+            "timestamp": "2024-02-15T10:30:00Z",
+            "config": {
+                "enabled": true,
+                "channels": ["email", "slack"],
+                "min_severity": "warning"
+            },
+            "recent_alerts": [
+                {
+                    "title": "Database Connection Pool CRITICAL",
+                    "severity": "critical",
+                    "timestamp": "2024-02-15T10:25:00Z"
+                }
+            ]
+        }
+    """
+    alert_manager = get_alert_manager()
+
+    # Get configuration (sanitize sensitive data)
+    config = alert_manager.config
+    config_data = {
+        "enabled": config.enabled,
+        "channels": [c.value for c in config.channels],
+        "min_severity": config.min_severity.value,
+        "email_configured": bool(config.email_to),
+        "webhook_configured": bool(config.webhook_url),
+        "slack_configured": bool(config.slack_webhook_url),
+    }
+
+    # Get recent alert history
+    recent_alerts = alert_manager.get_alert_history(limit=20)
+
+    return {
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "config": config_data,
+        "recent_alerts": recent_alerts,
+    }
+
+
+@router.post(
+    "/alerts/test",
+    summary="Send test alert",
+    description="Send a test alert through all configured channels",
+    response_model=None,
+)
+async def test_alert() -> Dict[str, Any]:
+    """Send a test alert through all configured channels.
+
+    This endpoint allows testing the alert configuration by sending a
+    test alert through all enabled channels.
+
+    Returns:
+        Dict containing alert send results
+
+    Example:
+        POST /health/alerts/test
+
+        Response:
+        {
+            "sent": true,
+            "timestamp": "2024-02-15T10:30:00Z",
+            "channels": {
+                "email": {"success": true, "recipients": ["admin@example.com"]},
+                "slack": {"success": true, "status_code": 200}
+            }
+        }
+    """
+    alert_manager = get_alert_manager()
+
+    result = await alert_manager.send_alert(
+        title="Test Alert from LAYA AI Service",
+        message="This is a test alert to verify the alert configuration is working correctly.",
+        severity=AlertSeverity.INFO,
+        context={
+            "test": True,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        },
+    )
+
+    return result

@@ -23,6 +23,9 @@ redis[hiredis]>=5.0.0
 # System monitoring
 psutil>=5.9.0
 
+# Alert delivery
+aiohttp>=3.9.0
+
 # Form data parsing
 python-multipart>=0.0.6
 
