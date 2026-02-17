@@ -26,7 +26,7 @@ jobs:
           fetch-depth: 0  # Full history for better context
 
       - name: Check workflow run status
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: pullRequest } = await github.rest.pulls.get({
@@ -103,7 +103,7 @@ jobs:
 
       - name: Comment PR with status
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: pullRequest } = await github.rest.pulls.get({
@@ -212,7 +212,7 @@ jobs:
 
     steps:
       - name: Check PR title format
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: pullRequest } = await github.rest.pulls.get({
@@ -232,7 +232,7 @@ jobs:
             console.log(`✅ PR title: "${title}"`);
 
       - name: Check PR has description
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { data: pullRequest } = await github.rest.pulls.get({
@@ -289,7 +289,7 @@ jobs:
 
     steps:
       - name: Check if all required jobs passed
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const needs = ${{ toJSON(needs) }};
