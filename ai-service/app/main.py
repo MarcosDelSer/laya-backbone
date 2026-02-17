@@ -24,12 +24,13 @@ from app.middleware.rate_limit import (
 )
 from app.middleware.security import get_xss_protection_middleware, get_hsts_middleware
 from app.redis_client import close_redis
-from app.routers import coaching
+from app.routers import coaching, rbac
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
 from app.routers.cache import router as cache_router
 from app.routers.communication import router as communication_router
 from app.routers.health import router as health_router
+from app.routers.search import router as search_router
 from app.routers.webhooks import router as webhooks_router
 from app.security import generate_csrf_token
 from app.security.csrf import CSRFProtectionMiddleware

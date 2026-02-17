@@ -23,7 +23,7 @@ from app.auth.schemas import (
     PasswordResetConfirm,
     PasswordResetConfirmResponse,
 )
-from app.auth.jwt import security, verify_token, create_token
+from app.auth.jwt import security, security_optional, verify_token, create_token
 from app.auth.dependencies import get_current_user, require_role
 
 # Import MFA-related items from parent auth.py module (not this package)
@@ -54,6 +54,7 @@ __all__ = [
     "PasswordResetConfirmResponse",
     # JWT utilities
     "security",
+    "security_optional",
     "verify_token",
     "create_token",
     # MFA constants and utilities

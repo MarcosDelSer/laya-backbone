@@ -21,6 +21,7 @@ settings = get_settings()
 
 # HTTPBearer security scheme for token extraction
 security = HTTPBearer()
+security_optional = HTTPBearer(auto_error=False)
 
 
 def create_token(

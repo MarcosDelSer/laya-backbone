@@ -13,7 +13,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import security, verify_token
+from app.auth import security, security_optional, verify_token
 from app.database import get_db
 from app.models.rbac import RoleType
 from app.services.rbac_service import RBACService
