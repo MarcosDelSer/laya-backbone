@@ -135,3 +135,44 @@ async def invalidate_cache(key_prefix: str, pattern: str = "*") -> int:
         return 0
     except Exception:
         return 0
+
+
+def invalidate_on_write(*cache_prefixes: str):
+    """Decorator to automatically invalidate caches after write operations.
+
+    This decorator wraps write operations (create, update, delete) and
+    automatically invalidates specified caches after the operation succeeds.
+
+    Args:
+        *cache_prefixes: One or more cache key prefixes to invalidate
+
+    Returns:
+        Decorated function with automatic cache invalidation
+
+    Example:
+        @invalidate_on_write("child_profile", "analytics_dashboard")
+        async def update_child_profile(child_id: UUID, data: dict):
+            # Perform update operation
+            return updated_profile
+            # Caches for "child_profile" and "analytics_dashboard" are invalidated
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            # Execute the write operation
+            result = await func(*args, **kwargs)
+
+            # Invalidate specified caches after successful write
+            try:
+                for prefix in cache_prefixes:
+                    await invalidate_cache(prefix)
+            except Exception:
+                # Don't fail the operation if cache invalidation fails
+                # This ensures write operations succeed even if Redis is down
+                pass
+
+            return result
+
+        return async_wrapper
+
+    return decorator

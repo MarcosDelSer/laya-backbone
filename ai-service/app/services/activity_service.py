@@ -11,7 +11,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import cache, invalidate_cache
+from app.core.cache import cache, invalidate_cache, invalidate_on_write
 from app.models.activity import (
     Activity,
     ActivityParticipation,
@@ -421,6 +421,7 @@ class ActivityService:
 
         return activities, total
 
+    @invalidate_on_write("analytics_dashboard")
     async def record_participation(
         self,
         child_id: UUID,
@@ -431,6 +432,9 @@ class ActivityService:
         notes: Optional[str] = None,
     ) -> ActivityParticipation:
         """Record a child's participation in an activity.
+
+        This method invalidates the analytics dashboard cache since
+        participation data affects engagement and activity metrics.
 
         Args:
             child_id: Unique identifier of the child.
@@ -456,6 +460,7 @@ class ActivityService:
         await self.db.refresh(participation)
         return participation
 
+    @invalidate_on_write("analytics_dashboard")
     async def save_recommendation(
         self,
         child_id: UUID,
@@ -464,6 +469,9 @@ class ActivityService:
         reasoning: Optional[str] = None,
     ) -> ActivityRecommendationModel:
         """Save a generated recommendation to the database.
+
+        This method invalidates the analytics dashboard cache since
+        recommendation data may affect analytics calculations.
 
         Args:
             child_id: Unique identifier of the child.
