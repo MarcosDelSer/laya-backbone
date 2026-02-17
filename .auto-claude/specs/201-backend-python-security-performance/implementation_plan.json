@@ -1,0 +1,737 @@
+{
+  "feature": "Backend Python Security & Performance Enhancements",
+  "workflow_type": "feature",
+  "workflow_rationale": "This task introduces new security infrastructure patterns (lifespan context manager, fastapi-limiter migration) and performance optimizations (cached settings) to the existing FastAPI application. While some components exist (JWT, security headers), the migration to modern patterns and integration of fastapi-limiter constitute new feature work.",
+  "phases": [
+    {
+      "id": "phase-1-setup",
+      "name": "Dependencies & Environment Setup",
+      "type": "setup",
+      "description": "Update dependencies and environment configuration files",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add fastapi-limiter and pip-audit to requirements.txt",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/requirements.txt"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep 'fastapi-limiter' requirements.txt && grep 'pip-audit' requirements.txt",
+            "expected": "Both packages present in requirements.txt"
+          },
+          "status": "completed",
+          "notes": "Successfully added fastapi-limiter>=0.1.5 and pip-audit>=2.7.0 to requirements.txt. Verification passed and changes committed.",
+          "updated_at": "2026-02-17T16:09:14.750261+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Update .env.example with all required security and performance environment variables",
+          "service": "ai-service",
+          "files_to_modify": [
+            ".env.example"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "grep -E 'JWT_SECRET_KEY|RATE_LIMIT_STORAGE_URI|X_FRAME_OPTIONS|ENFORCE_HTTPS' .env.example",
+            "expected": "All required environment variables documented"
+          },
+          "status": "completed",
+          "notes": "Successfully updated .env.example with all required security and performance environment variables including JWT_SECRET_KEY, RATE_LIMIT_STORAGE_URI, X_FRAME_OPTIONS, ENFORCE_HTTPS, CORS_ORIGINS, and other configuration options. All variables are properly documented with comments and example values. Verification passed and changes committed.",
+          "updated_at": "2026-02-17T16:10:38.454077+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-config-modernization",
+      "name": "Config Modernization",
+      "type": "implementation",
+      "description": "Modernize config.py with SettingsConfigDict and @lru_cache for performance",
+      "depends_on": [
+        "phase-1-setup"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Migrate config.py from Config inner class to SettingsConfigDict",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/config.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "ai-service/app/config.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"from app.config import Settings; s = Settings(); print('SettingsConfigDict migration successful')\"",
+            "expected": "SettingsConfigDict migration successful"
+          },
+          "status": "completed",
+          "notes": "Successfully migrated config.py from Config inner class to SettingsConfigDict. Added missing Literal import and replaced the old Config class pattern with modern model_config approach. Verification passed.",
+          "updated_at": "2026-02-17T16:12:45.638896+00:00"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Add @lru_cache getter function for settings to avoid repeated .env reads",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/config.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"from app.config import get_settings; s1 = get_settings(); s2 = get_settings(); print('Same instance:', id(s1) == id(s2))\"",
+            "expected": "Same instance: True"
+          },
+          "status": "completed",
+          "notes": "Added @lru_cache decorator to get_settings() function to cache Settings instance and avoid repeated .env file reads. Verification passed: get_settings() returns the same cached instance on multiple calls.",
+          "updated_at": "2026-02-17T16:14:33.618428+00:00"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Add @property methods for computed settings (cors_origins_list, etc.)",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/config.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "ai-service/app/config.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"from app.config import get_settings; s = get_settings(); print('CORS origins list:', type(s.cors_origins_list).__name__)\"",
+            "expected": "CORS origins list: list"
+          },
+          "status": "completed",
+          "notes": "Added @property methods for computed settings: cors_origins_list (converts comma-separated string to list) and redis_url (constructs Redis connection URL). Verification passed successfully.",
+          "updated_at": "2026-02-17T16:16:16.531785+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-lifespan-migration",
+      "name": "Lifespan Context Manager Migration",
+      "type": "implementation",
+      "description": "Migrate from deprecated @app.on_event to lifespan context manager for Redis and fastapi-limiter initialization",
+      "depends_on": [
+        "phase-2-config-modernization"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create lifespan context manager function in main.py for Redis and fastapi-limiter initialization",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/main.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "ai-service/app/database.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep -A 10 '@asynccontextmanager' app/main.py | grep 'FastAPILimiter.init'",
+            "expected": "FastAPILimiter.init found in lifespan context manager"
+          },
+          "status": "completed",
+          "notes": "Created lifespan context manager with @asynccontextmanager decorator in ai-service/app/main.py. Successfully initialized Redis connection and FastAPILimiter, integrated cache warming, and implemented proper cleanup on shutdown. Removed deprecated @app.on_event handlers and migrated to modern FastAPI lifespan pattern. Verification passed: FastAPILimiter.init found in lifespan context manager.",
+          "updated_at": "2026-02-17T17:20:00.000000+00:00"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Remove deprecated @app.on_event('startup'/'shutdown') handlers",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/main.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && ! grep -E '@app.on_event\\((\"startup\"|\"shutdown\")\\)' app/main.py",
+            "expected": "No @app.on_event handlers found"
+          },
+          "status": "completed",
+          "notes": "Verification confirmed: No deprecated @app.on_event handlers found in ai-service/app/main.py. The lifespan context manager already handles all startup/shutdown tasks. This subtask was completed as part of subtask-3-1.",
+          "updated_at": "2026-02-17T22:15:42.832120+00:00"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Update FastAPI app instantiation to use lifespan parameter",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/main.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep 'FastAPI(lifespan=lifespan' app/main.py",
+            "expected": "FastAPI instantiation includes lifespan parameter"
+          },
+          "status": "completed",
+          "notes": "FastAPI app instantiation already correctly configured with lifespan parameter. The lifespan context manager is defined and properly integrated.",
+          "updated_at": "2026-02-17T22:17:42.495395+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-rate-limit-migration",
+      "name": "Rate Limiting Migration",
+      "type": "implementation",
+      "description": "Migrate from slowapi to fastapi-limiter with Redis backend and proper async patterns",
+      "depends_on": [
+        "phase-3-lifespan-migration"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Update rate_limit.py to use fastapi-limiter instead of slowapi",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/middleware/rate_limit.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep 'from fastapi_limiter.depends import RateLimiter' app/middleware/rate_limit.py",
+            "expected": "RateLimiter imported from fastapi-limiter"
+          },
+          "status": "completed",
+          "notes": "Successfully migrated rate_limit.py from slowapi to fastapi-limiter. Replaced slowapi.Limiter with RateLimiter dependencies from fastapi-limiter.depends. Added get_auth_rate_limiter() and get_general_rate_limiter() helper functions. Kept backward-compatible get_auth_limit() and get_general_limit() string functions. Verification passed.",
+          "updated_at": "2026-02-17T22:19:37.089357+00:00"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Update endpoints in main.py to use RateLimiter dependency instead of @limiter.limit decorator",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/main.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep 'Depends(RateLimiter' app/main.py",
+            "expected": "Endpoints using RateLimiter dependency"
+          },
+          "status": "completed",
+          "notes": "Successfully updated all 4 endpoints in main.py to use RateLimiter dependency instead of @limiter.limit decorator. Updated imports, removed unused parameters, and cleaned up unused imports. Verification passed.",
+          "updated_at": "2026-02-17T22:22:07.407068+00:00"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Remove slowapi imports and limiter instance from main.py",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/main.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && ! grep 'from slowapi import' app/main.py",
+            "expected": "No slowapi imports found"
+          },
+          "status": "completed",
+          "notes": "Verification passed - no slowapi imports found in main.py. The file is already using fastapi-limiter instead of slowapi.",
+          "updated_at": "2026-02-17T22:24:02.024462+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-security-enhancement",
+      "name": "Security Middleware Enhancement",
+      "type": "implementation",
+      "description": "Ensure all security middleware is properly registered and configured",
+      "depends_on": [
+        "phase-3-lifespan-migration"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Register XSS protection middleware in main.py middleware stack",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/main.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "ai-service/app/middleware/security.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep 'get_xss_protection_middleware' app/main.py",
+            "expected": "XSS middleware registered"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Register HSTS middleware in main.py middleware stack",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/main.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "ai-service/app/middleware/security.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep 'get_hsts_middleware' app/main.py",
+            "expected": "HSTS middleware registered"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Update CORS middleware configuration to use get_settings().cors_origins_list",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/main.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "ai-service/app/middleware/security.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep 'cors_origins_list' app/main.py",
+            "expected": "CORS using cors_origins_list property"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-6-jwt-enhancement",
+      "name": "JWT Authentication Enhancement",
+      "type": "implementation",
+      "description": "Enhance JWT token handling with proper expiration and validation improvements",
+      "depends_on": [
+        "phase-2-config-modernization"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Update jwt.py to use get_settings() for cached configuration access",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/auth/jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep 'from app.config import get_settings' app/auth/jwt.py",
+            "expected": "JWT module using get_settings() for configuration"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Ensure create_token always includes 'exp' claim with proper timezone handling",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/auth/jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"from app.auth.jwt import create_token; import jwt; token = create_token('test123', 60); payload = jwt.decode(token, options={'verify_signature': False}); assert 'exp' in payload; print('Expiration claim present')\"",
+            "expected": "Expiration claim present"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Add comprehensive error handling for ExpiredSignatureError and InvalidTokenError",
+          "service": "ai-service",
+          "files_to_modify": [
+            "ai-service/app/auth/jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && grep -E '(ExpiredSignatureError|InvalidTokenError)' app/auth/jwt.py",
+            "expected": "Both exception types handled"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-7-testing",
+      "name": "Test Suite Implementation",
+      "type": "implementation",
+      "description": "Create comprehensive test suite for security and performance features",
+      "depends_on": [
+        "phase-4-rate-limit-migration",
+        "phase-5-security-enhancement",
+        "phase-6-jwt-enhancement"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Create test_auth.py with JWT creation, validation, and expiration tests",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [
+            "ai-service/tests/test_auth.py"
+          ],
+          "patterns_from": [
+            "ai-service/tests/test_error_handler.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && pytest tests/test_auth.py -v",
+            "expected": "All JWT tests pass"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Create test_rate_limit.py with rate limiting behavior and reset tests",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [
+            "ai-service/tests/test_rate_limit.py"
+          ],
+          "patterns_from": [
+            "ai-service/tests/test_error_handler.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && pytest tests/test_rate_limit.py -v",
+            "expected": "All rate limiting tests pass"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Create test_security_headers.py with middleware header verification tests",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [
+            "ai-service/tests/test_security_headers.py"
+          ],
+          "patterns_from": [
+            "ai-service/tests/test_error_handler.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && pytest tests/test_security_headers.py -v",
+            "expected": "All security header tests pass"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Create test_config.py with settings caching verification tests",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [
+            "ai-service/tests/test_config.py"
+          ],
+          "patterns_from": [
+            "ai-service/tests/test_error_handler.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && pytest tests/test_config.py -v",
+            "expected": "Settings caching tests pass"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-8-integration-verification",
+      "name": "Integration Verification",
+      "type": "integration",
+      "description": "Verify all components work together and run security scans",
+      "depends_on": [
+        "phase-7-testing"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Run full test suite to ensure no regressions",
+          "service": "ai-service",
+          "all_services": false,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && pytest tests/ -v",
+            "expected": "All tests pass including new security tests"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Run pip-audit to verify no critical/high vulnerabilities",
+          "service": "ai-service",
+          "all_services": false,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && pip-audit --desc",
+            "expected": "No critical or high severity vulnerabilities"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-8-3",
+          "description": "Start ai-service and verify startup without errors",
+          "service": "ai-service",
+          "all_services": false,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Start ai-service with 'uvicorn app.main:app --reload' and verify: (1) No startup errors, (2) Redis connection successful, (3) FastAPILimiter initialized, (4) /docs endpoint accessible"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-8-4",
+          "description": "Test rate limiting behavior via API calls",
+          "service": "ai-service",
+          "all_services": false,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "api",
+            "method": "GET",
+            "url": "http://localhost:8000/",
+            "expected_status": 200,
+            "additional_checks": [
+              "Make 6 rapid requests to verify rate limiting returns 429 on 6th request",
+              "Verify security headers present: X-Frame-Options, X-Content-Type-Options",
+              "Verify CORS headers present for allowed origins"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-8-5",
+          "description": "Test JWT authentication flow",
+          "service": "ai-service",
+          "all_services": false,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "api",
+            "method": "GET",
+            "url": "http://localhost:8000/protected",
+            "expected_status": 401,
+            "additional_checks": [
+              "Request without token returns 401",
+              "Request with valid token returns 200",
+              "Request with expired token returns 401 with 'Token expired' message"
+            ]
+          },
+          "status": "pending"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 8,
+    "total_subtasks": 24,
+    "services_involved": [
+      "ai-service"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-2-config-modernization"
+          ],
+          "reason": "Config modernization can proceed independently after setup"
+        },
+        {
+          "phases": [
+            "phase-5-security-enhancement",
+            "phase-6-jwt-enhancement"
+          ],
+          "reason": "Both depend on phase-2 and phase-3, modify different file sets, no conflicts"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential execution recommended due to tight dependencies between lifespan migration and rate limiting"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 201 --parallel 1"
+  },
+  "verification_strategy": {
+    "risk_level": "high",
+    "skip_validation": false,
+    "test_creation_phase": "phase-7-testing",
+    "test_types_required": [
+      "unit",
+      "integration",
+      "api"
+    ],
+    "security_scanning_required": true,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All existing tests pass (no regressions)",
+      "New tests created for JWT, rate limiting, security headers, config caching",
+      "pip-audit runs without high/critical vulnerabilities",
+      "Lifespan context manager initializes Redis and fastapi-limiter",
+      "Rate limiting enforces 5/min for auth endpoints, 100/min for general",
+      "Security headers present in all responses",
+      "Settings cached with @lru_cache (no repeated .env reads)",
+      "JWT tokens include 'exp' claim with proper expiration"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests",
+        "command": "cd ai-service && pytest tests/test_auth.py tests/test_rate_limit.py tests/test_security_headers.py tests/test_config.py -v",
+        "expected_outcome": "All new unit tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Integration Tests",
+        "command": "cd ai-service && pytest tests/ -v",
+        "expected_outcome": "All tests pass including existing tests (no regressions)",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Security Scan",
+        "command": "cd ai-service && pip-audit --desc",
+        "expected_outcome": "No high or critical vulnerabilities detected",
+        "type": "security",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Startup Verification",
+        "command": "cd ai-service && timeout 10 uvicorn app.main:app --host 0.0.0.0 --port 8000",
+        "expected_outcome": "Service starts without errors, Redis connects, FastAPILimiter initializes",
+        "type": "integration",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "High risk due to migration from slowapi to fastapi-limiter affecting all rate-limited endpoints, lifespan context manager replacing deprecated event handlers, and potential breaking changes. Requires comprehensive testing and security scanning."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": [
+        "cd ai-service && pytest tests/test_auth.py tests/test_rate_limit.py tests/test_security_headers.py tests/test_config.py -v"
+      ],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": [
+        "cd ai-service && pytest tests/ -v"
+      ],
+      "services_to_test": [
+        "ai-service"
+      ]
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "api_verification": {
+      "required": true,
+      "endpoints": [
+        {
+          "method": "GET",
+          "url": "http://localhost:8000/",
+          "expected_status": 200,
+          "checks": [
+            "Security headers present",
+            "Rate limiting functional"
+          ]
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost:8000/protected",
+          "expected_status": 401,
+          "checks": [
+            "Returns 401 without token",
+            "Returns 200 with valid token"
+          ]
+        },
+        {
+          "method": "GET",
+          "url": "http://localhost:8000/docs",
+          "expected_status": 200,
+          "checks": [
+            "Swagger UI loads",
+            "Shows lock icon for protected endpoints"
+          ]
+        }
+      ]
+    },
+    "security_verification": {
+      "required": true,
+      "checks": [
+        {
+          "name": "Dependency Vulnerabilities",
+          "command": "cd ai-service && pip-audit --desc",
+          "expected": "No high/critical vulnerabilities"
+        },
+        {
+          "name": "Environment Variables",
+          "command": "grep '.env' .gitignore",
+          "expected": ".env in .gitignore"
+        },
+        {
+          "name": "Security Headers",
+          "command": "curl -I http://localhost:8000/ | grep -E '(X-Frame-Options|X-Content-Type-Options|Strict-Transport-Security)'",
+          "expected": "All security headers present"
+        }
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "updated_at": "2026-02-17T22:22:31.942Z",
+  "last_updated": "2026-02-17T22:24:02.024473+00:00",
+  "recoveryNote": "Task recovered from stuck state at 2026-02-17T22:14:06.640Z"
+}
