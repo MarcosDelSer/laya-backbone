@@ -15,9 +15,13 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_role
 from app.models.rbac import RoleType
 from app.schemas.rbac import (
+    PermissionCheckRequest,
+    PermissionCheckResponse,
+    PermissionResponse,
     RevokeRoleRequest,
     RoleListResponse,
     RoleResponse,
+    UserPermissionsResponse,
     UserRoleAssignment,
     UserRoleListResponse,
     UserRoleResponse,
@@ -313,6 +317,200 @@ async def get_user_roles(
             include_inactive=include_inactive,
         )
         return roles
+    except RBACServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"RBAC service error: {str(e)}",
+        )
+
+
+# =============================================================================
+# Permission Endpoints
+# =============================================================================
+
+
+@router.get("/permissions", response_model=list[PermissionResponse])
+async def list_permissions(
+    role_id: Optional[UUID] = Query(
+        default=None,
+        description="Filter permissions by role ID",
+    ),
+    include_inactive: bool = Query(
+        default=False,
+        description="Whether to include inactive permissions in the response",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> list[PermissionResponse]:
+    """List all permissions in the system.
+
+    Returns all active permissions by default. Optionally filter by role ID.
+    Use include_inactive=true to also retrieve deactivated permissions.
+
+    Args:
+        role_id: Optional filter by role ID
+        include_inactive: Whether to include inactive permissions
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        List of PermissionResponse containing all matching permissions
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = RBACService(db)
+
+    try:
+        # Get all roles with their permissions
+        roles = await service.get_roles(include_inactive=include_inactive)
+
+        # Flatten permissions from all roles
+        permissions: list[PermissionResponse] = []
+        seen_ids: set[UUID] = set()
+
+        for role in roles:
+            # Filter by role_id if specified
+            if role_id and role.id != role_id:
+                continue
+
+            for permission in role.permissions:
+                # Skip if already added or if inactive and not including inactive
+                if permission.id in seen_ids:
+                    continue
+                if not include_inactive and not permission.is_active:
+                    continue
+
+                seen_ids.add(permission.id)
+                permissions.append(permission)
+
+        return permissions
+    except RBACServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"RBAC service error: {str(e)}",
+        )
+
+
+@router.post("/permissions/check", response_model=PermissionCheckResponse)
+async def check_permission(
+    request: PermissionCheckRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> PermissionCheckResponse:
+    """Check if a user has a specific permission.
+
+    Evaluates whether the specified user has permission to perform the given
+    action on the given resource. Considers the user's roles and any
+    group-level restrictions.
+
+    Args:
+        request: The permission check request containing user_id, resource, and action
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        PermissionCheckResponse indicating if the permission is allowed
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = RBACService(db)
+
+    try:
+        result = await service.check_permission(request)
+        return result
+    except RBACServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"RBAC service error: {str(e)}",
+        )
+
+
+@router.get("/users/{user_id}/permissions", response_model=UserPermissionsResponse)
+async def get_user_permissions(
+    user_id: UUID,
+    organization_id: Optional[UUID] = Query(
+        default=None,
+        description="Filter permissions by organization context",
+    ),
+    group_id: Optional[UUID] = Query(
+        default=None,
+        description="Filter permissions by group context",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> UserPermissionsResponse:
+    """Get all permissions for a specific user.
+
+    Retrieves all roles and their associated permissions for the user,
+    considering organization and group context. Users can view their own
+    permissions, while Directors can view any user's permissions.
+
+    Args:
+        user_id: ID of the user to get permissions for
+        organization_id: Optional organization context filter
+        group_id: Optional group context filter
+        db: Async database session (injected)
+        current_user: Authenticated user from JWT token (injected)
+
+    Returns:
+        UserPermissionsResponse containing all roles and aggregated permissions
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When trying to view another user's permissions without Director role
+        HTTPException 500: When an unexpected error occurs
+    """
+    service = RBACService(db)
+
+    # Check if user is viewing their own permissions or is a director
+    current_user_id_str = current_user.get("sub")
+    is_self = False
+
+    if current_user_id_str:
+        try:
+            current_user_id = UUID(current_user_id_str)
+            is_self = current_user_id == user_id
+        except (ValueError, TypeError):
+            pass
+
+    # If not viewing own permissions, check for Director role
+    if not is_self:
+        org_id = None
+        org_id_str = current_user.get("organization_id")
+        if org_id_str:
+            try:
+                org_id = UUID(org_id_str)
+            except (ValueError, TypeError):
+                pass
+
+        is_director = False
+        if current_user_id_str:
+            try:
+                current_user_id = UUID(current_user_id_str)
+                is_director = await service.is_director(
+                    user_id=current_user_id,
+                    organization_id=org_id,
+                )
+            except (ValueError, TypeError):
+                pass
+
+        if not is_director:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: can only view your own permissions or requires Director role",
+            )
+
+    try:
+        permissions = await service.get_user_permissions(
+            user_id=user_id,
+            organization_id=organization_id,
+            group_id=group_id,
+        )
+        return permissions
     except RBACServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
