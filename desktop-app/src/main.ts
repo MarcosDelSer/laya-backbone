@@ -37,14 +37,15 @@ function createWindow(): void {
 // App ready event
 app.whenReady().then(() => {
   // Configure Content Security Policy headers for security
+  // Strict policy: no unsafe-inline or unsafe-eval for enhanced security
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           "default-src 'self'; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-          "style-src 'self' 'unsafe-inline'; " +
+          "script-src 'self'; " +
+          "style-src 'self'; " +
           "img-src 'self' data: https:; " +
           "font-src 'self' data:; " +
           "connect-src 'self' http://localhost:* ws://localhost:*"
