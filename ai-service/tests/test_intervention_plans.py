@@ -2047,3 +2047,72 @@ async def test_create_plan_snapshot_captures_all_fields(
 
     assert "consultations" in snapshot, "Snapshot must include consultations (Part 8)"
     assert len(snapshot["consultations"]) == 1, "Consultations section should have 1 item"
+
+
+@pytest.mark.asyncio
+async def test_initial_version_has_snapshot_data(
+    mock_db_session: AsyncMock,
+    mock_user_id: UUID,
+    plan_create_request: InterventionPlanCreate,
+) -> None:
+    """Test that creating a plan creates version 1 with snapshot_data.
+
+    Verifies that when a plan is created, an initial version record
+    is created with version_number=1 and snapshot_data is not None.
+    """
+    service = InterventionPlanService(mock_db_session)
+
+    # Track what gets added to the session
+    added_objects = []
+
+    def track_add(obj: Any) -> None:
+        """Track objects added to session."""
+        added_objects.append(obj)
+
+    mock_db_session.add.side_effect = track_add
+
+    # Mock the get_plan method to return a response
+    mock_plan_response = MagicMock()
+    with patch.object(service, "get_plan", return_value=mock_plan_response):
+        with patch.object(
+            service,
+            "_get_plan_with_relations",
+            return_value=MagicMock(
+                id=uuid4(),
+                child_id=plan_create_request.child_id,
+                created_by=mock_user_id,
+                title=plan_create_request.title,
+                version=1,
+                strengths=[],
+                needs=[],
+                goals=[],
+                strategies=[],
+                monitoring=[],
+                parent_involvements=[],
+                consultations=[],
+            ),
+        ):
+            with patch.object(
+                service,
+                "_create_plan_snapshot",
+                return_value={
+                    "title": plan_create_request.title,
+                    "version": 1,
+                    "created_by": str(mock_user_id),
+                },
+            ):
+                await service.create_plan(plan_create_request, mock_user_id)
+
+    # Find the InterventionVersion object that was added
+    from app.models.intervention_plan import InterventionVersion
+
+    version_objects = [
+        obj for obj in added_objects if isinstance(obj, InterventionVersion)
+    ]
+
+    assert len(version_objects) == 1, "Should create exactly one version record"
+
+    version = version_objects[0]
+    assert version.version_number == 1, "Initial version should be version 1"
+    assert version.snapshot_data is not None, "Version 1 snapshot_data should not be None"
+    assert version.change_summary == "Initial plan creation", "Should have initial creation message"
