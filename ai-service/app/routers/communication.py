@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import verify_child_access
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas.communication import (
@@ -26,6 +27,7 @@ from app.services.communication_service import (
     CommunicationService,
     CommunicationServiceError,
     InvalidDateError,
+    UnauthorizedAccessError,
 )
 
 router = APIRouter()
@@ -60,15 +62,31 @@ async def generate_report(
     Raises:
         HTTPException 400: When the date is in the future or invalid
         HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user lacks permission to access the child's data
         HTTPException 500: When an unexpected error occurs
     """
     service = CommunicationService(db)
 
     try:
+        # Verify user has access to this child
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role", "parent")
+        await verify_child_access(
+            db=db,
+            child_id=request.child_id,
+            user_id=user_id,
+            user_role=user_role,
+        )
+
         return await service.generate_report(request, current_user)
     except InvalidDateError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
         )
     except CommunicationServiceError as e:
@@ -115,15 +133,31 @@ async def get_home_activities(
 
     Raises:
         HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user lacks permission to access the child's data
         HTTPException 500: When an unexpected error occurs
     """
     service = CommunicationService(db)
 
     try:
+        # Verify user has access to this child
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role", "parent")
+        await verify_child_access(
+            db=db,
+            child_id=child_id,
+            user_id=user_id,
+            user_role=user_role,
+        )
+
         return await service.get_home_activities(
             child_id=child_id,
             language=language,
             limit=limit,
+        )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
         )
     except CommunicationServiceError as e:
         raise HTTPException(
@@ -158,11 +192,29 @@ async def create_or_update_preferences(
 
     Raises:
         HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user lacks permission to access the child's data or parent's preferences
         HTTPException 500: When an unexpected error occurs
     """
     service = CommunicationService(db)
 
     try:
+        # Verify user has access to this child
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role", "parent")
+        await verify_child_access(
+            db=db,
+            child_id=request.child_id,
+            user_id=user_id,
+            user_role=user_role,
+        )
+
+        # Verify user can update this parent's preferences
+        # Parents can only update their own preferences; admins/educators can update any
+        if user_role.lower() == "parent" and str(request.parent_id) != str(user_id):
+            raise UnauthorizedAccessError(
+                "Parents can only update their own communication preferences"
+            )
+
         preference = await service.update_preference(
             parent_id=request.parent_id,
             child_id=request.child_id,
@@ -178,6 +230,11 @@ async def create_or_update_preferences(
             report_frequency=ReportFrequency(preference.report_frequency),
             created_at=preference.created_at,
             updated_at=preference.updated_at,
+        )
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
         )
     except CommunicationServiceError as e:
         raise HTTPException(
@@ -211,12 +268,23 @@ async def get_preferences(
 
     Raises:
         HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user lacks permission to access the parent's preferences
         HTTPException 404: When preferences are not found for the parent
         HTTPException 500: When an unexpected error occurs
     """
     service = CommunicationService(db)
 
     try:
+        # Verify user can access this parent's preferences
+        # Parents can only access their own preferences; admins/educators can access any
+        user_id = UUID(current_user["sub"])
+        user_role = current_user.get("role", "parent")
+
+        if user_role.lower() == "parent" and str(parent_id) != str(user_id):
+            raise UnauthorizedAccessError(
+                "Parents can only access their own communication preferences"
+            )
+
         preference = await service.get_preference_by_parent(parent_id=parent_id)
 
         if preference is None:
@@ -236,6 +304,11 @@ async def get_preferences(
         )
     except HTTPException:
         raise
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
     except CommunicationServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

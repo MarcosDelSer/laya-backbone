@@ -4,6 +4,8 @@ Provides business logic for document template management, document creation,
 and signature workflows. Implements CRUD operations and document lifecycle management.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -40,6 +42,46 @@ from app.schemas.document import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Exception Classes
+# =============================================================================
+
+
+class DocumentServiceError(Exception):
+    """Base exception for document service errors."""
+
+    pass
+
+
+class DocumentNotFoundError(DocumentServiceError):
+    """Raised when the specified document is not found."""
+
+    pass
+
+
+class TemplateNotFoundError(DocumentServiceError):
+    """Raised when the specified template is not found."""
+
+    pass
+
+
+class UnauthorizedAccessError(DocumentServiceError):
+    """Raised when the user does not have permission to access a resource."""
+
+    pass
+
+
+class SignatureRequestNotFoundError(DocumentServiceError):
+    """Raised when the specified signature request is not found."""
+
+    pass
+
+
+# =============================================================================
+# Document Service
+# =============================================================================
 
 
 class DocumentService:
@@ -1281,3 +1323,77 @@ class DocumentService:
             timestamp=audit_log.timestamp,
             created_at=audit_log.created_at,
         )
+
+    # =========================================================================
+    # Authorization Helper Methods
+    # =========================================================================
+
+    def _verify_document_access(
+        self,
+        document: Document,
+        user_id: UUID,
+    ) -> bool:
+        """Verify if a user has access to a document.
+
+        User has access if they are the creator of the document.
+
+        Args:
+            document: The document to check access for
+            user_id: ID of the user to check
+
+        Returns:
+            True if user has access, False otherwise
+        """
+        # Creator always has access
+        if str(document.created_by) == str(user_id):
+            return True
+
+        return False
+
+    def _verify_template_access(
+        self,
+        template: DocumentTemplate,
+        user_id: UUID,
+    ) -> bool:
+        """Verify if a user has access to a document template.
+
+        User has access if they are the creator of the template.
+
+        Args:
+            template: The template to check access for
+            user_id: ID of the user to check
+
+        Returns:
+            True if user has access, False otherwise
+        """
+        # Creator always has access
+        if str(template.created_by) == str(user_id):
+            return True
+
+        return False
+
+    def _verify_signature_request_access(
+        self,
+        signature_request: SignatureRequest,
+        user_id: UUID,
+    ) -> bool:
+        """Verify if a user has access to a signature request.
+
+        User has access if they are the requester or the signer.
+
+        Args:
+            signature_request: The signature request to check access for
+            user_id: ID of the user to check
+
+        Returns:
+            True if user has access, False otherwise
+        """
+        # Requester has access
+        if str(signature_request.requester_id) == str(user_id):
+            return True
+
+        # Signer has access
+        if str(signature_request.signer_id) == str(user_id):
+            return True
+
+        return False

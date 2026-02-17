@@ -290,6 +290,11 @@ async def update_intervention_plan(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
         )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
+        )
     except InvalidPlanError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -332,6 +337,11 @@ async def delete_intervention_plan(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
+        )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
         )
     except InterventionPlanServiceError as e:
         raise HTTPException(
@@ -383,6 +393,11 @@ async def create_plan_version(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
         )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
+        )
     except PlanVersionError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -427,6 +442,11 @@ async def get_plan_history(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
+        )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
         )
     except InterventionPlanServiceError as e:
         raise HTTPException(
@@ -477,6 +497,11 @@ async def add_plan_progress(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
+        )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
         )
     except InvalidPlanError as e:
         raise HTTPException(
@@ -533,6 +558,11 @@ async def sign_intervention_plan(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
         )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
+        )
     except InvalidPlanError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -583,6 +613,11 @@ async def add_strength(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
         )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
+        )
     except InterventionPlanServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -622,6 +657,11 @@ async def add_need(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
+        )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
         )
     except InterventionPlanServiceError as e:
         raise HTTPException(
@@ -670,6 +710,11 @@ async def add_goal(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
         )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
+        )
     except InterventionPlanServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -709,6 +754,11 @@ async def add_strategy(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
+        )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
         )
     except InterventionPlanServiceError as e:
         raise HTTPException(
@@ -750,6 +800,11 @@ async def add_monitoring(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
         )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
+        )
     except InterventionPlanServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -790,6 +845,11 @@ async def add_parent_involvement(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
         )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
+        )
     except InterventionPlanServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -829,6 +889,11 @@ async def add_consultation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Intervention plan not found",
+        )
+    except UnauthorizedAccessError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this intervention plan",
         )
     except InterventionPlanServiceError as e:
         raise HTTPException(

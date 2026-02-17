@@ -91,54 +91,6 @@ TestAsyncSessionLocal = sessionmaker(
 pytest_plugins = ("pytest_asyncio",)
 
 
-# SQLite-compatible auth tables (converted from PostgreSQL)
-SQLITE_CREATE_AUTH_TABLES_SQL = """
-CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    role TEXT NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS ix_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS ix_users_role ON users(role);
-CREATE INDEX IF NOT EXISTS ix_users_is_active ON users(is_active);
-
-CREATE TABLE IF NOT EXISTS token_blacklist (
-    id TEXT PRIMARY KEY,
-    token TEXT NOT NULL UNIQUE,
-    user_id TEXT NOT NULL,
-    blacklisted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS ix_token_blacklist_token ON token_blacklist(token);
-CREATE INDEX IF NOT EXISTS ix_token_blacklist_user_id ON token_blacklist(user_id);
-CREATE INDEX IF NOT EXISTS ix_token_blacklist_expires_at ON token_blacklist(expires_at);
-
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id TEXT PRIMARY KEY,
-    token TEXT NOT NULL UNIQUE,
-    user_id TEXT NOT NULL,
-    email TEXT NOT NULL,
-    is_used INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_token ON password_reset_tokens(token);
-CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_user_id ON password_reset_tokens(user_id);
-CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_email ON password_reset_tokens(email);
-CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_is_used ON password_reset_tokens(is_used);
-CREATE INDEX IF NOT EXISTS ix_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
-"""
-
-
 # SQLite-compatible coaching tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COACHING_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS coaching_sessions (
@@ -244,6 +196,23 @@ CREATE INDEX IF NOT EXISTS idx_participations_activity ON activity_participation
 
 # SQLite-compatible communication tables (PostgreSQL ARRAY not supported in SQLite)
 SQLITE_CREATE_COMMUNICATION_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS children (
+    id TEXT PRIMARY KEY,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    date_of_birth DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS parent_child (
+    parent_id TEXT NOT NULL,
+    child_id TEXT NOT NULL,
+    relationship_type VARCHAR(50) DEFAULT 'parent',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (parent_id, child_id)
+);
+
 CREATE TABLE IF NOT EXISTS parent_reports (
     id TEXT PRIMARY KEY,
     child_id TEXT NOT NULL,
@@ -285,6 +254,9 @@ CREATE TABLE IF NOT EXISTS communication_preferences (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_children_dob ON children(date_of_birth);
+CREATE INDEX IF NOT EXISTS idx_parent_child_parent ON parent_child(parent_id);
+CREATE INDEX IF NOT EXISTS idx_parent_child_child ON parent_child(child_id);
 CREATE INDEX IF NOT EXISTS idx_parent_reports_child ON parent_reports(child_id);
 CREATE INDEX IF NOT EXISTS idx_parent_reports_child_date ON parent_reports(child_id, report_date);
 CREATE INDEX IF NOT EXISTS idx_home_activities_child ON home_activities(child_id);
@@ -388,48 +360,97 @@ CREATE INDEX IF NOT EXISTS idx_file_thumbnails_file ON file_thumbnails(file_id);
 CREATE INDEX IF NOT EXISTS idx_storage_quotas_owner ON storage_quotas(owner_id);
 """
 
-
-# SQLite-compatible auth tables for RBAC testing
-SQLITE_CREATE_AUTH_TABLES_SQL = """
-CREATE TABLE IF NOT EXISTS users (
+SQLITE_CREATE_DOCUMENT_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS documents (
     id TEXT PRIMARY KEY,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    first_name VARCHAR(100) NOT NULL,
-    last_name VARCHAR(100) NOT NULL,
-    role VARCHAR(20) NOT NULL,
-    is_active INTEGER NOT NULL DEFAULT 1,
+    type VARCHAR(20) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content_url TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    created_by TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS token_blacklist (
+CREATE TABLE IF NOT EXISTS document_templates (
     id TEXT PRIMARY KEY,
-    token VARCHAR(500) NOT NULL UNIQUE,
-    user_id TEXT NOT NULL,
-    blacklisted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id TEXT PRIMARY KEY,
-    token VARCHAR(500) NOT NULL UNIQUE,
-    user_id TEXT NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    is_used INTEGER NOT NULL DEFAULT 0,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(20) NOT NULL,
+    description TEXT,
+    template_content TEXT NOT NULL,
+    required_fields TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    version INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
-CREATE INDEX IF NOT EXISTS idx_token_blacklist_token ON token_blacklist(token);
-CREATE INDEX IF NOT EXISTS idx_token_blacklist_user ON token_blacklist(user_id);
-CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at);
-CREATE INDEX IF NOT EXISTS idx_password_reset_token ON password_reset_tokens(token);
-CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id);
-CREATE INDEX IF NOT EXISTS idx_password_reset_email ON password_reset_tokens(email);
+CREATE TABLE IF NOT EXISTS signatures (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    signer_id TEXT NOT NULL,
+    signature_image_url TEXT NOT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    device_info TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS signature_requests (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    requester_id TEXT NOT NULL,
+    signer_id TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'sent',
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    viewed_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    expires_at TIMESTAMP,
+    notification_sent INTEGER NOT NULL DEFAULT 0,
+    notification_method VARCHAR(50),
+    message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS document_audit_logs (
+    id TEXT PRIMARY KEY,
+    event_type VARCHAR(50) NOT NULL,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    signature_id TEXT REFERENCES signatures(id) ON DELETE SET NULL,
+    signature_request_id TEXT REFERENCES signature_requests(id) ON DELETE SET NULL,
+    event_data TEXT,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+CREATE INDEX IF NOT EXISTS idx_documents_created_by ON documents(created_by);
+CREATE INDEX IF NOT EXISTS idx_document_templates_name ON document_templates(name);
+CREATE INDEX IF NOT EXISTS idx_document_templates_type ON document_templates(type);
+CREATE INDEX IF NOT EXISTS idx_document_templates_active ON document_templates(is_active);
+CREATE INDEX IF NOT EXISTS idx_document_templates_created_by ON document_templates(created_by);
+CREATE INDEX IF NOT EXISTS idx_signatures_document ON signatures(document_id);
+CREATE INDEX IF NOT EXISTS idx_signatures_signer ON signatures(signer_id);
+CREATE INDEX IF NOT EXISTS idx_signatures_timestamp ON signatures(timestamp);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_document ON signature_requests(document_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_requester ON signature_requests(requester_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_signer ON signature_requests(signer_id);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_status ON signature_requests(status);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_sent_at ON signature_requests(sent_at);
+CREATE INDEX IF NOT EXISTS idx_signature_requests_expires_at ON signature_requests(expires_at);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_event_type ON document_audit_logs(event_type);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_document ON document_audit_logs(document_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_user ON document_audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_signature ON document_audit_logs(signature_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_signature_request ON document_audit_logs(signature_request_id);
+CREATE INDEX IF NOT EXISTS idx_document_audit_logs_timestamp ON document_audit_logs(timestamp);
 """
 
 
@@ -451,13 +472,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     Yields:
         AsyncSession: Async database session for testing.
     """
-    # Create auth tables via raw SQL (SQLite compatibility)
-    async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_AUTH_TABLES_SQL.strip().split(';'):
-            statement = statement.strip()
-            if statement:
-                await conn.execute(text(statement))
-
     # Create coaching tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
         for statement in SQLITE_CREATE_COACHING_TABLES_SQL.strip().split(';'):
@@ -493,9 +507,9 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             if statement:
                 await conn.execute(text(statement))
 
-    # Create auth tables via raw SQL (SQLite compatibility) for RBAC
+    # Create document tables via raw SQL (SQLite compatibility)
     async with test_engine.begin() as conn:
-        for statement in SQLITE_CREATE_AUTH_TABLES_SQL.strip().split(';'):
+        for statement in SQLITE_CREATE_DOCUMENT_TABLES_SQL.strip().split(';'):
             statement = statement.strip()
             if statement:
                 await conn.execute(text(statement))
@@ -518,6 +532,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS communication_preferences"))
         await conn.execute(text("DROP TABLE IF EXISTS home_activities"))
         await conn.execute(text("DROP TABLE IF EXISTS parent_reports"))
+        await conn.execute(text("DROP TABLE IF EXISTS parent_child"))
+        await conn.execute(text("DROP TABLE IF EXISTS children"))
         # Drop activity tables
         await conn.execute(text("DROP TABLE IF EXISTS activity_participations"))
         await conn.execute(text("DROP TABLE IF EXISTS activity_recommendations"))
@@ -527,10 +543,12 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await conn.execute(text("DROP TABLE IF EXISTS observations"))
         await conn.execute(text("DROP TABLE IF EXISTS skill_assessments"))
         await conn.execute(text("DROP TABLE IF EXISTS development_profiles"))
-        # Drop auth tables
-        await conn.execute(text("DROP TABLE IF EXISTS password_reset_tokens"))
-        await conn.execute(text("DROP TABLE IF EXISTS token_blacklist"))
-        await conn.execute(text("DROP TABLE IF EXISTS users"))
+        # Drop document tables (foreign keys first)
+        await conn.execute(text("DROP TABLE IF EXISTS document_audit_logs"))
+        await conn.execute(text("DROP TABLE IF EXISTS signature_requests"))
+        await conn.execute(text("DROP TABLE IF EXISTS signatures"))
+        await conn.execute(text("DROP TABLE IF EXISTS document_templates"))
+        await conn.execute(text("DROP TABLE IF EXISTS documents"))
 
 
 @pytest_asyncio.fixture
@@ -586,7 +604,7 @@ def test_user_payload(test_user_id: UUID) -> dict[str, Any]:
     return {
         "sub": str(test_user_id),
         "email": "test@example.com",
-        "role": "teacher",  # Using "teacher" role for RBAC compatibility
+        "role": "educator",
     }
 
 
@@ -1912,96 +1930,6 @@ class MockStorageQuota:
         )
 
 
-class MockMFASettings:
-    """Mock MFASettings object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        user_id,
-        is_enabled,
-        method,
-        secret_key,
-        recovery_email,
-        last_verified_at,
-        failed_attempts,
-        locked_until,
-        created_at,
-        updated_at,
-    ):
-        self.id = id
-        self.user_id = user_id
-        self.is_enabled = is_enabled
-        self.method = method
-        self.secret_key = secret_key
-        self.recovery_email = recovery_email
-        self.last_verified_at = last_verified_at
-        self.failed_attempts = failed_attempts
-        self.locked_until = locked_until
-        self.created_at = created_at
-        self.updated_at = updated_at
-
-    def __repr__(self) -> str:
-        return (
-            f"<MFASettings(id={self.id}, user_id={self.user_id}, "
-            f"enabled={self.is_enabled}, method={self.method})>"
-        )
-
-
-class MockMFABackupCode:
-    """Mock MFABackupCode object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        mfa_settings_id,
-        code_hash,
-        is_used,
-        used_at,
-        created_at,
-    ):
-        self.id = id
-        self.mfa_settings_id = mfa_settings_id
-        self.code_hash = code_hash
-        self.is_used = is_used
-        self.used_at = used_at
-        self.created_at = created_at
-
-    def __repr__(self) -> str:
-        return (
-            f"<MFABackupCode(id={self.id}, mfa_settings_id={self.mfa_settings_id}, "
-            f"used={self.is_used})>"
-        )
-
-
-class MockMFAIPWhitelist:
-    """Mock MFAIPWhitelist object for testing without SQLAlchemy ORM overhead."""
-
-    def __init__(
-        self,
-        id,
-        mfa_settings_id,
-        ip_address,
-        description,
-        is_active,
-        created_at,
-        updated_at,
-    ):
-        self.id = id
-        self.mfa_settings_id = mfa_settings_id
-        self.ip_address = ip_address
-        self.description = description
-        self.is_active = is_active
-        self.created_at = created_at
-        self.updated_at = updated_at
-
-    def __repr__(self) -> str:
-        return (
-            f"<MFAIPWhitelist(id={self.id}, ip={self.ip_address}, "
-            f"active={self.is_active})>"
-        )
-
-
 async def create_file_in_db(
     session: AsyncSession,
     owner_id: UUID,
@@ -2151,62 +2079,6 @@ async def create_storage_quota_in_db(
         quota_bytes=quota_bytes,
         used_bytes=used_bytes,
         file_count=file_count,
-        created_at=now,
-        updated_at=now,
-    )
-
-
-async def create_mfa_settings_in_db(
-    session: AsyncSession,
-    user_id: UUID,
-    is_enabled: bool = False,
-    method: str = "totp",
-    secret_key: Optional[str] = None,
-    recovery_email: Optional[str] = None,
-    last_verified_at: Optional[datetime] = None,
-    failed_attempts: int = 0,
-    locked_until: Optional[datetime] = None,
-) -> MockMFASettings:
-    """Helper function to create MFA settings directly in SQLite database."""
-    settings_id = str(uuid4())
-    now = datetime.now(timezone.utc)
-
-    await session.execute(
-        text("""
-            INSERT INTO mfa_settings (
-                id, user_id, is_enabled, method, secret_key, recovery_email,
-                last_verified_at, failed_attempts, locked_until, created_at, updated_at
-            ) VALUES (
-                :id, :user_id, :is_enabled, :method, :secret_key, :recovery_email,
-                :last_verified_at, :failed_attempts, :locked_until, :created_at, :updated_at
-            )
-        """),
-        {
-            "id": settings_id,
-            "user_id": str(user_id),
-            "is_enabled": 1 if is_enabled else 0,
-            "method": method,
-            "secret_key": secret_key,
-            "recovery_email": recovery_email,
-            "last_verified_at": last_verified_at.isoformat() if last_verified_at else None,
-            "failed_attempts": failed_attempts,
-            "locked_until": locked_until.isoformat() if locked_until else None,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    )
-    await session.commit()
-
-    return MockMFASettings(
-        id=UUID(settings_id),
-        user_id=user_id,
-        is_enabled=is_enabled,
-        method=method,
-        secret_key=secret_key,
-        recovery_email=recovery_email,
-        last_verified_at=last_verified_at,
-        failed_attempts=failed_attempts,
-        locked_until=locked_until,
         created_at=now,
         updated_at=now,
     )

@@ -56,6 +56,34 @@ from app.schemas.development_profile import (
 )
 
 
+# =============================================================================
+# Exception Classes
+# =============================================================================
+
+
+class DevelopmentProfileServiceError(Exception):
+    """Base exception for development profile service errors."""
+
+    pass
+
+
+class ProfileNotFoundError(DevelopmentProfileServiceError):
+    """Raised when the specified profile is not found."""
+
+    pass
+
+
+class UnauthorizedAccessError(DevelopmentProfileServiceError):
+    """Raised when the user does not have permission to access a resource."""
+
+    pass
+
+
+# =============================================================================
+# Development Profile Service
+# =============================================================================
+
+
 class DevelopmentProfileService:
     """Service class for development profile management and tracking.
 
@@ -115,16 +143,23 @@ class DevelopmentProfileService:
     async def get_profile_by_id(
         self,
         profile_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
         include_relations: bool = True,
     ) -> Optional[DevelopmentProfileResponse]:
         """Retrieve a development profile by its ID.
 
         Args:
             profile_id: Unique identifier of the profile.
+            user_id: ID of the user requesting the profile.
+            user_role: Role of the user (admin, director, educator, parent).
             include_relations: Whether to include related data (assessments, observations).
 
         Returns:
             Development profile if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
         query = select(DevelopmentProfile).where(
             DevelopmentProfile.id == profile_id
@@ -143,21 +178,31 @@ class DevelopmentProfileService:
         if profile is None:
             return None
 
+        # Verify user has access to this profile
+        self._verify_profile_access(profile, user_id, user_role)
+
         return self._profile_to_response(profile)
 
     async def get_profile_by_child_id(
         self,
         child_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
         include_relations: bool = True,
     ) -> Optional[DevelopmentProfileResponse]:
         """Retrieve a development profile by child ID.
 
         Args:
             child_id: Unique identifier of the child.
+            user_id: ID of the user requesting the profile.
+            user_role: Role of the user (admin, director, educator, parent).
             include_relations: Whether to include related data.
 
         Returns:
             Development profile if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
         query = select(DevelopmentProfile).where(
             DevelopmentProfile.child_id == child_id
@@ -176,21 +221,31 @@ class DevelopmentProfileService:
         if profile is None:
             return None
 
+        # Verify user has access to this profile
+        self._verify_profile_access(profile, user_id, user_role)
+
         return self._profile_to_response(profile)
 
     async def update_profile(
         self,
         profile_id: UUID,
         request: DevelopmentProfileRequest,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> Optional[DevelopmentProfileResponse]:
         """Update an existing development profile.
 
         Args:
             profile_id: Unique identifier of the profile to update.
             request: Updated profile data.
+            user_id: ID of the user updating the profile.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             Updated profile response if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to update the profile.
         """
         query = select(DevelopmentProfile).where(
             DevelopmentProfile.id == profile_id
@@ -200,6 +255,9 @@ class DevelopmentProfileService:
 
         if profile is None:
             return None
+
+        # Verify user has access to this profile
+        self._verify_profile_access(profile, user_id, user_role)
 
         # Update fields
         profile.educator_id = request.educator_id
@@ -211,14 +269,24 @@ class DevelopmentProfileService:
 
         return self._profile_to_response(profile)
 
-    async def delete_profile(self, profile_id: UUID) -> bool:
+    async def delete_profile(
+        self,
+        profile_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
+    ) -> bool:
         """Delete a development profile.
 
         Args:
             profile_id: Unique identifier of the profile to delete.
+            user_id: ID of the user deleting the profile.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             True if profile was deleted, False if not found.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to delete the profile.
         """
         query = select(DevelopmentProfile).where(
             DevelopmentProfile.id == profile_id
@@ -229,12 +297,17 @@ class DevelopmentProfileService:
         if profile is None:
             return False
 
+        # Verify user has access to this profile
+        self._verify_profile_access(profile, user_id, user_role)
+
         await self.db.delete(profile)
         await self.db.commit()
         return True
 
     async def list_profiles(
         self,
+        user_id: UUID,
+        user_role: Optional[str] = None,
         skip: int = 0,
         limit: int = 100,
         is_active: Optional[bool] = True,
@@ -243,6 +316,8 @@ class DevelopmentProfileService:
         """List development profiles with optional filtering and pagination.
 
         Args:
+            user_id: ID of the user requesting the list.
+            user_role: Role of the user (admin, director, educator, parent).
             skip: Number of records to skip.
             limit: Maximum number of records to return.
             is_active: Optional filter by active status.
@@ -256,6 +331,13 @@ class DevelopmentProfileService:
 
         if is_active is not None:
             query = query.where(DevelopmentProfile.is_active == is_active)
+
+        # Apply access control filter
+        if user_role and user_role.lower() not in ["admin", "director"]:
+            # Non-admin/director users can only see profiles they're assigned to as educator
+            query = query.where(
+                cast(DevelopmentProfile.educator_id, String) == str(user_id)
+            )
 
         if educator_id is not None:
             query = query.where(
@@ -298,22 +380,25 @@ class DevelopmentProfileService:
     async def create_skill_assessment(
         self,
         request: SkillAssessmentRequest,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> SkillAssessmentResponse:
         """Create a new skill assessment.
 
         Args:
             request: Skill assessment creation request data.
+            user_id: ID of the user creating the assessment.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             The created skill assessment response.
 
         Raises:
             ValueError: If the profile does not exist.
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
-        # Verify profile exists
-        profile = await self._get_profile_model(request.profile_id)
-        if profile is None:
-            raise ValueError(f"Profile {request.profile_id} not found")
+        # Verify profile exists and user has access
+        await self._get_and_verify_profile(request.profile_id, user_id, user_role)
 
         # Convert schema enum to model enum
         domain = DevelopmentalDomain(request.domain.value)
@@ -337,14 +422,21 @@ class DevelopmentProfileService:
     async def get_skill_assessment_by_id(
         self,
         assessment_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> Optional[SkillAssessmentResponse]:
         """Retrieve a skill assessment by ID.
 
         Args:
             assessment_id: Unique identifier of the assessment.
+            user_id: ID of the user requesting the assessment.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             Skill assessment if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to access the assessment.
         """
         query = select(SkillAssessment).where(
             SkillAssessment.id == assessment_id
@@ -354,6 +446,9 @@ class DevelopmentProfileService:
 
         if assessment is None:
             return None
+
+        # Verify user has access to the profile this assessment belongs to
+        await self._get_and_verify_profile(assessment.profile_id, user_id, user_role)
 
         return self._skill_assessment_to_response(assessment)
 
@@ -361,15 +456,22 @@ class DevelopmentProfileService:
         self,
         assessment_id: UUID,
         request: SkillAssessmentUpdateRequest,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> Optional[SkillAssessmentResponse]:
         """Update an existing skill assessment.
 
         Args:
             assessment_id: Unique identifier of the assessment.
             request: Update request with partial data.
+            user_id: ID of the user updating the assessment.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             Updated assessment if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to update the assessment.
         """
         query = select(SkillAssessment).where(
             SkillAssessment.id == assessment_id
@@ -379,6 +481,9 @@ class DevelopmentProfileService:
 
         if assessment is None:
             return None
+
+        # Verify user has access to the profile this assessment belongs to
+        await self._get_and_verify_profile(assessment.profile_id, user_id, user_role)
 
         # Update fields if provided
         if request.status is not None:
@@ -396,14 +501,24 @@ class DevelopmentProfileService:
 
         return self._skill_assessment_to_response(assessment)
 
-    async def delete_skill_assessment(self, assessment_id: UUID) -> bool:
+    async def delete_skill_assessment(
+        self,
+        assessment_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
+    ) -> bool:
         """Delete a skill assessment.
 
         Args:
             assessment_id: Unique identifier of the assessment.
+            user_id: ID of the user deleting the assessment.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             True if deleted, False if not found.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to delete the assessment.
         """
         query = select(SkillAssessment).where(
             SkillAssessment.id == assessment_id
@@ -414,6 +529,9 @@ class DevelopmentProfileService:
         if assessment is None:
             return False
 
+        # Verify user has access to the profile this assessment belongs to
+        await self._get_and_verify_profile(assessment.profile_id, user_id, user_role)
+
         await self.db.delete(assessment)
         await self.db.commit()
         return True
@@ -421,6 +539,8 @@ class DevelopmentProfileService:
     async def list_skill_assessments(
         self,
         profile_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
         domain: Optional[DevelopmentalDomainSchema] = None,
         status: Optional[SkillStatusSchema] = None,
         skip: int = 0,
@@ -430,6 +550,8 @@ class DevelopmentProfileService:
 
         Args:
             profile_id: Unique identifier of the profile.
+            user_id: ID of the user requesting the list.
+            user_role: Role of the user (admin, director, educator, parent).
             domain: Optional filter by developmental domain.
             status: Optional filter by skill status.
             skip: Number of records to skip.
@@ -437,7 +559,12 @@ class DevelopmentProfileService:
 
         Returns:
             Paginated list of skill assessments.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
+        # Verify user has access to this profile
+        await self._get_and_verify_profile(profile_id, user_id, user_role)
         # Build base query
         query = select(SkillAssessment).where(
             cast(SkillAssessment.profile_id, String) == str(profile_id)
@@ -482,22 +609,25 @@ class DevelopmentProfileService:
     async def create_observation(
         self,
         request: ObservationRequest,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> ObservationResponse:
         """Create a new observation.
 
         Args:
             request: Observation creation request data.
+            user_id: ID of the user creating the observation.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             The created observation response.
 
         Raises:
             ValueError: If the profile does not exist.
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
-        # Verify profile exists
-        profile = await self._get_profile_model(request.profile_id)
-        if profile is None:
-            raise ValueError(f"Profile {request.profile_id} not found")
+        # Verify profile exists and user has access
+        await self._get_and_verify_profile(request.profile_id, user_id, user_role)
 
         # Convert schema enum to model enum
         domain = DevelopmentalDomain(request.domain.value)
@@ -523,14 +653,21 @@ class DevelopmentProfileService:
     async def get_observation_by_id(
         self,
         observation_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> Optional[ObservationResponse]:
         """Retrieve an observation by ID.
 
         Args:
             observation_id: Unique identifier of the observation.
+            user_id: ID of the user requesting the observation.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             Observation if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to access the observation.
         """
         query = select(Observation).where(
             Observation.id == observation_id
@@ -540,6 +677,9 @@ class DevelopmentProfileService:
 
         if observation is None:
             return None
+
+        # Verify user has access to the profile this observation belongs to
+        await self._get_and_verify_profile(observation.profile_id, user_id, user_role)
 
         return self._observation_to_response(observation)
 
@@ -547,15 +687,22 @@ class DevelopmentProfileService:
         self,
         observation_id: UUID,
         request: ObservationUpdateRequest,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> Optional[ObservationResponse]:
         """Update an existing observation.
 
         Args:
             observation_id: Unique identifier of the observation.
             request: Update request with partial data.
+            user_id: ID of the user updating the observation.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             Updated observation if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to update the observation.
         """
         query = select(Observation).where(
             Observation.id == observation_id
@@ -565,6 +712,9 @@ class DevelopmentProfileService:
 
         if observation is None:
             return None
+
+        # Verify user has access to the profile this observation belongs to
+        await self._get_and_verify_profile(observation.profile_id, user_id, user_role)
 
         # Update fields if provided
         if request.behavior_description is not None:
@@ -583,14 +733,24 @@ class DevelopmentProfileService:
 
         return self._observation_to_response(observation)
 
-    async def delete_observation(self, observation_id: UUID) -> bool:
+    async def delete_observation(
+        self,
+        observation_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
+    ) -> bool:
         """Delete an observation.
 
         Args:
             observation_id: Unique identifier of the observation.
+            user_id: ID of the user deleting the observation.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             True if deleted, False if not found.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to delete the observation.
         """
         query = select(Observation).where(
             Observation.id == observation_id
@@ -601,6 +761,9 @@ class DevelopmentProfileService:
         if observation is None:
             return False
 
+        # Verify user has access to the profile this observation belongs to
+        await self._get_and_verify_profile(observation.profile_id, user_id, user_role)
+
         await self.db.delete(observation)
         await self.db.commit()
         return True
@@ -608,6 +771,8 @@ class DevelopmentProfileService:
     async def list_observations(
         self,
         profile_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
         domain: Optional[DevelopmentalDomainSchema] = None,
         is_milestone: Optional[bool] = None,
         is_concern: Optional[bool] = None,
@@ -619,6 +784,8 @@ class DevelopmentProfileService:
 
         Args:
             profile_id: Unique identifier of the profile.
+            user_id: ID of the user requesting the list.
+            user_role: Role of the user (admin, director, educator, parent).
             domain: Optional filter by developmental domain.
             is_milestone: Optional filter for milestones only.
             is_concern: Optional filter for concerns only.
@@ -628,7 +795,12 @@ class DevelopmentProfileService:
 
         Returns:
             Paginated list of observations.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
+        # Verify user has access to this profile
+        await self._get_and_verify_profile(profile_id, user_id, user_role)
         # Build base query
         query = select(Observation).where(
             cast(Observation.profile_id, String) == str(profile_id)
@@ -677,22 +849,25 @@ class DevelopmentProfileService:
     async def create_monthly_snapshot(
         self,
         request: MonthlySnapshotRequest,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> MonthlySnapshotResponse:
         """Create a new monthly snapshot.
 
         Args:
             request: Monthly snapshot creation request data.
+            user_id: ID of the user creating the snapshot.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             The created monthly snapshot response.
 
         Raises:
             ValueError: If the profile does not exist or snapshot already exists for this month.
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
-        # Verify profile exists
-        profile = await self._get_profile_model(request.profile_id)
-        if profile is None:
-            raise ValueError(f"Profile {request.profile_id} not found")
+        # Verify profile exists and user has access
+        await self._get_and_verify_profile(request.profile_id, user_id, user_role)
 
         # Check if snapshot already exists for this month
         existing = await self._get_snapshot_for_month(
@@ -730,14 +905,21 @@ class DevelopmentProfileService:
     async def get_monthly_snapshot_by_id(
         self,
         snapshot_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> Optional[MonthlySnapshotResponse]:
         """Retrieve a monthly snapshot by ID.
 
         Args:
             snapshot_id: Unique identifier of the snapshot.
+            user_id: ID of the user requesting the snapshot.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             Monthly snapshot if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to access the snapshot.
         """
         query = select(MonthlySnapshot).where(
             MonthlySnapshot.id == snapshot_id
@@ -747,6 +929,9 @@ class DevelopmentProfileService:
 
         if snapshot is None:
             return None
+
+        # Verify user has access to the profile this snapshot belongs to
+        await self._get_and_verify_profile(snapshot.profile_id, user_id, user_role)
 
         return self._monthly_snapshot_to_response(snapshot)
 
@@ -754,15 +939,22 @@ class DevelopmentProfileService:
         self,
         snapshot_id: UUID,
         request: MonthlySnapshotUpdateRequest,
+        user_id: UUID,
+        user_role: Optional[str] = None,
     ) -> Optional[MonthlySnapshotResponse]:
         """Update an existing monthly snapshot.
 
         Args:
             snapshot_id: Unique identifier of the snapshot.
             request: Update request with partial data.
+            user_id: ID of the user updating the snapshot.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             Updated snapshot if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to update the snapshot.
         """
         query = select(MonthlySnapshot).where(
             MonthlySnapshot.id == snapshot_id
@@ -772,6 +964,9 @@ class DevelopmentProfileService:
 
         if snapshot is None:
             return None
+
+        # Verify user has access to the profile this snapshot belongs to
+        await self._get_and_verify_profile(snapshot.profile_id, user_id, user_role)
 
         # Update fields if provided
         if request.overall_progress is not None:
@@ -790,14 +985,24 @@ class DevelopmentProfileService:
 
         return self._monthly_snapshot_to_response(snapshot)
 
-    async def delete_monthly_snapshot(self, snapshot_id: UUID) -> bool:
+    async def delete_monthly_snapshot(
+        self,
+        snapshot_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
+    ) -> bool:
         """Delete a monthly snapshot.
 
         Args:
             snapshot_id: Unique identifier of the snapshot.
+            user_id: ID of the user deleting the snapshot.
+            user_role: Role of the user (admin, director, educator, parent).
 
         Returns:
             True if deleted, False if not found.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to delete the snapshot.
         """
         query = select(MonthlySnapshot).where(
             MonthlySnapshot.id == snapshot_id
@@ -808,6 +1013,9 @@ class DevelopmentProfileService:
         if snapshot is None:
             return False
 
+        # Verify user has access to the profile this snapshot belongs to
+        await self._get_and_verify_profile(snapshot.profile_id, user_id, user_role)
+
         await self.db.delete(snapshot)
         await self.db.commit()
         return True
@@ -815,6 +1023,8 @@ class DevelopmentProfileService:
     async def list_monthly_snapshots(
         self,
         profile_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
         start_month: Optional[date] = None,
         end_month: Optional[date] = None,
         skip: int = 0,
@@ -824,6 +1034,8 @@ class DevelopmentProfileService:
 
         Args:
             profile_id: Unique identifier of the profile.
+            user_id: ID of the user requesting the list.
+            user_role: Role of the user (admin, director, educator, parent).
             start_month: Optional start date filter.
             end_month: Optional end date filter.
             skip: Number of records to skip.
@@ -831,7 +1043,12 @@ class DevelopmentProfileService:
 
         Returns:
             Paginated list of monthly snapshots.
+
+        Raises:
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
+        # Verify user has access to this profile
+        await self._get_and_verify_profile(profile_id, user_id, user_role)
         # Build base query
         query = select(MonthlySnapshot).where(
             cast(MonthlySnapshot.profile_id, String) == str(profile_id)
@@ -871,6 +1088,8 @@ class DevelopmentProfileService:
         self,
         profile_id: UUID,
         snapshot_month: date,
+        user_id: UUID,
+        user_role: Optional[str] = None,
         generated_by_id: Optional[UUID] = None,
     ) -> MonthlySnapshotResponse:
         """Automatically generate a monthly snapshot from current assessments and observations.
@@ -881,6 +1100,8 @@ class DevelopmentProfileService:
         Args:
             profile_id: Unique identifier of the profile.
             snapshot_month: The month to generate the snapshot for.
+            user_id: ID of the user generating the snapshot.
+            user_role: Role of the user (admin, director, educator, parent).
             generated_by_id: UUID of the user generating the snapshot.
 
         Returns:
@@ -888,9 +1109,12 @@ class DevelopmentProfileService:
 
         Raises:
             ValueError: If profile not found or snapshot already exists for this month.
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
         # Verify profile exists and get it with relations
-        profile_response = await self.get_profile_by_id(profile_id, include_relations=True)
+        profile_response = await self.get_profile_by_id(
+            profile_id, user_id, user_role, include_relations=True
+        )
         if profile_response is None:
             raise ValueError(f"Profile {profile_id} not found")
 
@@ -1010,6 +1234,8 @@ class DevelopmentProfileService:
     async def get_growth_trajectory(
         self,
         profile_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
         start_month: Optional[date] = None,
         end_month: Optional[date] = None,
         domains: Optional[list[DevelopmentalDomainSchema]] = None,
@@ -1021,6 +1247,8 @@ class DevelopmentProfileService:
 
         Args:
             profile_id: Unique identifier of the profile.
+            user_id: ID of the user requesting the trajectory.
+            user_role: Role of the user (admin, director, educator, parent).
             start_month: Optional start date for trajectory data.
             end_month: Optional end date for trajectory data.
             domains: Optional list of domains to include.
@@ -1030,9 +1258,12 @@ class DevelopmentProfileService:
 
         Raises:
             ValueError: If profile not found.
+            UnauthorizedAccessError: If user lacks permission to access the profile.
         """
         # Get profile
-        profile_response = await self.get_profile_by_id(profile_id, include_relations=False)
+        profile_response = await self.get_profile_by_id(
+            profile_id, user_id, user_role, include_relations=False
+        )
         if profile_response is None:
             raise ValueError(f"Profile {profile_id} not found")
 
@@ -1112,6 +1343,68 @@ class DevelopmentProfileService:
     # =========================================================================
     # Private Helper Methods
     # =========================================================================
+
+    def _verify_profile_access(
+        self,
+        profile: DevelopmentProfile,
+        user_id: UUID,
+        user_role: Optional[str] = None,
+    ) -> None:
+        """Verify user has permission to access a development profile.
+
+        Users can access profiles if they are:
+        - Admin or director (access to all profiles)
+        - The educator assigned to the profile
+        - A parent of the child (future: check parent-child relationship)
+
+        Args:
+            profile: The development profile to check access for
+            user_id: ID of the user to check
+            user_role: Role of the user (admin, director, educator, parent)
+
+        Raises:
+            UnauthorizedAccessError: When user lacks permission to access the profile
+        """
+        # Allow admins and directors to access any profile
+        if user_role and user_role.lower() in ["admin", "director"]:
+            return
+
+        # Check if user is the educator assigned to this profile
+        if profile.educator_id and str(profile.educator_id) == str(user_id):
+            return
+
+        # Future: Add parent-child relationship check here
+        # For now, deny access if user is not admin/director/educator
+        raise UnauthorizedAccessError(
+            "You do not have permission to access this development profile"
+        )
+
+    async def _get_and_verify_profile(
+        self,
+        profile_id: UUID,
+        user_id: UUID,
+        user_role: Optional[str] = None,
+    ) -> DevelopmentProfile:
+        """Get profile model and verify user has access.
+
+        Args:
+            profile_id: Unique identifier of the profile.
+            user_id: ID of the user requesting access.
+            user_role: Role of the user (admin, director, educator, parent).
+
+        Returns:
+            DevelopmentProfile model if found and user has access.
+
+        Raises:
+            ValueError: If profile not found.
+            UnauthorizedAccessError: If user lacks permission to access the profile.
+        """
+        profile = await self._get_profile_model(profile_id)
+        if profile is None:
+            raise ValueError(f"Profile {profile_id} not found")
+
+        self._verify_profile_access(profile, user_id, user_role)
+        return profile
 
     async def _get_profile_model(
         self, profile_id: UUID
