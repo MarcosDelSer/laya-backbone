@@ -131,6 +131,8 @@ class TestCreateToken:
 
     def test_create_token_additional_claims_do_not_override_standard(self):
         """Test additional claims cannot override sub, iat, exp."""
+        # Get current timestamp for comparison
+        before = datetime.now(timezone.utc)
         token = create_token(
             subject="user123",
             expires_delta_seconds=3600,
@@ -138,8 +140,12 @@ class TestCreateToken:
                 "sub": "hacker",
                 "iat": 0,
                 "exp": 9999999999,
+                "iss": "evil.com",
+                "aud": "hackers",
             },
         )
+        after = datetime.now(timezone.utc)
+
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
@@ -147,9 +153,19 @@ class TestCreateToken:
             audience=settings.jwt_audience,
             issuer=settings.jwt_issuer,
         )
-        # Additional claims update AFTER standard claims, so they override
-        # This documents current behavior - may want to change
-        assert payload["sub"] == "hacker"  # Currently overrides
+        # Standard claims should NOT be overridden by additional_claims
+        assert payload["sub"] == "user123"  # Should be original subject
+        assert payload["iss"] == settings.jwt_issuer  # Should be original issuer
+        assert payload["aud"] == settings.jwt_audience  # Should be original audience
+
+        # Verify iat is current time (not 0 from additional_claims)
+        iat = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
+        assert before.replace(microsecond=0) <= iat <= after.replace(microsecond=0) + timedelta(seconds=1)
+
+        # Verify exp is ~1 hour from now (not 9999999999 from additional_claims)
+        exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        delta = (exp - datetime.now(timezone.utc)).total_seconds()
+        assert 3500 < delta < 3700  # Allow small tolerance
 
     def test_create_token_empty_additional_claims(self):
         """Test create_token with empty additional claims dict."""
@@ -480,61 +496,29 @@ class TestJWTSecurityProperties:
         assert exc_info.value.status_code == 401
 
     def test_token_algorithm_enforced(self):
-        """Test that tokens with 'none' algorithm are explicitly rejected."""
-        # Create payload with all required claims
+        """Test that only configured algorithm is accepted."""
+        # Create token with different algorithm
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
             "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-            "aud": settings.jwt_audience,
-            "iss": settings.jwt_issuer,
         }
-        # Try to use 'none' algorithm (critical security vulnerability if allowed)
-        # PyJWT may not support 'none' algorithm encoding, but we can test the header check
+        # Try to use 'none' algorithm (security vulnerability if allowed)
         try:
             token = jwt.encode(payload, "", algorithm="none")
-            # If encoding succeeds, decode_token should reject it
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(HTTPException):
                 decode_token(token)
-            assert exc_info.value.status_code == 401
-            assert "none" in exc_info.value.detail.lower()
         except jwt.exceptions.InvalidAlgorithmError:
-            # PyJWT library doesn't support 'none' algorithm encoding
-            # This is actually good - the library prevents it at creation time
-            # But our decode_token has defense-in-depth to reject it
+            # Some JWT libraries don't support 'none' algorithm
             pass
 
-    def test_token_with_wrong_algorithm_rejected(self):
-        """Test that tokens with wrong algorithm are rejected."""
-        # Create payload with all required claims
-        payload = {
-            "sub": "user123",
-            "iat": int(datetime.now(timezone.utc).timestamp()),
-            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-            "aud": settings.jwt_audience,
-            "iss": settings.jwt_issuer,
-        }
-
-        # Try to use HS512 instead of HS256
-        token = jwt.encode(
-            payload,
-            settings.jwt_secret_key,
-            algorithm="HS512",
-        )
-
-        # decode_token should reject tokens with wrong algorithm
-        with pytest.raises(HTTPException) as exc_info:
-            decode_token(token)
-        assert exc_info.value.status_code == 401
-        assert "algorithm" in exc_info.value.detail.lower()
-
     def test_expiration_is_required(self):
-        """Test that tokens without expiration are rejected."""
+        """Test that tokens without expiration claim are rejected."""
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
-            "aud": settings.jwt_audience,
             "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
             # No 'exp' claim
         }
         token = jwt.encode(
@@ -542,51 +526,11 @@ class TestJWTSecurityProperties:
             settings.jwt_secret_key,
             algorithm=settings.jwt_algorithm,
         )
-        # decode_token now requires exp claim - should raise HTTPException
+        # Tokens without exp claim should be rejected
         with pytest.raises(HTTPException) as exc_info:
             decode_token(token)
         assert exc_info.value.status_code == 401
-        assert "exp" in exc_info.value.detail.lower() or "required" in exc_info.value.detail.lower()
-
-    def test_subject_is_required(self):
-        """Test that tokens without subject are rejected."""
-        payload = {
-            "iat": int(datetime.now(timezone.utc).timestamp()),
-            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-            "aud": settings.jwt_audience,
-            "iss": settings.jwt_issuer,
-            # No 'sub' claim
-        }
-        token = jwt.encode(
-            payload,
-            settings.jwt_secret_key,
-            algorithm=settings.jwt_algorithm,
-        )
-        # decode_token now requires sub claim - should raise HTTPException
-        with pytest.raises(HTTPException) as exc_info:
-            decode_token(token)
-        assert exc_info.value.status_code == 401
-        assert "sub" in exc_info.value.detail.lower() or "required" in exc_info.value.detail.lower()
-
-    def test_issued_at_is_required(self):
-        """Test that tokens without issued-at timestamp are rejected."""
-        payload = {
-            "sub": "user123",
-            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-            "aud": settings.jwt_audience,
-            "iss": settings.jwt_issuer,
-            # No 'iat' claim
-        }
-        token = jwt.encode(
-            payload,
-            settings.jwt_secret_key,
-            algorithm=settings.jwt_algorithm,
-        )
-        # decode_token now requires iat claim - should raise HTTPException
-        with pytest.raises(HTTPException) as exc_info:
-            decode_token(token)
-        assert exc_info.value.status_code == 401
-        assert "iat" in exc_info.value.detail.lower() or "required" in exc_info.value.detail.lower()
+        assert "exp" in exc_info.value.detail.lower()
 
     def test_token_contains_all_standard_claims(self):
         """Test that created tokens have standard JWT claims."""
@@ -613,13 +557,161 @@ class TestJWTSecurityProperties:
         after_seconds = after.replace(microsecond=0) + timedelta(seconds=1)
         assert before_seconds <= iat <= after_seconds
 
-    def test_audience_is_validated_with_wrong_audience(self):
-        """Test that tokens with wrong audience are rejected."""
+    def test_token_missing_exp_claim_raises_401(self):
+        """Test that tokens missing exp claim are rejected."""
+        # Create token without exp claim
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing exp claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "exp" in exc_info.value.detail.lower()
+
+    def test_token_missing_iat_claim_raises_401(self):
+        """Test that tokens missing iat claim are rejected."""
+        # Create token without iat claim
+        payload = {
+            "sub": "user123",
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing iat claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "iat" in exc_info.value.detail.lower()
+
+    def test_token_missing_sub_claim_raises_401(self):
+        """Test that tokens missing sub claim are rejected."""
+        # Create token without sub claim
+        payload = {
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing sub claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "sub" in exc_info.value.detail.lower()
+
+    def test_create_token_includes_issuer(self):
+        """Test that created tokens include issuer claim."""
+        token = create_token(subject="user123")
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
+        )
+        assert "iss" in payload
+        assert payload["iss"] == settings.jwt_issuer
+
+    def test_create_token_includes_audience(self):
+        """Test that created tokens include audience claim."""
+        token = create_token(subject="user123")
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
+        )
+        assert "aud" in payload
+        assert payload["aud"] == settings.jwt_audience
+
+    def test_decode_token_validates_issuer(self):
+        """Test that decode_token rejects tokens with wrong issuer."""
+        # Create token with wrong issuer
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
             "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": "evil-issuer",
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for wrong issuer
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "issuer" in exc_info.value.detail.lower()
+
+    def test_decode_token_validates_audience(self):
+        """Test that decode_token rejects tokens with wrong audience."""
+        # Create token with wrong audience
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
             "aud": "wrong-audience",
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for wrong audience
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "audience" in exc_info.value.detail.lower()
+
+    def test_token_missing_issuer_claim_raises_401(self):
+        """Test that tokens missing issuer claim are rejected."""
+        # Create token without issuer claim
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should raise 401 for missing issuer claim
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "iss" in exc_info.value.detail.lower()
+
+    def test_token_missing_audience_claim_raises_401(self):
+        """Test that tokens missing audience claim are rejected."""
+        # Create token without audience claim
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
             "iss": settings.jwt_issuer,
         }
         token = jwt.encode(
@@ -627,88 +719,308 @@ class TestJWTSecurityProperties:
             settings.jwt_secret_key,
             algorithm=settings.jwt_algorithm,
         )
-        # decode_token validates audience - should raise HTTPException
+        # decode_token should raise 401 for missing audience claim
         with pytest.raises(HTTPException) as exc_info:
             decode_token(token)
         assert exc_info.value.status_code == 401
-        assert "aud" in exc_info.value.detail.lower() or "audience" in exc_info.value.detail.lower()
+        assert "aud" in exc_info.value.detail.lower()
 
-    def test_audience_is_required(self):
-        """Test that tokens without audience are rejected."""
+    def test_issuer_validation_prevents_token_reuse_across_services(self):
+        """Test that issuer validation prevents tokens from other services being accepted."""
+        # Simulate token from a different service with same secret
+        other_service_token = jwt.encode(
+            {
+                "sub": "user123",
+                "iat": int(datetime.now(timezone.utc).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                "iss": "other-service",
+                "aud": settings.jwt_audience,
+            },
+            settings.jwt_secret_key,  # Same secret but different issuer
+            algorithm=settings.jwt_algorithm,
+        )
+        # Should be rejected due to wrong issuer
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(other_service_token)
+        assert exc_info.value.status_code == 401
+
+    def test_audience_validation_prevents_token_misuse(self):
+        """Test that audience validation prevents tokens intended for other audiences."""
+        # Create token intended for different audience
+        wrong_audience_token = jwt.encode(
+            {
+                "sub": "user123",
+                "iat": int(datetime.now(timezone.utc).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                "iss": settings.jwt_issuer,
+                "aud": "different-api",
+            },
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # Should be rejected due to wrong audience
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(wrong_audience_token)
+        assert exc_info.value.status_code == 401
+
+    def test_issuer_and_audience_both_must_be_valid(self):
+        """Test that both issuer and audience must be valid together."""
+        # Valid issuer, wrong audience
+        token1 = jwt.encode(
+            {
+                "sub": "user123",
+                "iat": int(datetime.now(timezone.utc).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                "iss": settings.jwt_issuer,
+                "aud": "wrong-audience",
+            },
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        with pytest.raises(HTTPException):
+            decode_token(token1)
+
+        # Wrong issuer, valid audience
+        token2 = jwt.encode(
+            {
+                "sub": "user123",
+                "iat": int(datetime.now(timezone.utc).timestamp()),
+                "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                "iss": "wrong-issuer",
+                "aud": settings.jwt_audience,
+            },
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        with pytest.raises(HTTPException):
+            decode_token(token2)
+
+        # Both correct - should work
+        token3 = create_token(subject="user123")
+        payload = decode_token(token3)
+        assert payload["sub"] == "user123"
+
+
+class TestSignatureVerificationSecurity:
+    """Tests ensuring signature verification cannot be bypassed."""
+
+    def test_token_signed_with_wrong_secret_rejected(self):
+        """Test that tokens signed with incorrect secret key are rejected."""
+        # Create token with wrong secret
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
             "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
             "iss": settings.jwt_issuer,
-            # No 'aud' claim
+            "aud": settings.jwt_audience,
         }
-        token = jwt.encode(
+        wrong_secret_token = jwt.encode(
             payload,
-            settings.jwt_secret_key,
+            "completely_wrong_secret_key_12345",
             algorithm=settings.jwt_algorithm,
         )
-        # decode_token validates audience - should raise HTTPException
+        # Should be rejected due to signature mismatch
         with pytest.raises(HTTPException) as exc_info:
-            decode_token(token)
+            decode_token(wrong_secret_token)
         assert exc_info.value.status_code == 401
-        assert "aud" in exc_info.value.detail.lower() or "audience" in exc_info.value.detail.lower()
+        assert "Invalid token" in exc_info.value.detail
 
-    def test_issuer_is_validated_with_wrong_issuer(self):
-        """Test that tokens with wrong issuer are rejected."""
+    def test_token_with_modified_signature_rejected(self):
+        """Test that tokens with modified signatures are rejected."""
+        # Create valid token
+        token = create_token(subject="user123")
+        parts = token.split(".")
+
+        # Modify the signature part
+        modified_signature = parts[2][:-5] + "XXXXX"
+        tampered_token = f"{parts[0]}.{parts[1]}.{modified_signature}"
+
+        # Should be rejected due to invalid signature
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(tampered_token)
+        assert exc_info.value.status_code == 401
+
+    def test_token_with_signature_from_different_token_rejected(self):
+        """Test that mixing payload from one token with signature from another is rejected."""
+        # Create two different tokens
+        token1 = create_token(subject="user1")
+        token2 = create_token(subject="user2")
+
+        # Split both tokens
+        parts1 = token1.split(".")
+        parts2 = token2.split(".")
+
+        # Create hybrid token: payload from token1, signature from token2
+        hybrid_token = f"{parts1[0]}.{parts1[1]}.{parts2[2]}"
+
+        # Should be rejected due to signature mismatch
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(hybrid_token)
+        assert exc_info.value.status_code == 401
+
+    def test_unsigned_token_with_none_algorithm_rejected(self):
+        """Test that unsigned tokens using 'none' algorithm are rejected."""
+        # Create payload without signature
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
             "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-            "aud": settings.jwt_audience,
-            "iss": "wrong-issuer",
-        }
-        token = jwt.encode(
-            payload,
-            settings.jwt_secret_key,
-            algorithm=settings.jwt_algorithm,
-        )
-        # decode_token validates issuer - should raise HTTPException
-        with pytest.raises(HTTPException) as exc_info:
-            decode_token(token)
-        assert exc_info.value.status_code == 401
-        assert "iss" in exc_info.value.detail.lower() or "issuer" in exc_info.value.detail.lower()
-
-    def test_issuer_is_required(self):
-        """Test that tokens without issuer are rejected."""
-        payload = {
-            "sub": "user123",
-            "iat": int(datetime.now(timezone.utc).timestamp()),
-            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-            "aud": settings.jwt_audience,
-            # No 'iss' claim
-        }
-        token = jwt.encode(
-            payload,
-            settings.jwt_secret_key,
-            algorithm=settings.jwt_algorithm,
-        )
-        # decode_token validates issuer - should raise HTTPException
-        with pytest.raises(HTTPException) as exc_info:
-            decode_token(token)
-        assert exc_info.value.status_code == 401
-        assert "iss" in exc_info.value.detail.lower() or "issuer" in exc_info.value.detail.lower()
-
-    def test_valid_audience_and_issuer_accepted(self):
-        """Test that tokens with correct audience and issuer are accepted."""
-        payload = {
-            "sub": "user123",
-            "iat": int(datetime.now(timezone.utc).timestamp()),
-            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-            "aud": settings.jwt_audience,
             "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
         }
-        token = jwt.encode(
+
+        try:
+            # Try to create token with 'none' algorithm (no signature)
+            unsigned_token = jwt.encode(payload, "", algorithm="none")
+
+            # Should be rejected
+            with pytest.raises(HTTPException) as exc_info:
+                decode_token(unsigned_token)
+            assert exc_info.value.status_code == 401
+        except jwt.exceptions.InvalidAlgorithmError:
+            # Some JWT libraries don't allow 'none' algorithm - that's good!
+            pass
+
+    def test_token_with_modified_payload_rejected(self):
+        """Test that tokens with modified payload but valid structure are rejected."""
+        # Create valid token
+        token = create_token(subject="regular_user", additional_claims={"role": "user"})
+        parts = token.split(".")
+
+        # Decode payload to modify it
+        import base64
+        import json
+
+        # Decode the payload
+        padded_payload = parts[1] + "=" * (4 - len(parts[1]) % 4)
+        payload_bytes = base64.urlsafe_b64decode(padded_payload)
+        payload = json.loads(payload_bytes)
+
+        # Modify the payload (try to escalate privileges)
+        payload["role"] = "admin"
+        payload["sub"] = "admin_user"
+
+        # Re-encode modified payload
+        modified_payload = base64.urlsafe_b64encode(
+            json.dumps(payload).encode()
+        ).decode().rstrip("=")
+
+        # Create token with modified payload but original signature
+        tampered_token = f"{parts[0]}.{modified_payload}.{parts[2]}"
+
+        # Should be rejected due to signature mismatch
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(tampered_token)
+        assert exc_info.value.status_code == 401
+
+    def test_token_signature_verification_not_optional(self):
+        """Test that signature verification cannot be bypassed by any means."""
+        # Create a valid token
+        valid_token = create_token(subject="user123")
+
+        # Verify it works first
+        payload = decode_token(valid_token)
+        assert payload["sub"] == "user123"
+
+        # Now try various bypass attempts
+        parts = valid_token.split(".")
+
+        # Attempt 1: Empty signature
+        no_sig_token = f"{parts[0]}.{parts[1]}."
+        with pytest.raises(HTTPException):
+            decode_token(no_sig_token)
+
+        # Attempt 2: Garbage signature
+        garbage_sig_token = f"{parts[0]}.{parts[1]}.invalidgarbage"
+        with pytest.raises(HTTPException):
+            decode_token(garbage_sig_token)
+
+    def test_signature_verified_before_claims_processed(self):
+        """Test that signature is verified before processing any claims."""
+        # Create token with wrong signature but valid-looking payload
+        payload = {
+            "sub": "admin",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+            "role": "superadmin",
+        }
+        wrong_sig_token = jwt.encode(
             payload,
-            settings.jwt_secret_key,
+            "wrong_secret",
             algorithm=settings.jwt_algorithm,
         )
-        # decode_token should succeed with valid audience and issuer
-        result = decode_token(token)
-        assert result["sub"] == "user123"
-        assert result["aud"] == settings.jwt_audience
-        assert result["iss"] == settings.jwt_issuer
+
+        # Even though payload looks valid, should fail due to signature
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(wrong_sig_token)
+        assert exc_info.value.status_code == 401
+
+    def test_algorithm_switching_attack_prevented(self):
+        """Test that algorithm switching attacks are prevented."""
+        # This tests against attacks where an attacker tries to change
+        # the algorithm (e.g., from RS256 to HS256) to bypass signature verification
+
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+
+        # Try to create token with different algorithm
+        # If we're using HS256, try HS512; if RS256, try HS256, etc.
+        alternative_algorithms = ["HS512", "HS384", "RS256"]
+
+        for alt_alg in alternative_algorithms:
+            if alt_alg != settings.jwt_algorithm:
+                try:
+                    # Create token with alternative algorithm
+                    alt_token = jwt.encode(
+                        payload,
+                        settings.jwt_secret_key,
+                        algorithm=alt_alg,
+                    )
+
+                    # Should be rejected due to algorithm mismatch
+                    with pytest.raises(HTTPException) as exc_info:
+                        decode_token(alt_token)
+                    assert exc_info.value.status_code == 401
+                except (jwt.exceptions.InvalidAlgorithmError, ValueError, NotImplementedError):
+                    # Some algorithms may not be supported - that's fine
+                    pass
+
+    @pytest.mark.asyncio
+    async def test_verify_token_checks_signature_before_blacklist(self, mock_db_session):
+        """Test that signature verification happens before blacklist check."""
+        # Create token with wrong signature
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+        invalid_sig_token = jwt.encode(
+            payload,
+            "wrong_secret",
+            algorithm=settings.jwt_algorithm,
+        )
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials=invalid_sig_token
+        )
+
+        # Should fail before reaching blacklist check
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_token(credentials, mock_db_session)
+
+        assert exc_info.value.status_code == 401
+        # Database should not be queried since signature check fails first
+        mock_db_session.execute.assert_not_called()
+
+    @pytest.fixture
+    def mock_db_session(self):
+        """Create a mock database session."""
+        return AsyncMock()

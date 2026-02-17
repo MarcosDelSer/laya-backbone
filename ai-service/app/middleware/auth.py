@@ -20,10 +20,8 @@ from __future__ import annotations
 from typing import Any, Literal, Optional
 
 import jwt
-import redis.asyncio as redis
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.audit_logger import (
     audit_logger,
@@ -32,8 +30,6 @@ from app.auth.audit_logger import (
     get_user_agent,
 )
 from app.config import settings
-from app.core.redis import get_redis
-from app.database import get_db
 
 # HTTPBearer security scheme for multi-source authentication
 security_multi_source = HTTPBearer()
@@ -98,8 +94,6 @@ class MultiSourceTokenPayload:
 
 async def verify_token_from_any_source(
     credentials: HTTPAuthorizationCredentials,
-    db: AsyncSession,
-    redis_client: Optional[redis.Redis] = None,
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """Verify and decode a JWT token from any supported source.
@@ -109,12 +103,9 @@ async def verify_token_from_any_source(
     and normalizes the user data.
 
     Includes comprehensive audit logging for security monitoring.
-    Uses two-tier blacklist checking: Redis (fast) then PostgreSQL (authoritative).
 
     Args:
         credentials: HTTP Authorization credentials containing the Bearer token
-        db: Async database session for blacklist lookup
-        redis_client: Optional async Redis client for fast blacklist checking
         request: Optional FastAPI Request for audit logging context
 
     Returns:
@@ -131,41 +122,7 @@ async def verify_token_from_any_source(
     endpoint = get_endpoint(request) if request else None
 
     try:
-        # First, decode the header without verification to check the algorithm
-        # This provides explicit defense-in-depth against 'none' algorithm attacks
-        unverified_header = jwt.get_unverified_header(token)
-        token_algorithm = unverified_header.get("alg", "").lower()
-
-        # Explicitly reject 'none' algorithm (critical security check)
-        if token_algorithm == "none":
-            audit_logger.log_invalid_token(
-                error_message="Token uses 'none' algorithm which is not allowed",
-                ip_address=ip_address,
-                user_agent=user_agent,
-                endpoint=endpoint,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: 'none' algorithm is not allowed",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Verify algorithm matches expected algorithm
-        if token_algorithm != settings.jwt_algorithm.lower():
-            audit_logger.log_invalid_token(
-                error_message=f"Token algorithm mismatch: expected {settings.jwt_algorithm}, got {token_algorithm}",
-                ip_address=ip_address,
-                user_agent=user_agent,
-                endpoint=endpoint,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid token: algorithm mismatch (expected {settings.jwt_algorithm})",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Decode the token using the shared secret with full security validation
-        # Enforce required claims, audience, and issuer validation
+        # Decode the token using the shared secret
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
@@ -173,52 +130,14 @@ async def verify_token_from_any_source(
             audience=settings.jwt_audience,
             issuer=settings.jwt_issuer,
             options={
-                "require": ["exp", "sub", "iat"],
+                "require": ["exp", "iat", "sub", "iss", "aud"],
+                "verify_signature": True,
                 "verify_exp": True,
+                "verify_iat": True,
+                "verify_aud": True,
+                "verify_iss": True,
             },
         )
-
-        # Two-tier blacklist check for performance:
-        # 1. Check Redis (fast cache) first
-        # 2. If not in Redis, check PostgreSQL (authoritative source)
-        is_blacklisted = False
-
-        # Check Redis first for fast lookup
-        if redis_client:
-            try:
-                redis_key = f"blacklist:{token}"
-                redis_result = await redis_client.get(redis_key)
-                if redis_result is not None:
-                    # Token found in Redis blacklist
-                    is_blacklisted = True
-            except Exception:
-                # If Redis fails, fall back to database check
-                # Don't fail the request due to Redis issues
-                pass
-
-        # If not found in Redis, check PostgreSQL
-        if not is_blacklisted:
-            from app.auth.models import TokenBlacklist
-            from sqlalchemy import select
-
-            stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
-            result = await db.execute(stmt)
-            if result.scalar_one_or_none() is not None:
-                is_blacklisted = True
-
-        # Reject if token is blacklisted
-        if is_blacklisted:
-            audit_logger.log_verification_failed(
-                error_message="Token has been revoked",
-                ip_address=ip_address,
-                user_agent=user_agent,
-                endpoint=endpoint,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
 
         # Validate required fields
         if not payload.get("sub"):
@@ -283,9 +202,7 @@ async def verify_token_from_any_source(
                 token,
                 settings.jwt_secret_key,
                 algorithms=[settings.jwt_algorithm],
-                audience=settings.jwt_audience,
-                issuer=settings.jwt_issuer,
-                options={"verify_exp": False},
+                options={"verify_signature": False, "verify_exp": False},
             )
             audit_logger.log_token_expired(
                 token_payload=expired_payload,
@@ -337,9 +254,7 @@ async def verify_token_from_any_source(
 
 
 async def get_current_user_multi_source(
-    credentials: HTTPAuthorizationCredentials = Depends(security_multi_source),
-    db: AsyncSession = Depends(get_db),
-    redis_client: redis.Redis = Depends(get_redis),
+    credentials: HTTPAuthorizationCredentials,
     request: Optional[Request] = None,
 ) -> dict[str, Any]:
     """FastAPI dependency to get current user from multi-source JWT token.
@@ -348,12 +263,9 @@ async def get_current_user_multi_source(
     from either AI service or Gibbon JWT tokens.
 
     Includes audit logging for all verification attempts.
-    Uses two-tier blacklist checking (Redis then PostgreSQL) for performance.
 
     Args:
         credentials: HTTP Authorization credentials injected by FastAPI
-        db: Async database session for blacklist lookup
-        redis_client: Async Redis client for fast blacklist checking
         request: Optional FastAPI Request for audit context
 
     Returns:
@@ -373,13 +285,11 @@ async def get_current_user_multi_source(
                 "source": current_user.get("source", "ai-service")
             }
     """
-    return await verify_token_from_any_source(credentials, db, redis_client, request)
+    return await verify_token_from_any_source(credentials, request)
 
 
 async def get_optional_user_multi_source(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security_multi_source_optional),
-    db: AsyncSession = Depends(get_db),
-    redis_client: redis.Redis = Depends(get_redis),
+    credentials: HTTPAuthorizationCredentials | None,
     request: Optional[Request] = None,
 ) -> dict[str, Any] | None:
     """FastAPI dependency to optionally get current user from multi-source token.
@@ -388,12 +298,8 @@ async def get_optional_user_multi_source(
     is provided instead of raising an exception. Useful for endpoints that
     behave differently based on authentication status.
 
-    Uses two-tier blacklist checking (Redis then PostgreSQL) for performance.
-
     Args:
         credentials: Optional HTTP Authorization credentials
-        db: Async database session for blacklist lookup
-        redis_client: Async Redis client for fast blacklist checking
         request: Optional FastAPI Request for audit context
 
     Returns:
@@ -412,7 +318,7 @@ async def get_optional_user_multi_source(
     if credentials is None:
         return None
 
-    return await verify_token_from_any_source(credentials, db, redis_client, request)
+    return await verify_token_from_any_source(credentials, request)
 
 
 def extract_user_info(payload: dict[str, Any]) -> dict[str, Any]:

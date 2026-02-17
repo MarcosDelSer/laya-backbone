@@ -42,28 +42,6 @@ from app.schemas.document import (
 logger = logging.getLogger(__name__)
 
 
-# =============================================================================
-# Exception Classes
-# =============================================================================
-
-
-class DocumentServiceError(Exception):
-    """Base exception for document service errors."""
-
-    pass
-
-
-class UnauthorizedAccessError(DocumentServiceError):
-    """Raised when the user does not have permission to access a resource."""
-
-    pass
-
-
-# =============================================================================
-# Document Service
-# =============================================================================
-
-
 class DocumentService:
     """Service class for document and template management logic.
 
@@ -346,35 +324,22 @@ class DocumentService:
 
         return document
 
-    async def get_document_by_id(
-        self, document_id: UUID, user_id: UUID
-    ) -> Optional[Document]:
+    async def get_document_by_id(self, document_id: UUID) -> Optional[Document]:
         """Retrieve a document by ID.
 
         Args:
             document_id: Unique identifier of the document.
-            user_id: ID of the user requesting the document.
 
         Returns:
             Document if found, None otherwise.
-
-        Raises:
-            UnauthorizedAccessError: When the user doesn't have access.
         """
-        query = select(Document).where(Document.id == document_id)
+        from sqlalchemy import cast, String
+
+        query = select(Document).where(
+            cast(Document.id, String) == str(document_id)
+        )
         result = await self.db.execute(query)
-        document = result.scalar_one_or_none()
-
-        if not document:
-            return None
-
-        # Verify user has access to the document
-        if not self._user_has_document_access(document, user_id):
-            raise UnauthorizedAccessError(
-                "User does not have permission to access this document"
-            )
-
-        return document
+        return result.scalar_one_or_none()
 
     async def list_documents(
         self,
@@ -425,7 +390,7 @@ class DocumentService:
         return documents, total
 
     async def update_document(
-        self, document_id: UUID, update_data: DocumentUpdate, user_id: UUID
+        self, document_id: UUID, update_data: DocumentUpdate
     ) -> Optional[Union[Document, str]]:
         """Update a document.
 
@@ -434,17 +399,13 @@ class DocumentService:
         Args:
             document_id: ID of the document to update.
             update_data: Fields to update.
-            user_id: ID of the user updating the document.
 
         Returns:
             Updated Document if found and updatable.
             None if document not found.
             "immutable" string if document is signed and cannot be modified.
-
-        Raises:
-            UnauthorizedAccessError: When the user doesn't have access.
         """
-        document = await self.get_document_by_id(document_id, user_id)
+        document = await self.get_document_by_id(document_id)
         if not document:
             return None
 
@@ -1320,25 +1281,3 @@ class DocumentService:
             timestamp=audit_log.timestamp,
             created_at=audit_log.created_at,
         )
-
-    def _user_has_document_access(
-        self,
-        document: Document,
-        user_id: UUID,
-    ) -> bool:
-        """Check if a user has access to a document.
-
-        User has access if they are the creator.
-
-        Args:
-            document: The document to check access for
-            user_id: ID of the user to check
-
-        Returns:
-            True if user has access, False otherwise
-        """
-        # Creator always has access
-        if str(document.created_by) == str(user_id):
-            return True
-
-        return False

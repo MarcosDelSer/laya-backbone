@@ -53,12 +53,17 @@ def create_token(
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
-        "aud": settings.jwt_audience,
         "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
     }
 
     if additional_claims:
-        payload.update(additional_claims)
+        # Filter out standard claims to prevent override vulnerability
+        standard_claims = {"sub", "iat", "exp", "iss", "aud"}
+        filtered_claims = {
+            k: v for k, v in additional_claims.items() if k not in standard_claims
+        }
+        payload.update(filtered_claims)
 
     return jwt.encode(
         payload,
@@ -86,29 +91,6 @@ def decode_token(token: str) -> dict[str, Any]:
         'user123'
     """
     try:
-        # First, decode the header without verification to check the algorithm
-        # This provides explicit defense-in-depth against 'none' algorithm attacks
-        unverified_header = jwt.get_unverified_header(token)
-        token_algorithm = unverified_header.get("alg", "").lower()
-
-        # Explicitly reject 'none' algorithm (critical security check)
-        if token_algorithm == "none":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: 'none' algorithm is not allowed",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Verify algorithm matches expected algorithm
-        if token_algorithm != settings.jwt_algorithm.lower():
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid token: algorithm mismatch (expected {settings.jwt_algorithm})",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Now decode and validate with full verification
-        # The algorithms parameter provides an additional layer of security
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
@@ -116,8 +98,12 @@ def decode_token(token: str) -> dict[str, Any]:
             audience=settings.jwt_audience,
             issuer=settings.jwt_issuer,
             options={
-                "require": ["exp", "sub", "iat"],
+                "require": ["exp", "iat", "sub", "iss", "aud"],
+                "verify_signature": True,
                 "verify_exp": True,
+                "verify_iat": True,
+                "verify_aud": True,
+                "verify_iss": True,
             },
         )
         return payload

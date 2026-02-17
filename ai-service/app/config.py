@@ -17,9 +17,8 @@ class Settings(BaseSettings):
         postgres_password: PostgreSQL database password
         jwt_secret_key: Secret key for JWT token signing
         jwt_algorithm: Algorithm for JWT token signing
-        redis_host: Redis server host
-        redis_port: Redis server port
-        redis_db: Redis database number
+        jwt_issuer: JWT token issuer claim
+        jwt_audience: JWT token audience claim
     """
 
     # Database configuration
@@ -32,13 +31,8 @@ class Settings(BaseSettings):
     # JWT configuration
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
-    jwt_audience: str = "laya-ai-service"
     jwt_issuer: str = "laya-ai-service"
-
-    # Redis configuration
-    redis_host: str = "localhost"
-    redis_port: int = 6379
-    redis_db: int = 0
+    jwt_audience: str = "laya-api"
 
     # Database connection pool configuration
     db_pool_size: int = 10
@@ -59,15 +53,6 @@ class Settings(BaseSettings):
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
-
-    @property
-    def redis_url(self) -> str:
-        """Construct the Redis connection URL.
-
-        Returns:
-            str: Redis connection URL
-        """
-        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     class Config:
         """Pydantic settings configuration."""
