@@ -37,6 +37,8 @@ use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Domain\User\FamilyGateway;
 use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Module\EnhancedFinance\Domain\InvoiceGateway;
+use Gibbon\Module\EnhancedFinance\Service\InvoiceService;
+use Gibbon\Module\EnhancedFinance\Validator\InvoiceValidator;
 
 // Access check
 if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_invoice_add.php') == false) {
@@ -59,28 +61,31 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
         return;
     }
 
-    // Get gateways and settings
+    // Get gateways and services
     $settingGateway = $container->get(SettingGateway::class);
     $familyGateway = $container->get(FamilyGateway::class);
     $studentGateway = $container->get(StudentGateway::class);
     $invoiceGateway = $container->get(InvoiceGateway::class);
 
-    // Get settings
-    $invoicePrefix = $settingGateway->getSettingByScope('Enhanced Finance', 'invoicePrefix') ?: 'INV-';
-    $gstRate = $settingGateway->getSettingByScope('Enhanced Finance', 'gstRate') ?: '0.05';
-    $qstRate = $settingGateway->getSettingByScope('Enhanced Finance', 'qstRate') ?: '0.09975';
-    $defaultPaymentTermsDays = $settingGateway->getSettingByScope('Enhanced Finance', 'defaultPaymentTermsDays') ?: '30';
+    // Initialize Invoice Service
+    $invoiceValidator = new InvoiceValidator();
+    $invoiceService = new InvoiceService($settingGateway, $invoiceGateway, $invoiceValidator);
+
+    // Get currency from settings
     $currency = $settingGateway->getSettingByScope('System', 'currency') ?: 'CAD';
 
-    // Calculate combined tax rate
-    $combinedTaxRate = (float)$gstRate + (float)$qstRate;
+    // Get tax rates from service
+    $taxRates = $invoiceService->getTaxRates();
+    $gstRate = $taxRates['gst'];
+    $qstRate = $taxRates['qst'];
+    $combinedTaxRate = $taxRates['combined'];
 
-    // Generate next invoice number
-    $invoiceNumber = $invoiceGateway->generateInvoiceNumber($invoicePrefix, $gibbonSchoolYearID);
+    // Generate next invoice number using service
+    $invoiceNumber = $invoiceService->generateInvoiceNumber($gibbonSchoolYearID);
 
-    // Calculate default dates
+    // Calculate default dates using service
     $defaultInvoiceDate = date('Y-m-d');
-    $defaultDueDate = date('Y-m-d', strtotime('+' . $defaultPaymentTermsDays . ' days'));
+    $defaultDueDate = $invoiceService->calculateDueDate($defaultInvoiceDate);
 
     // Description
     echo '<p>';

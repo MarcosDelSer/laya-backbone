@@ -36,6 +36,8 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Domain\User\FamilyGateway;
 use Gibbon\Module\EnhancedFinance\Domain\InvoiceGateway;
+use Gibbon\Module\EnhancedFinance\Service\InvoiceService;
+use Gibbon\Module\EnhancedFinance\Validator\InvoiceValidator;
 
 // Access check
 if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_invoices.php') == false) {
@@ -82,10 +84,14 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
             $request['status'] = 'Outstanding';
         }
 
-        // Get gateways
+        // Get gateways and services
         $invoiceGateway = $container->get(InvoiceGateway::class);
         $familyGateway = $container->get(FamilyGateway::class);
         $settingGateway = $container->get(SettingGateway::class);
+
+        // Initialize Invoice Service
+        $invoiceValidator = new InvoiceValidator();
+        $invoiceService = new InvoiceService($settingGateway, $invoiceGateway, $invoiceValidator);
 
         // Get currency from settings
         $currency = $settingGateway->getSettingByScope('System', 'currency') ?: 'CAD';
@@ -171,9 +177,9 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
             ->displayLabel();
 
         // Row modifier for status highlighting
-        $table->modifyRows(function ($invoice, $row) {
-            // Highlight overdue invoices
-            if (in_array($invoice['status'], ['Issued', 'Partial']) && $invoice['dueDate'] < date('Y-m-d')) {
+        $table->modifyRows(function ($invoice, $row) use ($invoiceService) {
+            // Highlight overdue invoices (using service)
+            if ($invoiceService->isOverdue($invoice['dueDate'], $invoice['status'])) {
                 $row->addClass('error');
             }
             // Highlight paid invoices
@@ -227,12 +233,12 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
         // Column: Status
         $table->addColumn('status', __('Status'))
             ->sortable(['status'])
-            ->format(function ($invoice) {
+            ->format(function ($invoice) use ($invoiceService) {
                 $status = $invoice['status'];
                 $class = '';
 
-                // Check for overdue
-                if (in_array($status, ['Issued', 'Partial']) && $invoice['dueDate'] < date('Y-m-d')) {
+                // Check for overdue (using service)
+                if ($invoiceService->isOverdue($invoice['dueDate'], $invoice['status'])) {
                     $status = __('Overdue');
                     $class = 'text-red-600 font-semibold';
                 } else if ($status == 'Paid') {
