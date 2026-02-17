@@ -3,23 +3,23 @@
   "spec": "201-critical-auth-security-fixes",
   "state": "building",
   "subtasks": {
-    "completed": 1,
+    "completed": 3,
     "total": 15,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Security Audit & Configuration",
+    "current": "JWT Verification Enhancement",
     "id": null,
-    "total": 2
+    "total": 3
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 3,
+    "number": 5,
     "started_at": "2026-02-17T16:28:00.299620"
   },
-  "last_update": "2026-02-17T16:33:07.363499"
+  "last_update": "2026-02-17T16:40:10.843452"
 }

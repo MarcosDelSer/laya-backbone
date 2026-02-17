@@ -45,7 +45,7 @@ def create_token(
         True
 
     Note:
-        Standard claims (sub, iat, exp) cannot be overridden by additional_claims
+        Standard claims (sub, iat, exp, iss, aud) cannot be overridden by additional_claims
         for security reasons. Any attempts to override these will be ignored.
     """
     now = datetime.now(timezone.utc)
@@ -60,7 +60,7 @@ def create_token(
         # Filter out reserved claims to prevent override attacks
         filtered_claims = {
             k: v for k, v in additional_claims.items()
-            if k not in ("sub", "iat", "exp")
+            if k not in ("sub", "iat", "exp", "iss", "aud")
         }
         payload.update(filtered_claims)
 
@@ -69,6 +69,8 @@ def create_token(
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
     })
 
     return jwt.encode(
@@ -99,9 +101,11 @@ def decode_token(token: str) -> dict[str, Any]:
     Security:
         - Validates signature using configured secret key
         - Enforces algorithm (prevents algorithm substitution attacks)
-        - Requires standard JWT claims: sub, exp, iat
+        - Requires standard JWT claims: sub, exp, iat, iss, aud
         - Validates expiration time (exp)
         - Validates issued-at time (iat)
+        - Validates issuer (iss) matches configured jwt_issuer
+        - Validates audience (aud) matches configured jwt_audience
     """
     try:
         # Decode with strict validation and required claims
@@ -109,12 +113,14 @@ def decode_token(token: str) -> dict[str, Any]:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
             # Strict validation options
             options={
                 "verify_signature": True,  # Verify signature (default: True)
                 "verify_exp": True,  # Verify expiration (default: True)
                 "verify_iat": True,  # Verify issued-at time (default: True)
-                "require": ["sub", "exp", "iat"],  # Require standard claims
+                "require": ["sub", "exp", "iat", "iss", "aud"],  # Require standard claims
             },
         )
         return payload

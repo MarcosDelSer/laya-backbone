@@ -39,6 +39,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         assert "sub" in payload
         assert payload["sub"] == "user123"
@@ -51,6 +53,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         assert payload["sub"] == user_id
 
@@ -61,6 +65,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         assert "iat" in payload
         # iat should be within last minute
@@ -75,6 +81,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         assert "exp" in payload
         # exp should be approximately 1 hour from now
@@ -91,6 +99,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         now = datetime.now(timezone.utc)
         exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
@@ -111,6 +121,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         assert payload["sub"] == "user123"
         assert payload["role"] == "admin"
@@ -132,6 +144,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         # Security fix: Standard claims are now protected from override
         # Additional claims attempting to override sub, iat, exp are filtered out
@@ -146,6 +160,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         assert payload["sub"] == "user123"
         assert "iat" in payload
@@ -158,6 +174,8 @@ class TestCreateToken:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            issuer=settings.jwt_issuer,
+            audience=settings.jwt_audience,
         )
         assert payload["sub"] == "user123"
 

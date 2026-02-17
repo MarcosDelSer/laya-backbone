@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "your_jwt_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
+    jwt_issuer: str = "laya-ai-service"
+    jwt_audience: str = "laya-api"
 
     # CSRF configuration
     csrf_token_expire_minutes: int = 60
