@@ -3,13 +3,16 @@
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.dependencies import get_current_user
 from app.middleware.rate_limit import get_auth_limit, limiter
 from app.middleware.security import get_cors_origins
+from app.middleware.validation import validation_exception_handler
 from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
@@ -25,6 +28,10 @@ app = FastAPI(
 # Configure rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Configure validation exception handler for strict mode
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(ValidationError, validation_exception_handler)
 
 # Configure CORS middleware with security lockdown for production
 # Only allows whitelisted origins from environment configuration

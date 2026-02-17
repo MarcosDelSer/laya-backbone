@@ -15,6 +15,12 @@ class BaseSchema(BaseModel):
 
     Configures ORM mode for SQLAlchemy model compatibility.
     All domain schemas should inherit from this class.
+
+    Security Configuration:
+        - str_strip_whitespace=True: Automatically strips whitespace from strings
+        - JSON validation: FastAPI handles JSON deserialization before Pydantic
+          validation, so type safety is maintained through the JSON parsing layer
+        - Additional validators can be added for security-critical fields
     """
 
     model_config = ConfigDict(
@@ -65,8 +71,10 @@ class BaseResponse(BaseSchema, TimestampMixin, IDMixin):
     pass
 
 
-class PaginationParams(BaseModel):
+class PaginationParams(BaseSchema):
     """Pagination parameters for list endpoints.
+
+    Inherits strict mode from BaseSchema for security.
 
     Attributes:
         skip: Number of records to skip (offset)

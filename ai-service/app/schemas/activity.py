@@ -49,8 +49,10 @@ class ActivityDifficulty(str, Enum):
     HARD = "hard"
 
 
-class AgeRange(BaseModel):
+class AgeRange(BaseSchema):
     """Age range specification for activity targeting.
+
+    Inherits strict mode from BaseSchema for security.
 
     Attributes:
         min_months: Minimum age in months
