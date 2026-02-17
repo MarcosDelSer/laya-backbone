@@ -347,7 +347,7 @@ class DevelopmentProfileService:
             Skill assessment if found, None otherwise.
         """
         query = select(SkillAssessment).where(
-            cast(SkillAssessment.id, String) == str(assessment_id)
+            SkillAssessment.id == assessment_id
         )
         result = await self.db.execute(query)
         assessment = result.scalar_one_or_none()
@@ -372,7 +372,7 @@ class DevelopmentProfileService:
             Updated assessment if found, None otherwise.
         """
         query = select(SkillAssessment).where(
-            cast(SkillAssessment.id, String) == str(assessment_id)
+            SkillAssessment.id == assessment_id
         )
         result = await self.db.execute(query)
         assessment = result.scalar_one_or_none()
@@ -406,7 +406,7 @@ class DevelopmentProfileService:
             True if deleted, False if not found.
         """
         query = select(SkillAssessment).where(
-            cast(SkillAssessment.id, String) == str(assessment_id)
+            SkillAssessment.id == assessment_id
         )
         result = await self.db.execute(query)
         assessment = result.scalar_one_or_none()
