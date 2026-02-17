@@ -740,7 +740,7 @@ class DevelopmentProfileService:
             Monthly snapshot if found, None otherwise.
         """
         query = select(MonthlySnapshot).where(
-            cast(MonthlySnapshot.id, String) == str(snapshot_id)
+            MonthlySnapshot.id == snapshot_id
         )
         result = await self.db.execute(query)
         snapshot = result.scalar_one_or_none()
@@ -765,7 +765,7 @@ class DevelopmentProfileService:
             Updated snapshot if found, None otherwise.
         """
         query = select(MonthlySnapshot).where(
-            cast(MonthlySnapshot.id, String) == str(snapshot_id)
+            MonthlySnapshot.id == snapshot_id
         )
         result = await self.db.execute(query)
         snapshot = result.scalar_one_or_none()
@@ -800,7 +800,7 @@ class DevelopmentProfileService:
             True if deleted, False if not found.
         """
         query = select(MonthlySnapshot).where(
-            cast(MonthlySnapshot.id, String) == str(snapshot_id)
+            MonthlySnapshot.id == snapshot_id
         )
         result = await self.db.execute(query)
         snapshot = result.scalar_one_or_none()
