@@ -11,7 +11,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.dependencies import get_current_user
 from app.middleware.rate_limit import get_auth_limit, limiter
-from app.middleware.security import get_cors_origins
+from app.middleware.security import get_cors_origins, get_xss_protection_middleware
 from app.middleware.validation import validation_exception_handler
 from app.routers import coaching
 from app.routers.activities import router as activities_router
@@ -32,6 +32,11 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Configure validation exception handler for strict mode
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(ValidationError, validation_exception_handler)
+
+# Configure XSS protection middleware to add security headers
+# Adds Content-Security-Policy, X-Content-Type-Options, and X-Frame-Options
+# to all responses for defense-in-depth protection against XSS attacks
+app.middleware("http")(get_xss_protection_middleware())
 
 # Configure CORS middleware with security lockdown for production
 # Only allows whitelisted origins from environment configuration
