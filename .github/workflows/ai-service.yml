@@ -74,7 +74,7 @@ jobs:
           ACCESS_TOKEN_EXPIRE_MINUTES: 30
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         if: always()
         with:
           file: ./ai-service/coverage.xml
