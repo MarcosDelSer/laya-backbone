@@ -152,6 +152,254 @@ class RoleMapping:
     }
 ```
 
+## JWT Security and Validation
+
+### Overview
+
+The LAYA AI Service implements comprehensive JWT security validation following OWASP best practices and RFC 7519 standards. This section documents the security measures implemented to prevent authentication bypass vulnerabilities.
+
+### Required JWT Claims
+
+All JWT tokens **MUST** include the following claims for validation to succeed:
+
+| Claim | Name | Required | Description | Validation |
+|-------|------|----------|-------------|------------|
+| `exp` | Expiration Time | ✅ Yes | Unix timestamp when token expires | Automatically verified, must be in future |
+| `sub` | Subject | ✅ Yes | User identifier (UUID or username) | Must be present |
+| `iat` | Issued At | ✅ Yes | Unix timestamp when token was created | Must be present |
+| `aud` | Audience | ✅ Yes | Intended recipient (`laya-ai-service`) | Must match configured value |
+| `iss` | Issuer | ✅ Yes | Token issuer (`laya-ai-service`) | Must match configured value |
+
+**Example Valid Token Payload:**
+```json
+{
+  "sub": "user-12345",
+  "exp": 1708185600,
+  "iat": 1708182000,
+  "aud": "laya-ai-service",
+  "iss": "laya-ai-service",
+  "email": "user@example.com",
+  "role": "teacher"
+}
+```
+
+### Algorithm Enforcement
+
+The JWT validation enforces strict algorithm requirements:
+
+- **Allowed Algorithm:** `HS256` (HMAC with SHA-256) only
+- **Rejected Algorithms:**
+  - `none` - Explicitly rejected to prevent unsigned token attacks
+  - Any algorithm other than configured algorithm - Rejected with 401
+- **Defense-in-Depth:**
+  - Pre-validation check of token header before decoding
+  - Algorithm whitelist in `jwt.decode()` call
+  - Explicit rejection of `none` algorithm with clear error message
+
+**Security Note:** The system validates the token's algorithm claim BEFORE signature verification to prevent algorithm confusion attacks.
+
+### Audience and Issuer Validation
+
+#### Audience Validation (`aud` claim)
+
+Ensures tokens are intended for this specific service:
+
+- **Expected Value:** `laya-ai-service` (configurable via `JWT_AUDIENCE` env var)
+- **Purpose:** Prevents tokens from other services being used here
+- **Rejection:** Tokens with wrong or missing audience return 401 Unauthorized
+
+**Configuration:**
+```python
+# In app/config.py
+jwt_audience: str = Field(default="laya-ai-service", env="JWT_AUDIENCE")
+```
+
+#### Issuer Validation (`iss` claim)
+
+Ensures tokens come from trusted sources:
+
+- **Expected Value:** `laya-ai-service` (configurable via `JWT_ISSUER` env var)
+- **Purpose:** Prevents tokens from untrusted issuers
+- **Rejection:** Tokens with wrong or missing issuer return 401 Unauthorized
+
+**Configuration:**
+```python
+# In app/config.py
+jwt_issuer: str = Field(default="laya-ai-service", env="JWT_ISSUER")
+```
+
+### JWT Validation Flow
+
+```
+1. Extract Bearer Token from Authorization Header
+   ↓
+2. Decode Token Header (without verification)
+   ↓
+3. Validate Algorithm
+   - Reject if algorithm is 'none'
+   - Reject if algorithm doesn't match HS256
+   ↓
+4. Decode and Verify Token
+   - Verify signature with secret key
+   - Verify expiration (exp) is in future
+   - Require exp, sub, iat claims present
+   - Validate audience matches expected value
+   - Validate issuer matches expected value
+   ↓
+5. Check Token Blacklist
+   - Reject if token has been revoked
+   ↓
+6. Return Validated Payload
+```
+
+### Security Best Practices
+
+#### 1. Required Claims Enforcement
+
+All tokens **MUST** include critical claims. Tokens missing any required claim are rejected:
+
+```python
+# In app/auth/jwt.py - decode_token()
+payload = jwt.decode(
+    token,
+    settings.jwt_secret_key,
+    algorithms=[settings.jwt_algorithm],
+    audience=settings.jwt_audience,
+    issuer=settings.jwt_issuer,
+    options={
+        "require": ["exp", "sub", "iat"],  # Critical claims
+        "verify_exp": True,                # Verify expiration
+    },
+)
+```
+
+**Why this matters:**
+- Prevents permanent tokens (missing `exp`)
+- Prevents anonymous access (missing `sub`)
+- Enables token age tracking (requires `iat`)
+
+#### 2. Short Token Lifetimes
+
+- **Default Expiration:** 1 hour (3600 seconds)
+- **Maximum Recommended:** 24 hours for standard tokens
+- **Rationale:** Limits exposure window if token is compromised
+
+#### 3. Secure Secret Management
+
+- **Secret Length:** Minimum 256 bits (32 bytes)
+- **Storage:** Environment variables, never in code
+- **Rotation:** Every 90 days recommended
+- **Generation:** Use cryptographically secure random generator
+
+```bash
+# Generate secure JWT secret
+./scripts/generate-jwt-secret.sh
+```
+
+#### 4. Token Revocation
+
+The system implements a token blacklist for logout and security events:
+
+```python
+# Tokens are checked against blacklist after validation
+stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
+result = await db.execute(stmt)
+if result.scalar_one_or_none() is not None:
+    raise HTTPException(status_code=401, detail="Token has been revoked")
+```
+
+#### 5. Comprehensive Error Handling
+
+All validation failures return consistent 401 responses:
+
+- Invalid signature → 401 Unauthorized
+- Expired token → 401 Unauthorized
+- Missing required claims → 401 Unauthorized
+- Wrong audience/issuer → 401 Unauthorized
+- Invalid algorithm → 401 Unauthorized
+- Blacklisted token → 401 Unauthorized
+
+**Security Note:** Error messages are intentionally generic to prevent information leakage to attackers.
+
+### Common Validation Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Missing required claim: exp` | Token doesn't have expiration | Include `exp` when creating token |
+| `Missing required claim: sub` | Token doesn't have subject | Include `sub` when creating token |
+| `Missing required claim: iat` | Token doesn't have issued-at | Include `iat` when creating token |
+| `Invalid audience` | Token `aud` doesn't match expected | Ensure `aud` is `laya-ai-service` |
+| `Invalid issuer` | Token `iss` doesn't match expected | Ensure `iss` is `laya-ai-service` |
+| `Invalid token: 'none' algorithm is not allowed` | Token uses unsigned algorithm | Use HS256 algorithm |
+| `Token has expired` | Current time > token `exp` | Request new token |
+| `Token has been revoked` | Token in blacklist | Request new token via login |
+
+### Testing JWT Security
+
+Comprehensive security tests are available:
+
+```bash
+# Test JWT validation security
+pytest tests/auth/test_jwt.py::TestJWTSecurityProperties -v
+
+# Test that bypass vulnerabilities are fixed
+pytest tests/auth/test_jwt_security_bypass.py -v
+
+# Test middleware JWT validation
+pytest tests/test_middleware_auth.py::TestMiddlewareSecurityValidation -v
+```
+
+### Creating Secure Tokens
+
+Always use the `create_token()` function which automatically includes all required claims:
+
+```python
+from app.auth.jwt import create_token
+
+# Create token with required claims
+token = create_token(
+    subject="user-12345",
+    expires_delta_seconds=3600,  # 1 hour
+    additional_claims={
+        "email": "user@example.com",
+        "role": "teacher"
+    }
+)
+
+# Token automatically includes:
+# - sub: "user-12345"
+# - exp: current_time + 3600
+# - iat: current_time
+# - aud: "laya-ai-service"
+# - iss: "laya-ai-service"
+# - email: "user@example.com"
+# - role: "teacher"
+```
+
+### Vulnerability Remediation
+
+This implementation addresses critical JWT vulnerabilities identified in security audit (Task 086):
+
+| Vulnerability | CVSS | Status | Mitigation |
+|---------------|------|--------|------------|
+| Missing expiration enforcement | 9.8 | ✅ Fixed | Required claims: `exp`, `verify_exp: True` |
+| Missing subject enforcement | 9.8 | ✅ Fixed | Required claims: `sub` |
+| Missing issued-at enforcement | 7.5 | ✅ Fixed | Required claims: `iat` |
+| No audience validation | 8.1 | ✅ Fixed | `audience` parameter validation |
+| No issuer validation | 8.1 | ✅ Fixed | `issuer` parameter validation |
+| Algorithm confusion | 9.0 | ✅ Fixed | Explicit algorithm whitelist + pre-validation |
+
+**Documentation:**
+- Vulnerability Analysis: `.auto-claude/specs/086-fix-jwt-verification-auth-bypass/VULNERABILITY_ANALYSIS.md`
+- Security Verification: `.auto-claude/specs/086-fix-jwt-verification-auth-bypass/SECURITY_VERIFICATION_REPORT.md`
+
+### References
+
+- [RFC 7519 - JSON Web Token (JWT)](https://datatracker.ietf.org/doc/html/rfc7519)
+- [OWASP JWT Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html)
+- [PyJWT Documentation](https://pyjwt.readthedocs.io/en/stable/)
+- [JWT Claims Registry](https://www.iana.org/assignments/jwt/jwt.xhtml)
+
 ## Security Considerations
 
 1. **Shared Secret**: Both Gibbon and AI Service must use the same `JWT_SECRET_KEY`

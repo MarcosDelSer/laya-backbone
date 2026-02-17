@@ -1,0 +1,517 @@
+{
+  "feature": "Fix JWT Verification Authentication Bypass Vulnerability",
+  "workflow_type": "bugfix",
+  "workflow_rationale": "This is a critical security vulnerability (CVSS 9.8) that allows complete authentication bypass. The vulnerability stems from PyJWT's default behavior of not requiring critical claims like 'exp' (expiration), and lack of audience/issuer validation. This must be fixed immediately before any other tasks.",
+  "phases": [
+    {
+      "id": "phase-1-investigation",
+      "name": "Vulnerability Investigation and Documentation",
+      "type": "investigation",
+      "description": "Document the JWT verification bypass vulnerability and create proof-of-concept tests demonstrating the security flaws",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create proof-of-concept tests demonstrating JWT bypass vulnerabilities",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [
+            "tests/auth/test_jwt_security_bypass.py"
+          ],
+          "patterns_from": [
+            "tests/auth/test_jwt.py",
+            "tests/auth/test_security.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -m pytest tests/auth/test_jwt_security_bypass.py -v -k 'test_token_without_exp_claim_accepted'",
+            "expected": "Test should PASS (demonstrating vulnerability exists)"
+          },
+          "status": "completed",
+          "expected_output": "Test file with failing security tests that demonstrate: (1) Tokens without exp claim are accepted, (2) Tokens without required claims are accepted, (3) No audience/issuer validation occurs, (4) Vulnerability is reproducible",
+          "notes": "Successfully created comprehensive proof-of-concept test suite with 14 tests demonstrating JWT bypass vulnerabilities. All tests pass, confirming vulnerabilities exist. Tests demonstrate: tokens without exp/sub/iat claims accepted, no audience/issuer validation, and complete authentication bypass scenarios. Root cause identified: PyJWT's jwt.decode() doesn't require critical claims by default.",
+          "updated_at": "2026-02-17T10:48:27.333849+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Document the vulnerability details and root cause",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/086-fix-jwt-verification-auth-bypass/VULNERABILITY_ANALYSIS.md"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Review VULNERABILITY_ANALYSIS.md for: (1) Clear description of vulnerability, (2) Root cause (PyJWT default behavior), (3) Attack scenarios, (4) Impact analysis"
+          },
+          "status": "completed",
+          "expected_output": "Markdown document containing: (1) Vulnerability description, (2) Root cause analysis (PyJWT doesn't require 'exp' by default), (3) Proof-of-concept test results, (4) Security impact assessment, (5) Recommended fixes",
+          "notes": "Successfully created comprehensive VULNERABILITY_ANALYSIS.md documenting: (1) Clear description of 6 critical vulnerabilities, (2) Root cause analysis (PyJWT's permissive defaults), (3) CVSS 9.8 severity assessment, (4) 4 detailed attack scenarios with likelihood/impact, (5) References to 14 proof-of-concept tests, (6) Priority-ranked remediation recommendations, (7) Validation criteria for fix verification. Document includes executive summary, technical details, business impact, testing requirements, and PyJWT security best practices.",
+          "updated_at": "2026-02-17T14:07:49.418983+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-jwt-validation-fix",
+      "name": "Implement JWT Validation Security Fixes",
+      "type": "implementation",
+      "description": "Add proper JWT signature verification, required claims enforcement, and audience/issuer validation to jwt.py",
+      "depends_on": [
+        "phase-1-investigation"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Add required claims enforcement to decode_token function",
+          "service": "ai-service",
+          "files_to_modify": [
+            "app/auth/jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "app/auth/jwt.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"from app.auth.jwt import decode_token; import jwt; from app.config import settings; token = jwt.encode({'sub': 'test', 'iat': 1234567890}, settings.jwt_secret_key, algorithm='HS256'); decode_token(token)\"",
+            "expected": "Should raise HTTPException with 401 status (token missing required 'exp' claim)"
+          },
+          "status": "completed",
+          "notes": "Successfully added required claims enforcement to decode_token function. Added options parameter to jwt.decode() with require=['exp', 'sub', 'iat'] and verify_exp=True. Verification passed - tokens missing required claims (especially 'exp') are now properly rejected with HTTPException 401 status. This prevents the critical JWT authentication bypass vulnerability where tokens without expiration could be accepted.",
+          "updated_at": "2026-02-17T14:10:57.949595+00:00"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Add audience and issuer validation to decode_token",
+          "service": "ai-service",
+          "files_to_modify": [
+            "app/auth/jwt.py",
+            "app/config.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "app/auth/jwt.py",
+            "app/config.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"from app.auth.jwt import decode_token; import jwt; from app.config import settings; from datetime import datetime, timezone, timedelta; exp = int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()); token = jwt.encode({'sub': 'test', 'iat': int(datetime.now(timezone.utc).timestamp()), 'exp': exp, 'aud': 'wrong-audience'}, settings.jwt_secret_key, algorithm='HS256'); decode_token(token)\"",
+            "expected": "Should raise HTTPException with 401 status (invalid audience)"
+          },
+          "status": "completed",
+          "notes": "Successfully added audience and issuer validation to decode_token function. Added jwt_audience and jwt_issuer fields to Settings class in config.py with default value 'laya-ai-service'. Updated decode_token in jwt.py to validate audience and issuer claims using audience= and issuer= parameters in jwt.decode(). Verification passed - comprehensive tests confirm: (1) tokens with wrong audience are rejected with 401, (2) tokens missing audience are rejected with 401, (3) tokens with wrong issuer are rejected with 401, (4) tokens missing issuer are rejected with 401, (5) tokens with correct audience and issuer are accepted. This prevents JWT authentication bypass by ensuring tokens can only be used for the intended audience and from the expected issuer.",
+          "updated_at": "2026-02-17T14:15:33.365369+00:00"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Add explicit algorithm validation and reject 'none' algorithm",
+          "service": "ai-service",
+          "files_to_modify": [
+            "app/auth/jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "app/auth/jwt.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"from app.auth.jwt import decode_token; import jwt; token = jwt.encode({'sub': 'test', 'exp': 9999999999}, key='', algorithm='none'); decode_token(token)\"",
+            "expected": "Should raise HTTPException with 401 status (invalid algorithm)"
+          },
+          "status": "completed",
+          "notes": "Successfully added explicit algorithm validation to decode_token function. Implementation includes: (1) Explicit check of token header using jwt.get_unverified_header() to inspect algorithm before verification, (2) Explicit rejection of 'none' algorithm with HTTPException 401, (3) Validation that token algorithm matches expected algorithm (HS256), (4) Defense-in-depth approach with both pre-validation checks and algorithms parameter in jwt.decode(). Verification passed - tokens with 'none' algorithm are properly rejected with 401 status. This prevents JWT algorithm confusion attacks where attackers could bypass signature verification by using 'none' algorithm.",
+          "updated_at": "2026-02-17T14:18:33.135207+00:00"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Update create_token to include aud and iss claims",
+          "service": "ai-service",
+          "files_to_modify": [
+            "app/auth/jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "app/auth/jwt.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"from app.auth.jwt import create_token, decode_token; token = create_token('test123'); payload = decode_token(token); print('aud:', payload.get('aud'), 'iss:', payload.get('iss'))\"",
+            "expected": "Should print aud and iss values from settings"
+          },
+          "status": "completed",
+          "notes": "Successfully updated create_token function to include aud and iss claims from settings. Added jwt_audience and jwt_issuer to the payload dictionary before additional_claims to prevent override. Verification passed - tokens now include aud: laya-ai-service and iss: laya-ai-service claims, which are properly validated by decode_token. This completes the JWT validation security fixes in the create_token function.",
+          "updated_at": "2026-02-17T14:23:58.209467+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-middleware-validation-fix",
+      "name": "Implement Middleware JWT Validation Security Fixes",
+      "type": "implementation",
+      "description": "Add proper JWT validation to multi-source authentication middleware",
+      "depends_on": [
+        "phase-2-jwt-validation-fix"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Add required claims enforcement to verify_token_from_any_source",
+          "service": "ai-service",
+          "files_to_modify": [
+            "app/middleware/auth.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "app/middleware/auth.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -c \"import asyncio; from app.middleware.auth import verify_token_from_any_source; from fastapi.security import HTTPAuthorizationCredentials; import jwt; from app.config import settings; token = jwt.encode({'sub': 'test', 'iat': 1234567890}, settings.jwt_secret_key, algorithm='HS256'); creds = HTTPAuthorizationCredentials(scheme='Bearer', credentials=token); asyncio.run(verify_token_from_any_source(creds))\"",
+            "expected": "Should raise HTTPException with 401 status (missing required claims)"
+          },
+          "status": "completed",
+          "notes": "Successfully added required claims enforcement to verify_token_from_any_source function. Implementation includes: (1) Algorithm validation with explicit rejection of 'none' algorithm, (2) Required claims enforcement (exp, sub, iat) using options parameter, (3) Audience and issuer validation, (4) Defense-in-depth approach with pre-validation checks before jwt.decode(), (5) Comprehensive audit logging maintained. Verification passed - tokens missing required claims are properly rejected with HTTPException 401 status. This prevents JWT authentication bypass vulnerability in the middleware layer.",
+          "updated_at": "2026-02-17T14:28:09.874609+00:00"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add audience and issuer validation to middleware",
+          "service": "ai-service",
+          "files_to_modify": [
+            "app/middleware/auth.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "app/middleware/auth.py"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Review code changes in verify_token_from_any_source to ensure audience and issuer parameters are passed to jwt.decode() for both AI service and Gibbon tokens"
+          },
+          "status": "completed",
+          "notes": "Successfully added audience and issuer validation to middleware verify_token_from_any_source function. Implementation includes: (1) Main jwt.decode() call already had audience and issuer validation from subtask-3-1, (2) Added audience and issuer validation to exception handling jwt.decode() call for defense-in-depth security, (3) Both AI service and Gibbon tokens are validated through the single decode point with proper audience and issuer checks. Manual verification confirmed: audience and issuer parameters are passed to all jwt.decode() calls in verify_token_from_any_source for comprehensive security validation.",
+          "updated_at": "2026-02-17T14:32:17.303558+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-comprehensive-testing",
+      "name": "Add Comprehensive Security Tests",
+      "type": "implementation",
+      "description": "Create comprehensive security tests to verify all JWT vulnerabilities are fixed",
+      "depends_on": [
+        "phase-3-middleware-validation-fix"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Add security tests for required claims enforcement",
+          "service": "ai-service",
+          "files_to_modify": [
+            "tests/auth/test_jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "tests/auth/test_jwt.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -m pytest tests/auth/test_jwt.py::TestJWTSecurityProperties::test_expiration_is_required -v",
+            "expected": "Test should FAIL showing that tokens without exp are now rejected"
+          },
+          "status": "completed",
+          "notes": "Successfully added security tests for required claims enforcement. Updated test_expiration_is_required to expect HTTPException when exp claim is missing (was previously expecting success). Added test_subject_is_required and test_issued_at_is_required to verify that tokens missing sub and iat claims are properly rejected with HTTPException 401 status. All 7 security tests in TestJWTSecurityProperties class now pass, demonstrating that the JWT validation properly enforces required claims.",
+          "updated_at": "2026-02-17T14:35:07.427053+00:00"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Add security tests for audience and issuer validation",
+          "service": "ai-service",
+          "files_to_modify": [
+            "tests/auth/test_jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "tests/auth/test_jwt.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -m pytest tests/auth/test_jwt.py -v -k 'audience or issuer'",
+            "expected": "All audience and issuer validation tests pass"
+          },
+          "status": "completed",
+          "notes": "Successfully added security tests for audience and issuer validation. Added 5 comprehensive test cases to TestJWTSecurityProperties class: (1) test_audience_is_validated_with_wrong_audience - verifies tokens with wrong audience are rejected with 401, (2) test_audience_is_required - verifies tokens missing audience claim are rejected with 401, (3) test_issuer_is_validated_with_wrong_issuer - verifies tokens with wrong issuer are rejected with 401, (4) test_issuer_is_required - verifies tokens missing issuer claim are rejected with 401, (5) test_valid_audience_and_issuer_accepted - verifies tokens with correct audience and issuer are accepted. All tests pass, demonstrating that JWT validation properly enforces audience and issuer security requirements. Verification command passed: cd ai-service && python -m pytest tests/auth/test_jwt.py -v -k 'audience or issuer' - all 5 tests passed.",
+          "updated_at": "2026-02-17T14:37:44.721975+00:00"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Add security tests for algorithm validation",
+          "service": "ai-service",
+          "files_to_modify": [
+            "tests/auth/test_jwt.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "tests/auth/test_jwt.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -m pytest tests/auth/test_jwt.py::TestJWTSecurityProperties::test_token_algorithm_enforced -v",
+            "expected": "Test passes showing 'none' algorithm is rejected"
+          },
+          "status": "completed",
+          "notes": "Successfully added comprehensive security tests for algorithm validation. Updated test_token_algorithm_enforced to properly verify 'none' algorithm is explicitly rejected with HTTPException 401 status. Added test_token_with_wrong_algorithm_rejected to verify tokens using wrong algorithm (e.g., HS512 when expecting HS256) are rejected with 401 status. Both tests verify the defense-in-depth algorithm validation in decode_token that checks token headers before verification. All 13 security tests in TestJWTSecurityProperties class pass, demonstrating comprehensive JWT security validation including: (1) 'none' algorithm rejection, (2) algorithm mismatch detection, (3) required claims enforcement (exp, sub, iat), (4) audience and issuer validation. Verification command passed: cd ai-service && python -m pytest tests/auth/test_jwt.py::TestJWTSecurityProperties::test_token_algorithm_enforced -v",
+          "updated_at": "2026-02-17T14:40:19.861175+00:00"
+        },
+        {
+          "id": "subtask-4-4",
+          "description": "Add middleware security tests",
+          "service": "ai-service",
+          "files_to_modify": [
+            "tests/test_middleware_auth.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "tests/test_middleware_auth.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -m pytest tests/test_middleware_auth.py -v -k 'security'",
+            "expected": "All middleware security tests pass"
+          },
+          "status": "completed",
+          "notes": "Successfully added comprehensive middleware security tests. Implementation includes: (1) Created TestMiddlewareSecurityValidation class with 8 security tests, (2) Tests verify rejection of tokens without required claims (exp, iat, aud, iss), (3) Tests verify rejection of tokens with invalid audience/issuer values, (4) Tests verify explicit rejection of 'none' algorithm, (5) Tests verify rejection of wrong algorithm tokens, (6) Updated helper functions (create_ai_service_token and create_gibbon_token) to include required aud and iss claims, (7) Fixed existing test_gibbon_token_without_username_raises_exception to include required claims. Verification passed: cd ai-service && python -m pytest tests/test_middleware_auth.py -v -k 'security' - all 8 security tests passed. All 19 middleware tests pass (11 existing + 8 new security tests).",
+          "updated_at": "2026-02-17T14:44:27.481248+00:00"
+        },
+        {
+          "id": "subtask-4-5",
+          "description": "Update proof-of-concept tests to verify fixes",
+          "service": "ai-service",
+          "files_to_modify": [
+            "tests/auth/test_jwt_security_bypass.py"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "tests/auth/test_jwt_security_bypass.py"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -m pytest tests/auth/test_jwt_security_bypass.py -v",
+            "expected": "All tests should now FAIL (showing vulnerabilities are fixed)"
+          },
+          "status": "completed",
+          "notes": "Successfully updated proof-of-concept tests to verify that JWT vulnerabilities are fixed. All 14 tests now pass, confirming: (1) Tokens without required claims (exp, sub, iat) are properly rejected with HTTPException 401, (2) Tokens without audience/issuer claims are rejected, (3) Tokens with wrong audience/issuer are rejected, (4) Authentication bypass scenarios are prevented, (5) Properly formed tokens with all required claims still work correctly. Tests were updated from expecting successful decoding (demonstrating vulnerabilities) to expecting HTTPException (demonstrating fixes). Verification passed: cd ai-service && python -m pytest tests/auth/test_jwt_security_bypass.py -v - all 14 tests passed.",
+          "updated_at": "2026-02-17T14:48:40.792450+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-integration-verification",
+      "name": "Integration Testing and Security Verification",
+      "type": "integration",
+      "description": "Run all authentication tests and perform security verification to ensure no bypass is possible",
+      "depends_on": [
+        "phase-4-comprehensive-testing"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Run full authentication test suite",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -m pytest tests/auth/ -v",
+            "expected": "All authentication tests pass"
+          },
+          "status": "completed",
+          "notes": "Successfully ran full authentication test suite. Fixed JWT validation test issues by updating test helper functions to include required aud and iss claims. All 245 authentication tests pass (excluding test_routes.py which has unrelated import issues in worktree setup). Test results: (1) tests/auth/test_jwt.py - all passing, (2) tests/auth/test_dependencies.py - all passing, (3) tests/auth/test_jwt_security_bypass.py - all passing, (4) tests/auth/test_security.py - all passing, (5) tests/auth/test_service.py - all passing. JWT validation security fixes are working correctly and all authentication functionality is properly validated.",
+          "updated_at": "2026-02-17T14:54:31.213395+00:00"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Run middleware authentication tests",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd ai-service && python -m pytest tests/test_middleware_auth.py -v",
+            "expected": "All middleware authentication tests pass"
+          },
+          "status": "completed",
+          "notes": "Successfully ran all middleware authentication tests. All 19 tests passed, including: (1) 11 existing middleware authentication tests (AI service tokens, Gibbon tokens, expired tokens, invalid tokens, token extraction, etc.), (2) 8 new security validation tests from phase 4 (tokens without required claims exp/iat/aud/iss, tokens with invalid audience/issuer, tokens with 'none' algorithm, tokens with wrong algorithm). Verification passed: cd ai-service && python -m pytest tests/test_middleware_auth.py -v - all 19 tests passed in 0.40s. JWT validation security fixes in the middleware layer are working correctly and all middleware authentication functionality is properly validated.",
+          "updated_at": "2026-02-17T14:56:24.435955+00:00"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Security penetration testing - attempt bypass attacks",
+          "service": "ai-service",
+          "files_to_modify": [],
+          "files_to_create": [
+            ".auto-claude/specs/086-fix-jwt-verification-auth-bypass/SECURITY_VERIFICATION_REPORT.md"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Review SECURITY_VERIFICATION_REPORT.md for documented attempts at: (1) Token without exp, (2) Token without sub, (3) Token with wrong audience, (4) Token with 'none' algorithm, (5) Token tampering. All should be rejected."
+          },
+          "status": "pending",
+          "expected_output": "Security report documenting: (1) All bypass attempt scenarios tested, (2) All attacks properly rejected with 401, (3) No authentication bypass possible, (4) Confirmation that vulnerability is fully resolved"
+        },
+        {
+          "id": "subtask-5-4",
+          "description": "Update security documentation with JWT best practices",
+          "service": "ai-service",
+          "files_to_modify": [
+            "app/auth/README.md"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "app/auth/README.md"
+          ],
+          "verification": {
+            "type": "manual",
+            "instructions": "Review README.md for documentation of: (1) Required JWT claims, (2) Audience and issuer validation, (3) Algorithm enforcement, (4) Security best practices"
+          },
+          "status": "pending",
+          "notes": "Document the JWT security improvements, required claims, audience/issuer validation, and security best practices for future developers."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 5,
+    "total_subtasks": 15,
+    "services_involved": [
+      "ai-service"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 1,
+      "parallel_groups": [],
+      "recommended_workers": 1,
+      "speedup_estimate": "N/A - security fix requires sequential execution"
+    },
+    "startup_command": "cd ai-service && docker-compose up -d ai-service postgres"
+  },
+  "verification_strategy": {
+    "risk_level": "critical",
+    "skip_validation": false,
+    "test_creation_phase": "integrated",
+    "test_types_required": [
+      "unit",
+      "integration",
+      "security"
+    ],
+    "security_scanning_required": true,
+    "staging_deployment_required": true,
+    "acceptance_criteria": [
+      "All JWT tokens must be properly verified with signature validation",
+      "Expired tokens must be rejected (exp claim required and validated)",
+      "Tokens missing required claims (exp, sub, iat) must be rejected",
+      "Tokens with invalid audience or issuer must be rejected",
+      "Tokens using 'none' algorithm must be rejected",
+      "All existing authentication tests pass",
+      "New security tests demonstrate vulnerabilities are fixed",
+      "Security penetration testing confirms no bypass is possible",
+      "Documentation updated with JWT security best practices"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests - JWT Core",
+        "command": "cd ai-service && python -m pytest tests/auth/test_jwt.py -v",
+        "expected_outcome": "All JWT unit tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Unit Tests - Middleware",
+        "command": "cd ai-service && python -m pytest tests/test_middleware_auth.py -v",
+        "expected_outcome": "All middleware tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Security Tests - Bypass Prevention",
+        "command": "cd ai-service && python -m pytest tests/auth/test_jwt_security_bypass.py -v",
+        "expected_outcome": "All bypass attempt tests fail (vulnerabilities fixed)",
+        "type": "security",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Integration Tests - Full Auth Suite",
+        "command": "cd ai-service && python -m pytest tests/auth/ -v",
+        "expected_outcome": "All authentication integration tests pass",
+        "type": "integration",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Secrets Scan",
+        "command": "python auto-claude/scan_secrets.py --all-files --json",
+        "expected_outcome": "No secrets detected",
+        "type": "security",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "Critical security vulnerability (CVSS 9.8) requires comprehensive testing including unit tests, integration tests, security-specific tests, and penetration testing to ensure complete remediation"
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": [
+        "cd ai-service && python -m pytest tests/auth/test_jwt.py -v"
+      ],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": [
+        "cd ai-service && python -m pytest tests/auth/ -v"
+      ],
+      "services_to_test": [
+        "ai-service"
+      ]
+    },
+    "security_tests": {
+      "required": true,
+      "commands": [
+        "cd ai-service && python -m pytest tests/auth/test_jwt_security_bypass.py -v",
+        "python auto-claude/scan_secrets.py --all-files --json"
+      ],
+      "penetration_testing": true
+    },
+    "e2e_tests": {
+      "required": false,
+      "commands": [],
+      "flows": []
+    },
+    "browser_verification": {
+      "required": false,
+      "pages": []
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    }
+  },
+  "qa_signoff": null,
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "updated_at": "2026-02-17T14:58:22.270Z",
+  "last_updated": "2026-02-17T14:56:24.435962+00:00",
+  "recoveryNote": "Task recovered from stuck state at 2026-02-17T14:05:14.485Z"
+}

@@ -106,6 +106,7 @@ class TestGetCurrentUser:
     async def test_get_current_user_wrong_signature(self, auth_db_session, mock_credentials):
         """Test get_current_user raises 401 for token with wrong signature."""
         import jwt
+        from app.config import settings
 
         payload = {
             "sub": str(uuid4()),
@@ -114,6 +115,8 @@ class TestGetCurrentUser:
             "type": "access",
             "iat": int(datetime.now(timezone.utc).timestamp()),
             "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
         }
         token = jwt.encode(payload, "wrong_secret_key", algorithm="HS256")
         credentials = mock_credentials(token)

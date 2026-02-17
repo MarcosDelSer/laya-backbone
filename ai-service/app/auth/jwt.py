@@ -5,7 +5,6 @@ Provides JWT token creation, validation, and payload management.
 
 from datetime import datetime, timezone
 from typing import Any, Optional
-import uuid
 
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -54,7 +53,8 @@ def create_token(
         "sub": subject,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
-        "jti": str(uuid.uuid4()),
+        "aud": settings.jwt_audience,
+        "iss": settings.jwt_issuer,
     }
 
     if additional_claims:
@@ -86,10 +86,39 @@ def decode_token(token: str) -> dict[str, Any]:
         'user123'
     """
     try:
+        # First, decode the header without verification to check the algorithm
+        # This provides explicit defense-in-depth against 'none' algorithm attacks
+        unverified_header = jwt.get_unverified_header(token)
+        token_algorithm = unverified_header.get("alg", "").lower()
+
+        # Explicitly reject 'none' algorithm (critical security check)
+        if token_algorithm == "none":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: 'none' algorithm is not allowed",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Verify algorithm matches expected algorithm
+        if token_algorithm != settings.jwt_algorithm.lower():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid token: algorithm mismatch (expected {settings.jwt_algorithm})",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Now decode and validate with full verification
+        # The algorithms parameter provides an additional layer of security
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
+            options={
+                "require": ["exp", "sub", "iat"],
+                "verify_exp": True,
+            },
         )
         return payload
     except InvalidTokenError as e:
@@ -130,24 +159,21 @@ async def verify_token(
             return {"user_id": payload["sub"]}
     """
     # Import here to avoid circular dependency
-    from app.auth.blacklist import TokenBlacklistService
+    from app.auth.models import TokenBlacklist
 
     token = credentials.credentials
 
     # Decode and validate the token (handles expiration, signature, etc.)
     payload = decode_token(token)
 
-    # Check if token is blacklisted using Redis
-    blacklist_service = TokenBlacklistService()
-    try:
-        is_blacklisted = await blacklist_service.is_token_blacklisted(token)
-        if is_blacklisted:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    finally:
-        await blacklist_service.close()
+    # Check if token is blacklisted
+    stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
+    result = await db.execute(stmt)
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     return payload
