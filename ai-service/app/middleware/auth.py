@@ -132,6 +132,25 @@ async def verify_token_from_any_source(
             algorithms=[settings.jwt_algorithm],
         )
 
+        # Check if token is blacklisted
+        from app.auth.models import TokenBlacklist
+        from sqlalchemy import select
+
+        stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none() is not None:
+            audit_logger.log_verification_failed(
+                error_message="Token has been revoked",
+                ip_address=ip_address,
+                user_agent=user_agent,
+                endpoint=endpoint,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         # Validate required fields
         if not payload.get("sub"):
             audit_logger.log_missing_claims(
