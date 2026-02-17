@@ -255,6 +255,7 @@ class DevelopmentProfileService:
         profile.educator_id = request.educator_id
         profile.birth_date = request.birth_date
         profile.notes = request.notes
+        profile.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(profile)
@@ -427,24 +428,35 @@ class DevelopmentProfileService:
         self,
         assessment_id: UUID,
         request: SkillAssessmentUpdateRequest,
+        user_id: UUID,
     ) -> Optional[SkillAssessmentResponse]:
         """Update an existing skill assessment.
 
         Args:
             assessment_id: Unique identifier of the assessment.
             request: Update request with partial data.
+            user_id: ID of the user updating the assessment.
 
         Returns:
             Updated assessment if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(SkillAssessment).where(
             cast(SkillAssessment.id, String) == str(assessment_id)
-        )
+        ).options(selectinload(SkillAssessment.profile))
         result = await self.db.execute(query)
         assessment = result.scalar_one_or_none()
 
         if assessment is None:
             return None
+
+        # Verify user has access to the parent profile
+        if not self._user_has_profile_access(assessment.profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to update this skill assessment"
+            )
 
         # Update fields if provided
         if request.status is not None:
@@ -454,8 +466,10 @@ class DevelopmentProfileService:
         if request.assessed_by_id is not None:
             assessment.assessed_by_id = request.assessed_by_id
 
-        # Update assessed_at timestamp
-        assessment.assessed_at = datetime.now(timezone.utc)
+        # Update assessed_at and updated_at timestamps
+        now = datetime.now(timezone.utc)
+        assessment.assessed_at = now
+        assessment.updated_at = now
 
         await self.db.commit()
         await self.db.refresh(assessment)
@@ -629,24 +643,35 @@ class DevelopmentProfileService:
         self,
         observation_id: UUID,
         request: ObservationUpdateRequest,
+        user_id: UUID,
     ) -> Optional[ObservationResponse]:
         """Update an existing observation.
 
         Args:
             observation_id: Unique identifier of the observation.
             request: Update request with partial data.
+            user_id: ID of the user updating the observation.
 
         Returns:
             Updated observation if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(Observation).where(
             cast(Observation.id, String) == str(observation_id)
-        )
+        ).options(selectinload(Observation.profile))
         result = await self.db.execute(query)
         observation = result.scalar_one_or_none()
 
         if observation is None:
             return None
+
+        # Verify user has access to the parent profile
+        if not self._user_has_profile_access(observation.profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to update this observation"
+            )
 
         # Update fields if provided
         if request.behavior_description is not None:
@@ -659,6 +684,9 @@ class DevelopmentProfileService:
             observation.is_concern = request.is_concern
         if request.attachments is not None:
             observation.attachments = request.attachments
+
+        # Update updated_at timestamp
+        observation.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(observation)
@@ -852,24 +880,35 @@ class DevelopmentProfileService:
         self,
         snapshot_id: UUID,
         request: MonthlySnapshotUpdateRequest,
+        user_id: UUID,
     ) -> Optional[MonthlySnapshotResponse]:
         """Update an existing monthly snapshot.
 
         Args:
             snapshot_id: Unique identifier of the snapshot.
             request: Update request with partial data.
+            user_id: ID of the user updating the snapshot.
 
         Returns:
             Updated snapshot if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(MonthlySnapshot).where(
             cast(MonthlySnapshot.id, String) == str(snapshot_id)
-        )
+        ).options(selectinload(MonthlySnapshot.profile))
         result = await self.db.execute(query)
         snapshot = result.scalar_one_or_none()
 
         if snapshot is None:
             return None
+
+        # Verify user has access to the parent profile
+        if not self._user_has_profile_access(snapshot.profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to update this monthly snapshot"
+            )
 
         # Update fields if provided
         if request.overall_progress is not None:
@@ -882,6 +921,9 @@ class DevelopmentProfileService:
             snapshot.growth_areas = {"items": request.growth_areas}
         if request.is_parent_shared is not None:
             snapshot.is_parent_shared = request.is_parent_shared
+
+        # Update updated_at timestamp
+        snapshot.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(snapshot)
@@ -1108,6 +1150,7 @@ class DevelopmentProfileService:
     async def get_growth_trajectory(
         self,
         profile_id: UUID,
+        user_id: UUID,
         start_month: Optional[date] = None,
         end_month: Optional[date] = None,
         domains: Optional[list[DevelopmentalDomainSchema]] = None,
@@ -1119,6 +1162,7 @@ class DevelopmentProfileService:
 
         Args:
             profile_id: Unique identifier of the profile.
+            user_id: ID of the user requesting the trajectory.
             start_month: Optional start date for trajectory data.
             end_month: Optional end date for trajectory data.
             domains: Optional list of domains to include.
@@ -1128,9 +1172,10 @@ class DevelopmentProfileService:
 
         Raises:
             ValueError: If profile not found.
+            UnauthorizedAccessError: When the user doesn't have access.
         """
-        # Get profile
-        profile_response = await self.get_profile_by_id(profile_id, include_relations=False)
+        # Get profile (this also checks authorization)
+        profile_response = await self.get_profile_by_id(profile_id, user_id, include_relations=False)
         if profile_response is None:
             raise ValueError(f"Profile {profile_id} not found")
 
@@ -1213,7 +1258,7 @@ class DevelopmentProfileService:
 
     def _user_has_profile_access(
         self,
-        profile: DevelopmentProfile,
+        profile: Optional[DevelopmentProfile],
         user_id: UUID,
     ) -> bool:
         """Check if a user has access to a development profile.
@@ -1227,6 +1272,9 @@ class DevelopmentProfileService:
         Returns:
             True if user has access, False otherwise
         """
+        if profile is None:
+            return False
+
         # Educator always has access
         if str(profile.educator_id) == str(user_id):
             return True
