@@ -122,11 +122,51 @@ async def verify_token_from_any_source(
     endpoint = get_endpoint(request) if request else None
 
     try:
-        # Decode the token using the shared secret
+        # First, decode the header without verification to check the algorithm
+        # This provides explicit defense-in-depth against 'none' algorithm attacks
+        unverified_header = jwt.get_unverified_header(token)
+        token_algorithm = unverified_header.get("alg", "").lower()
+
+        # Explicitly reject 'none' algorithm (critical security check)
+        if token_algorithm == "none":
+            audit_logger.log_invalid_token(
+                error_message="Token uses 'none' algorithm which is not allowed",
+                ip_address=ip_address,
+                user_agent=user_agent,
+                endpoint=endpoint,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: 'none' algorithm is not allowed",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Verify algorithm matches expected algorithm
+        if token_algorithm != settings.jwt_algorithm.lower():
+            audit_logger.log_invalid_token(
+                error_message=f"Token algorithm mismatch: expected {settings.jwt_algorithm}, got {token_algorithm}",
+                ip_address=ip_address,
+                user_agent=user_agent,
+                endpoint=endpoint,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Invalid token: algorithm mismatch (expected {settings.jwt_algorithm})",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Decode the token using the shared secret with full security validation
+        # Enforce required claims, audience, and issuer validation
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
+            options={
+                "require": ["exp", "sub", "iat"],
+                "verify_exp": True,
+            },
         )
 
         # Validate required fields
