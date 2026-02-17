@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "044-accessibility-audit",
+  "spec": "046-child-registration-form",
   "state": "building",
   "subtasks": {
-    "completed": 7,
-    "total": 9,
+    "completed": 8,
+    "total": 34,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Phase 4: Documentation and Hardening",
+    "current": "Gibbon Gateway Classes",
     "id": null,
-    "total": 6
+    "total": 8
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 3,
-    "started_at": "2026-02-17T10:42:37.069139"
+    "number": 6,
+    "started_at": "2026-02-16T21:08:41.929205"
   },
-  "last_update": "2026-02-17T10:58:01.145476"
+  "last_update": "2026-02-16T21:22:10.863548"
 }

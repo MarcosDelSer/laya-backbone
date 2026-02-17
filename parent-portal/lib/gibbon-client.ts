@@ -28,8 +28,13 @@ import type {
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
-  UpdateDietaryProfileRequest,
-  WeeklyMenu,
+  EnrollmentForm,
+  EnrollmentFormSummary,
+  EnrollmentFormStatus,
+  CreateEnrollmentFormRequest,
+  UpdateEnrollmentFormRequest,
+  SignEnrollmentFormRequest,
+  SubmitEnrollmentFormRequest,
 } from './types';
 
 // ============================================================================
@@ -63,11 +68,12 @@ const ENDPOINTS = {
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
 
-  // Menu
-  WEEKLY_MENU: '/api/v1/menu/weekly',
-  MENU_ITEMS: '/api/v1/menu/items',
-  DIETARY_PROFILE: (childId: string) => `/api/v1/children/${childId}/dietary-profile`,
-  NUTRITIONAL_REPORT: (childId: string) => `/api/v1/children/${childId}/nutritional-report`,
+  // Enrollment Forms
+  ENROLLMENT_FORMS: '/api/v1/enrollment-forms',
+  ENROLLMENT_FORM: (id: string) => `/api/v1/enrollment-forms/${id}`,
+  ENROLLMENT_FORM_SIGN: (id: string) => `/api/v1/enrollment-forms/${id}/sign`,
+  ENROLLMENT_FORM_SUBMIT: (id: string) => `/api/v1/enrollment-forms/${id}/submit`,
+  ENROLLMENT_FORM_PDF: (id: string) => `/api/v1/enrollment-forms/${id}/pdf`,
 } as const;
 
 // ============================================================================
@@ -347,92 +353,124 @@ export async function getPendingDocumentsCount(): Promise<number> {
 }
 
 // ============================================================================
-// Menu API
+// Enrollment Forms API
 // ============================================================================
 
 /**
- * Parameters for fetching weekly menu.
+ * Parameters for fetching enrollment forms.
  */
-export interface WeeklyMenuParams {
-  weekStartDate?: string;
-  childId?: string;
+export interface EnrollmentFormParams extends PaginationParams {
+  status?: EnrollmentFormStatus;
+  familyId?: string;
+  personId?: string;
 }
 
 /**
- * Fetch weekly menu with optional date filter.
- * If childId is provided, includes allergen warnings specific to the child.
+ * Fetch enrollment forms with optional filters.
  */
-export async function getWeeklyMenu(params?: WeeklyMenuParams): Promise<WeeklyMenu> {
-  return gibbonClient.get<WeeklyMenu>(ENDPOINTS.WEEKLY_MENU, {
-    params: {
-      week_start_date: params?.weekStartDate,
-      child_id: params?.childId,
-    },
-  });
-}
-
-/**
- * Parameters for fetching menu items.
- */
-export interface MenuItemsParams extends PaginationParams {
-  category?: string;
-  isActive?: boolean;
-}
-
-/**
- * Fetch menu items with optional filters.
- */
-export async function getMenuItems(
-  params?: MenuItemsParams
-): Promise<PaginatedResponse<MenuItem>> {
-  return gibbonClient.get<PaginatedResponse<MenuItem>>(ENDPOINTS.MENU_ITEMS, {
+export async function getEnrollmentForms(
+  params?: EnrollmentFormParams
+): Promise<PaginatedResponse<EnrollmentFormSummary>> {
+  return gibbonClient.get<PaginatedResponse<EnrollmentFormSummary>>(ENDPOINTS.ENROLLMENT_FORMS, {
     params: {
       skip: params?.skip,
       limit: params?.limit,
-      category: params?.category,
-      is_active: params?.isActive,
+      status: params?.status,
+      family_id: params?.familyId,
+      person_id: params?.personId,
     },
   });
 }
 
 /**
- * Fetch dietary profile for a child.
+ * Fetch a specific enrollment form by ID with all related data.
  */
-export async function getDietaryProfile(childId: string): Promise<DietaryProfile> {
-  return gibbonClient.get<DietaryProfile>(ENDPOINTS.DIETARY_PROFILE(childId));
+export async function getEnrollmentForm(formId: string): Promise<EnrollmentForm> {
+  return gibbonClient.get<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM(formId));
 }
 
 /**
- * Update dietary profile for a child.
+ * Create a new enrollment form.
  */
-export async function updateDietaryProfile(
-  childId: string,
-  request: UpdateDietaryProfileRequest
-): Promise<DietaryProfile> {
-  return gibbonClient.put<DietaryProfile>(ENDPOINTS.DIETARY_PROFILE(childId), request);
+export async function createEnrollmentForm(
+  request: CreateEnrollmentFormRequest
+): Promise<EnrollmentForm> {
+  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORMS, request);
 }
 
 /**
- * Parameters for fetching nutritional report.
+ * Update an existing enrollment form.
  */
-export interface NutritionalReportParams {
-  startDate: string;
-  endDate: string;
+export async function updateEnrollmentForm(
+  formId: string,
+  request: UpdateEnrollmentFormRequest
+): Promise<EnrollmentForm> {
+  return gibbonClient.put<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM(formId), request);
 }
 
 /**
- * Fetch nutritional report for a child over a date range.
+ * Delete an enrollment form (only draft forms can be deleted).
  */
-export async function getNutritionalReport(
-  childId: string,
-  params: NutritionalReportParams
-): Promise<NutritionalReport> {
-  return gibbonClient.get<NutritionalReport>(ENDPOINTS.NUTRITIONAL_REPORT(childId), {
-    params: {
-      start_date: params.startDate,
-      end_date: params.endDate,
-    },
+export async function deleteEnrollmentForm(formId: string): Promise<void> {
+  return gibbonClient.delete<void>(ENDPOINTS.ENROLLMENT_FORM(formId));
+}
+
+/**
+ * Sign an enrollment form with e-signature.
+ */
+export async function signEnrollmentForm(
+  request: SignEnrollmentFormRequest
+): Promise<EnrollmentForm> {
+  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM_SIGN(request.formId), {
+    signature_type: request.signatureType,
+    signature_data: request.signatureData,
+    signer_name: request.signerName,
   });
+}
+
+/**
+ * Submit an enrollment form for approval.
+ */
+export async function submitEnrollmentForm(
+  request: SubmitEnrollmentFormRequest
+): Promise<EnrollmentForm> {
+  return gibbonClient.post<EnrollmentForm>(ENDPOINTS.ENROLLMENT_FORM_SUBMIT(request.formId));
+}
+
+/**
+ * Get the PDF download URL for an enrollment form.
+ */
+export function getEnrollmentFormPdfUrl(formId: string): string {
+  return `${process.env.NEXT_PUBLIC_GIBBON_URL || 'http://localhost:8080/gibbon'}${ENDPOINTS.ENROLLMENT_FORM_PDF(formId)}`;
+}
+
+/**
+ * Get enrollment forms for a specific family.
+ */
+export async function getFamilyEnrollmentForms(
+  familyId: string,
+  params?: Omit<EnrollmentFormParams, 'familyId'>
+): Promise<PaginatedResponse<EnrollmentFormSummary>> {
+  return getEnrollmentForms({
+    ...params,
+    familyId,
+  });
+}
+
+/**
+ * Get draft enrollment forms count.
+ */
+export async function getDraftEnrollmentFormsCount(): Promise<number> {
+  const response = await getEnrollmentForms({ status: 'Draft', limit: 1 });
+  return response.total;
+}
+
+/**
+ * Get pending submission enrollment forms count.
+ */
+export async function getSubmittedEnrollmentFormsCount(): Promise<number> {
+  const response = await getEnrollmentForms({ status: 'Submitted', limit: 1 });
+  return response.total;
 }
 
 // ============================================================================

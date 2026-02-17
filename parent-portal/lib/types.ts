@@ -391,183 +391,300 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
-// Menu Types
+// Enrollment Form Types
 // ============================================================================
 
 /**
- * Allergen severity levels.
+ * Enrollment form status.
  */
-export type AllergenSeverity = 'mild' | 'moderate' | 'severe';
+export type EnrollmentFormStatus =
+  | 'Draft'
+  | 'Submitted'
+  | 'Approved'
+  | 'Rejected'
+  | 'Expired';
 
 /**
- * Menu item category types.
+ * Parent/Guardian number identifier.
  */
-export type MenuCategory =
-  | 'main'
-  | 'side'
-  | 'beverage'
-  | 'snack'
-  | 'dessert'
-  | 'fruit'
-  | 'vegetable'
-  | 'dairy'
-  | 'grain';
+export type ParentNumber = '1' | '2';
 
 /**
- * Dietary type categories.
+ * E-signature type identifier.
  */
-export type DietaryType =
-  | 'regular'
-  | 'vegetarian'
-  | 'vegan'
-  | 'halal'
-  | 'kosher'
-  | 'gluten_free'
-  | 'lactose_free'
-  | 'other';
+export type SignatureType = 'Parent1' | 'Parent2' | 'Director';
 
 /**
- * Allergen associated with a menu item.
+ * Parent/Guardian information for enrollment form.
  */
-export interface MenuAllergen {
-  id: string;
+export interface EnrollmentParent {
+  id?: string;
+  formId: string;
+  parentNumber: ParentNumber;
   name: string;
-  severity: AllergenSeverity;
+  relationship: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  homePhone?: string;
+  cellPhone?: string;
+  workPhone?: string;
+  email?: string;
+  employer?: string;
+  workAddress?: string;
+  workHours?: string;
+  isPrimaryContact: boolean;
 }
 
 /**
- * Nutritional information for a menu item.
+ * Authorized pickup person for enrollment form.
  */
-export interface NutritionalInfo {
-  calories: number;
-  protein: number;
-  carbohydrates: number;
-  fat: number;
-  fiber?: number;
-  servingSize?: string;
-}
-
-/**
- * Menu item in the meal catalog.
- */
-export interface MenuItem {
-  id: string;
+export interface AuthorizedPickup {
+  id?: string;
+  formId: string;
   name: string;
-  description: string;
-  category: MenuCategory;
-  allergens: MenuAllergen[];
-  nutritionalInfo?: NutritionalInfo;
+  relationship: string;
+  phone: string;
+  photoPath?: string;
   photoUrl?: string;
-  isActive: boolean;
+  priority: number;
+  notes?: string;
 }
 
 /**
- * Menu entry for a specific date and meal type.
+ * Emergency contact for enrollment form.
  */
-export interface WeeklyMenuEntry {
-  id: string;
-  date: string;
-  mealType: MealType;
-  menuItems: MenuItem[];
-  servingNotes?: string;
+export interface EmergencyContact {
+  id?: string;
+  formId: string;
+  name: string;
+  relationship: string;
+  phone: string;
+  alternatePhone?: string;
+  priority: number;
+  notes?: string;
 }
 
 /**
- * Weekly menu containing all entries for a week.
+ * Allergy information with details.
  */
-export interface WeeklyMenu {
-  weekStartDate: string;
-  weekEndDate: string;
-  entries: WeeklyMenuEntry[];
-}
-
-/**
- * Child allergy information.
- */
-export interface ChildAllergy {
+export interface AllergyInfo {
   allergen: string;
-  severity: AllergenSeverity;
+  severity?: 'mild' | 'moderate' | 'severe';
+  reaction?: string;
+  treatment?: string;
+}
+
+/**
+ * Medication information with dosage and schedule.
+ */
+export interface MedicationInfo {
+  name: string;
+  dosage: string;
+  schedule: string;
+  instructions?: string;
+}
+
+/**
+ * Health information for enrollment form.
+ */
+export interface HealthInfo {
+  id?: string;
+  formId: string;
+  allergies?: AllergyInfo[];
+  medicalConditions?: string;
+  hasEpiPen: boolean;
+  epiPenInstructions?: string;
+  medications?: MedicationInfo[];
+  doctorName?: string;
+  doctorPhone?: string;
+  doctorAddress?: string;
+  healthInsuranceNumber?: string;
+  healthInsuranceExpiry?: string;
+  specialNeeds?: string;
+  developmentalNotes?: string;
+}
+
+/**
+ * Nutrition and dietary information for enrollment form.
+ */
+export interface NutritionInfo {
+  id?: string;
+  formId: string;
+  dietaryRestrictions?: string;
+  foodAllergies?: string;
+  feedingInstructions?: string;
+  isBottleFeeding: boolean;
+  bottleFeedingInfo?: string;
+  foodPreferences?: string;
+  foodDislikes?: string;
+  mealPlanNotes?: string;
+}
+
+/**
+ * Weekly attendance pattern for enrollment form.
+ */
+export interface AttendancePattern {
+  id?: string;
+  formId: string;
+  mondayAm: boolean;
+  mondayPm: boolean;
+  tuesdayAm: boolean;
+  tuesdayPm: boolean;
+  wednesdayAm: boolean;
+  wednesdayPm: boolean;
+  thursdayAm: boolean;
+  thursdayPm: boolean;
+  fridayAm: boolean;
+  fridayPm: boolean;
+  saturdayAm: boolean;
+  saturdayPm: boolean;
+  sundayAm: boolean;
+  sundayPm: boolean;
+  expectedHoursPerWeek?: number;
+  expectedArrivalTime?: string;
+  expectedDepartureTime?: string;
   notes?: string;
 }
 
 /**
- * Child's dietary profile and accommodations.
+ * E-signature for enrollment form.
  */
-export interface DietaryProfile {
+export interface EnrollmentSignature {
+  id?: string;
+  formId: string;
+  signatureType: SignatureType;
+  signatureData: string;
+  signerName: string;
+  signedAt: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+/**
+ * Complete enrollment form with all related data.
+ */
+export interface EnrollmentForm {
   id: string;
-  childId: string;
-  childName?: string;
-  dietaryType: DietaryType;
-  allergies: ChildAllergy[];
-  restrictions?: string;
+  personId: string;
+  familyId: string;
+  schoolYearId: string;
+  formNumber: string;
+  status: EnrollmentFormStatus;
+  version: number;
+  admissionDate?: string;
+  childFirstName: string;
+  childLastName: string;
+  childDateOfBirth: string;
+  childAddress?: string;
+  childCity?: string;
+  childPostalCode?: string;
+  languagesSpoken?: string;
   notes?: string;
-  parentNotified: boolean;
-  lastUpdated?: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  approvedById?: string;
+  rejectedAt?: string;
+  rejectedById?: string;
+  rejectionReason?: string;
+  createdById: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Related data (populated when fetched with relations)
+  parents?: EnrollmentParent[];
+  authorizedPickups?: AuthorizedPickup[];
+  emergencyContacts?: EmergencyContact[];
+  healthInfo?: HealthInfo;
+  nutritionInfo?: NutritionInfo;
+  attendancePattern?: AttendancePattern;
+  signatures?: EnrollmentSignature[];
 }
 
 /**
- * Request payload for updating dietary profile.
+ * Enrollment form summary for list display.
  */
-export interface UpdateDietaryProfileRequest {
-  dietaryType: DietaryType;
-  allergies: ChildAllergy[];
-  restrictions?: string;
+export interface EnrollmentFormSummary {
+  id: string;
+  formNumber: string;
+  status: EnrollmentFormStatus;
+  version: number;
+  admissionDate?: string;
+  childFirstName: string;
+  childLastName: string;
+  childDateOfBirth: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdByName?: string;
+}
+
+/**
+ * Request payload for creating an enrollment form.
+ */
+export interface CreateEnrollmentFormRequest {
+  personId: string;
+  familyId: string;
+  admissionDate?: string;
+  childFirstName: string;
+  childLastName: string;
+  childDateOfBirth: string;
+  childAddress?: string;
+  childCity?: string;
+  childPostalCode?: string;
+  languagesSpoken?: string;
   notes?: string;
+  parents: Omit<EnrollmentParent, 'id' | 'formId'>[];
+  authorizedPickups?: Omit<AuthorizedPickup, 'id' | 'formId'>[];
+  emergencyContacts: Omit<EmergencyContact, 'id' | 'formId'>[];
+  healthInfo?: Omit<HealthInfo, 'id' | 'formId'>;
+  nutritionInfo?: Omit<NutritionInfo, 'id' | 'formId'>;
+  attendancePattern?: Omit<AttendancePattern, 'id' | 'formId'>;
 }
 
 /**
- * Daily nutritional breakdown entry.
+ * Request payload for updating an enrollment form.
  */
-export interface DailyNutritionalBreakdown {
-  date: string;
-  mealType: MealType;
-  calories: number;
-  protein: number;
-  carbohydrates: number;
-  fat: number;
-  appetiteLevel: MealAmount;
+export interface UpdateEnrollmentFormRequest {
+  admissionDate?: string;
+  childFirstName?: string;
+  childLastName?: string;
+  childDateOfBirth?: string;
+  childAddress?: string;
+  childCity?: string;
+  childPostalCode?: string;
+  languagesSpoken?: string;
+  notes?: string;
+  parents?: Omit<EnrollmentParent, 'formId'>[];
+  authorizedPickups?: Omit<AuthorizedPickup, 'formId'>[];
+  emergencyContacts?: Omit<EmergencyContact, 'formId'>[];
+  healthInfo?: Omit<HealthInfo, 'formId'>;
+  nutritionInfo?: Omit<NutritionInfo, 'formId'>;
+  attendancePattern?: Omit<AttendancePattern, 'formId'>;
 }
 
 /**
- * Nutritional report totals.
+ * Request payload for signing an enrollment form.
  */
-export interface NutritionalTotals {
-  totalCalories: number;
-  totalProtein: number;
-  totalCarbohydrates: number;
-  totalFat: number;
-  averageCaloriesPerDay: number;
-  mealsTracked: number;
+export interface SignEnrollmentFormRequest {
+  formId: string;
+  signatureType: SignatureType;
+  signatureData: string;
+  signerName: string;
 }
 
 /**
- * Nutritional report for a child over a date range.
+ * Request payload for submitting an enrollment form for approval.
  */
-export interface NutritionalReport {
-  childId: string;
-  childName?: string;
-  startDate: string;
-  endDate: string;
-  totals: NutritionalTotals;
-  dailyBreakdown: DailyNutritionalBreakdown[];
-  appetiteTrends: {
-    all: number;
-    most: number;
-    some: number;
-    none: number;
-  };
+export interface SubmitEnrollmentFormRequest {
+  formId: string;
 }
 
 /**
- * Allergen warning for menu viewing.
+ * Request payload for approving or rejecting an enrollment form.
  */
-export interface AllergenWarning {
-  date: string;
-  mealType: MealType;
-  menuItemId: string;
-  menuItemName: string;
-  allergen: string;
-  severity: AllergenSeverity;
+export interface ReviewEnrollmentFormRequest {
+  formId: string;
+  action: 'approve' | 'reject';
+  reason?: string;
 }
 
 // ============================================================================
