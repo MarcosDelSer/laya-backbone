@@ -228,6 +228,7 @@ class InterventionPlanService:
 
         Raises:
             PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
         """
         # Query with all relationships loaded
         query = (
@@ -250,6 +251,12 @@ class InterventionPlanService:
 
         if not plan:
             raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
 
         return InterventionPlanResponse.model_validate(plan)
 
@@ -276,6 +283,7 @@ class InterventionPlanService:
 
         Raises:
             PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
         """
         # Get existing plan
         query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
@@ -284,6 +292,12 @@ class InterventionPlanService:
 
         if not plan:
             raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
 
         # Create version snapshot before update if requested
         if create_version:
@@ -416,6 +430,7 @@ class InterventionPlanService:
 
         Raises:
             PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
         """
         query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
         result = await self.db.execute(query)
@@ -423,6 +438,12 @@ class InterventionPlanService:
 
         if not plan:
             raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
 
         # Soft delete by archiving
         plan.status = InterventionPlanStatus.ARCHIVED.value
@@ -452,11 +473,18 @@ class InterventionPlanService:
 
         Raises:
             PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
         """
         # Get the plan with all relationships
         plan = await self._get_plan_with_relations(plan_id)
         if not plan:
             raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
 
         # Create snapshot
         snapshot = await self._create_plan_snapshot(plan)
@@ -501,6 +529,7 @@ class InterventionPlanService:
 
         Raises:
             PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
         """
         # Verify plan exists
         query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
@@ -509,6 +538,12 @@ class InterventionPlanService:
 
         if not plan:
             raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
 
         # Create progress record
         progress = InterventionProgress(
@@ -573,6 +608,7 @@ class InterventionPlanService:
 
         Raises:
             PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
         """
         # Verify plan exists
         query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
@@ -581,6 +617,12 @@ class InterventionPlanService:
 
         if not plan:
             raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
 
         # Get all versions
         version_query = (
@@ -675,6 +717,7 @@ class InterventionPlanService:
 
         Raises:
             PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
             InvalidPlanError: When the plan cannot be signed
         """
         query = select(InterventionPlan).where(InterventionPlan.id == plan_id)
@@ -683,6 +726,12 @@ class InterventionPlanService:
 
         if not plan:
             raise PlanNotFoundError(f"Intervention plan with ID {plan_id} not found")
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, parent_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
 
         if plan.parent_signed:
             raise InvalidPlanError("Plan has already been signed")
@@ -725,8 +774,19 @@ class InterventionPlanService:
 
         Returns:
             Updated InterventionPlanResponse
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
         """
-        await self._verify_plan_exists(plan_id)
+        plan = await self._verify_plan_exists(plan_id)
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
+
         strength = self._create_strength_model(plan_id, request)
         self.db.add(strength)
         await self.db.commit()
@@ -738,8 +798,20 @@ class InterventionPlanService:
         request: NeedCreate,
         user_id: UUID,
     ) -> InterventionPlanResponse:
-        """Add a need to an intervention plan."""
-        await self._verify_plan_exists(plan_id)
+        """Add a need to an intervention plan.
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        plan = await self._verify_plan_exists(plan_id)
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
+
         need = self._create_need_model(plan_id, request)
         self.db.add(need)
         await self.db.commit()
@@ -751,8 +823,20 @@ class InterventionPlanService:
         request: SMARTGoalCreate,
         user_id: UUID,
     ) -> InterventionPlanResponse:
-        """Add a SMART goal to an intervention plan."""
-        await self._verify_plan_exists(plan_id)
+        """Add a SMART goal to an intervention plan.
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        plan = await self._verify_plan_exists(plan_id)
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
+
         goal = self._create_goal_model(plan_id, request)
         self.db.add(goal)
         await self.db.commit()
@@ -764,8 +848,20 @@ class InterventionPlanService:
         request: StrategyCreate,
         user_id: UUID,
     ) -> InterventionPlanResponse:
-        """Add a strategy to an intervention plan."""
-        await self._verify_plan_exists(plan_id)
+        """Add a strategy to an intervention plan.
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        plan = await self._verify_plan_exists(plan_id)
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
+
         strategy = self._create_strategy_model(plan_id, request)
         self.db.add(strategy)
         await self.db.commit()
@@ -777,8 +873,20 @@ class InterventionPlanService:
         request: MonitoringCreate,
         user_id: UUID,
     ) -> InterventionPlanResponse:
-        """Add a monitoring approach to an intervention plan."""
-        await self._verify_plan_exists(plan_id)
+        """Add a monitoring approach to an intervention plan.
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        plan = await self._verify_plan_exists(plan_id)
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
+
         monitoring = self._create_monitoring_model(plan_id, request)
         self.db.add(monitoring)
         await self.db.commit()
@@ -790,8 +898,20 @@ class InterventionPlanService:
         request: ParentInvolvementCreate,
         user_id: UUID,
     ) -> InterventionPlanResponse:
-        """Add a parent involvement activity to an intervention plan."""
-        await self._verify_plan_exists(plan_id)
+        """Add a parent involvement activity to an intervention plan.
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        plan = await self._verify_plan_exists(plan_id)
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
+
         involvement = self._create_parent_involvement_model(plan_id, request)
         self.db.add(involvement)
         await self.db.commit()
@@ -803,8 +923,20 @@ class InterventionPlanService:
         request: ConsultationCreate,
         user_id: UUID,
     ) -> InterventionPlanResponse:
-        """Add a consultation to an intervention plan."""
-        await self._verify_plan_exists(plan_id)
+        """Add a consultation to an intervention plan.
+
+        Raises:
+            PlanNotFoundError: When the plan is not found
+            UnauthorizedAccessError: When the user doesn't have access
+        """
+        plan = await self._verify_plan_exists(plan_id)
+
+        # Verify user has access to the plan
+        if not self._user_has_plan_access(plan, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this intervention plan"
+            )
+
         consultation = self._create_consultation_model(plan_id, request)
         self.db.add(consultation)
         await self.db.commit()
@@ -1174,3 +1306,30 @@ class InterventionPlanService:
             notes=data.notes,
             order=data.order,
         )
+
+    def _user_has_plan_access(
+        self,
+        plan: InterventionPlan,
+        user_id: UUID,
+    ) -> bool:
+        """Check if a user has access to an intervention plan.
+
+        User has access if they are the creator of the plan.
+
+        Args:
+            plan: The intervention plan to check access for
+            user_id: ID of the user to check
+
+        Returns:
+            True if user has access, False otherwise
+        """
+        # Creator always has access
+        if str(plan.created_by) == str(user_id):
+            return True
+
+        # In a full implementation, we would also check:
+        # - If user is a parent of the child
+        # - If user is an educator/staff with proper permissions
+        # For now, we only check creator access
+
+        return False
