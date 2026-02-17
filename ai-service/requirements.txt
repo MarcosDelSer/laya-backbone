@@ -15,6 +15,9 @@ redis[asyncio]>=5.0.0
 PyJWT>=2.8.0
 pyotp>=2.9.0
 
+# Security & Rate Limiting
+fastapi-limiter>=0.1.5
+
 # HTTP client
 httpx>=0.26.0
 
@@ -36,3 +39,6 @@ tiktoken>=0.6.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 aiosqlite>=0.19.0
+
+# Security Auditing
+pip-audit>=2.7.0
