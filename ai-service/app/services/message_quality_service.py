@@ -12,7 +12,9 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException, status
 
+from app.auth.bridges import has_admin_access
 from app.auth.models import UserRole
 from app.models.message_quality import MessageAnalysis, MessageTemplate, TrainingExample
 from app.schemas.message_quality import (
@@ -389,6 +391,42 @@ class MessageQualityService:
             db: Async database session
         """
         self.db = db
+
+    def check_ownership(
+        self,
+        resource_owner_id: UUID,
+        current_user: dict,
+    ) -> None:
+        """Check if the current user has permission to access a resource.
+
+        Validates ownership by checking if the current user is either:
+        1. An admin (admins can access all resources)
+        2. The owner of the resource (user_id matches resource_owner_id)
+
+        Args:
+            resource_owner_id: UUID of the user who owns the resource
+            current_user: Current user payload from JWT token containing:
+                - sub: User ID
+                - role: User role (admin, teacher, etc.)
+
+        Raises:
+            HTTPException 403: When a non-admin user tries to access
+                another user's resource
+        """
+        # Extract user information from token
+        current_user_id = UUID(current_user.get("sub", current_user.get("user_id")))
+        user_role = current_user.get("role", "").lower()
+
+        # Admins can access all resources
+        if has_admin_access(user_role):
+            return
+
+        # Check if user owns the resource
+        if current_user_id != resource_owner_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this resource. Educators can only access their own messages.",
+            )
 
     async def analyze_message(
         self,

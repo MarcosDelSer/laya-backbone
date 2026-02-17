@@ -3139,3 +3139,48 @@ class TestAPIEdgeCasesAndErrorHandling:
         )
 
         assert response.status_code == 422
+
+
+# =============================================================================
+# Ownership Validation Tests
+# =============================================================================
+
+
+def test_ownership_validation(mock_db_session):
+    """Test ownership validation in message quality service.
+
+    Verifies that:
+    - Admins can access all resources (bypass ownership check)
+    - Teachers can access their own resources
+    - Teachers cannot access other teachers' resources (403 error)
+    - Ownership validation properly uses has_admin_access()
+    """
+    from app.services.message_quality_service import MessageQualityService
+
+    service = MessageQualityService(mock_db_session)
+
+    # Test 1: Admin can access any resource
+    admin_user = {
+        "sub": str(uuid4()),
+        "role": "admin",
+    }
+    other_user_id = uuid4()
+    service.check_ownership(other_user_id, admin_user)  # Should not raise
+
+    # Test 2: Teacher can access own resource
+    teacher_id = uuid4()
+    teacher_user = {
+        "sub": str(teacher_id),
+        "role": "teacher",
+    }
+    service.check_ownership(teacher_id, teacher_user)  # Should not raise
+
+    # Test 3: Teacher cannot access another teacher's resource
+    another_teacher_id = uuid4()
+    with pytest.raises(Exception) as exc_info:
+        service.check_ownership(another_teacher_id, teacher_user)
+
+    # Verify it's a 403 Forbidden error
+    assert hasattr(exc_info.value, 'status_code')
+    assert exc_info.value.status_code == 403
+    assert "permission" in str(exc_info.value.detail).lower()
