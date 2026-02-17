@@ -37,6 +37,21 @@ from app.models.communication import (
     HomeActivity,
     ParentReport,
 )
+from app.models.medical import (
+    AccommodationPlan,
+    AccommodationPlanStatus,
+    AccommodationPlanType,
+    AdministeredBy,
+    AlertLevel,
+    AlertType,
+    Allergy,
+    AllergenType,
+    AllergySeverity,
+    MedicalAlert,
+    Medication,
+    MedicationRoute,
+    MedicationType,
+)
 
 __all__ = [
     "Base",
@@ -61,4 +76,18 @@ __all__ = [
     "ParentReport",
     "HomeActivity",
     "CommunicationPreference",
+    # Medical models
+    "Allergy",
+    "AllergenType",
+    "AllergySeverity",
+    "Medication",
+    "MedicationType",
+    "MedicationRoute",
+    "AdministeredBy",
+    "AccommodationPlan",
+    "AccommodationPlanType",
+    "AccommodationPlanStatus",
+    "MedicalAlert",
+    "AlertType",
+    "AlertLevel",
 ]
