@@ -88,6 +88,7 @@ def decode_token(token: str) -> dict[str, Any]:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            options={"require": ["exp", "iat", "sub"]},
         )
         return payload
     except InvalidTokenError as e:
