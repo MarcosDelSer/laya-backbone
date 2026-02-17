@@ -8,13 +8,9 @@
 import { gibbonClient, ApiError } from './api';
 import type {
   Child,
+  ChildStaffResponse,
   DailyReport,
   Document,
-  GovernmentDocument,
-  GovernmentDocumentChecklist,
-  GovernmentDocumentStats,
-  GovernmentDocumentTypeDefinition,
-  GovernmentDocumentUploadRequest,
   Invoice,
   Message,
   MessageThread,
@@ -23,6 +19,8 @@ import type {
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
+  StaffOnDuty,
+  StaffProfile,
 } from './types';
 
 // ============================================================================
@@ -56,14 +54,10 @@ const ENDPOINTS = {
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
 
-  // Government Documents
-  GOVERNMENT_DOCUMENTS: '/api/v1/government-documents',
-  GOVERNMENT_DOCUMENT: (id: string) => `/api/v1/government-documents/${id}`,
-  GOVERNMENT_DOCUMENT_TYPES: '/api/v1/government-documents/types',
-  GOVERNMENT_DOCUMENT_CHECKLIST: '/api/v1/government-documents/checklist',
-  GOVERNMENT_DOCUMENT_STATS: '/api/v1/government-documents/stats',
-  GOVERNMENT_DOCUMENT_UPLOAD: '/api/v1/government-documents/upload',
-  GOVERNMENT_DOCUMENT_FILE: (id: string) => `/api/v1/government-documents/${id}/file`,
+  // Staff
+  CHILD_STAFF: (childId: string) => `/api/v1/children/${childId}/staff`,
+  CHILD_STAFF_ON_DUTY: (childId: string) => `/api/v1/children/${childId}/staff/on-duty`,
+  STAFF_PROFILE: (staffId: string) => `/api/v1/staff/${staffId}`,
 } as const;
 
 // ============================================================================
@@ -343,115 +337,47 @@ export async function getPendingDocumentsCount(): Promise<number> {
 }
 
 // ============================================================================
-// Government Documents API
+// Staff API
 // ============================================================================
 
 /**
- * Parameters for fetching government documents.
+ * Fetch all staff assigned to a specific child.
+ * Includes primary caregivers, classroom staff, and specialists.
  */
-export interface GovernmentDocumentParams extends PaginationParams {
-  personId?: string;
-  status?: 'missing' | 'pending_verification' | 'verified' | 'rejected' | 'expired';
-  category?: 'child_identity' | 'parent_identity' | 'health' | 'immigration';
+export async function getChildStaff(childId: string): Promise<ChildStaffResponse> {
+  return gibbonClient.get<ChildStaffResponse>(ENDPOINTS.CHILD_STAFF(childId));
 }
 
 /**
- * Fetch government documents with optional filters.
+ * Fetch staff currently on duty for a child's classroom.
  */
-export async function getGovernmentDocuments(
-  params?: GovernmentDocumentParams
-): Promise<PaginatedResponse<GovernmentDocument>> {
-  return gibbonClient.get<PaginatedResponse<GovernmentDocument>>(ENDPOINTS.GOVERNMENT_DOCUMENTS, {
-    params: {
-      skip: params?.skip,
-      limit: params?.limit,
-      person_id: params?.personId,
-      status: params?.status,
-      category: params?.category,
-    },
-  });
+export async function getChildStaffOnDuty(childId: string): Promise<StaffOnDuty[]> {
+  return gibbonClient.get<StaffOnDuty[]>(ENDPOINTS.CHILD_STAFF_ON_DUTY(childId));
 }
 
 /**
- * Fetch a specific government document by ID.
+ * Fetch a staff member's profile by ID.
+ * Returns only parent-visible information.
  */
-export async function getGovernmentDocument(documentId: string): Promise<GovernmentDocument> {
-  return gibbonClient.get<GovernmentDocument>(ENDPOINTS.GOVERNMENT_DOCUMENT(documentId));
+export async function getStaffProfile(staffId: string): Promise<StaffProfile> {
+  return gibbonClient.get<StaffProfile>(ENDPOINTS.STAFF_PROFILE(staffId));
 }
 
 /**
- * Fetch all available government document types.
+ * Fetch all staff assigned to children for the current parent.
+ * Aggregates staff from all children.
  */
-export async function getGovernmentDocumentTypes(): Promise<GovernmentDocumentTypeDefinition[]> {
-  return gibbonClient.get<GovernmentDocumentTypeDefinition[]>(ENDPOINTS.GOVERNMENT_DOCUMENT_TYPES);
+export async function getAllChildrenStaff(): Promise<ChildStaffResponse[]> {
+  const children = await getChildren();
+  return Promise.all(children.map((child) => getChildStaff(child.id)));
 }
 
 /**
- * Fetch the family document checklist.
+ * Get the primary caregiver(s) for a child.
  */
-export async function getGovernmentDocumentChecklist(): Promise<GovernmentDocumentChecklist> {
-  return gibbonClient.get<GovernmentDocumentChecklist>(ENDPOINTS.GOVERNMENT_DOCUMENT_CHECKLIST);
-}
-
-/**
- * Fetch government document statistics.
- */
-export async function getGovernmentDocumentStats(): Promise<GovernmentDocumentStats> {
-  return gibbonClient.get<GovernmentDocumentStats>(ENDPOINTS.GOVERNMENT_DOCUMENT_STATS);
-}
-
-/**
- * Upload a government document.
- */
-export async function uploadGovernmentDocument(
-  request: GovernmentDocumentUploadRequest
-): Promise<GovernmentDocument> {
-  const formData = new FormData();
-  formData.append('person_id', request.personId);
-  formData.append('document_type_id', request.documentTypeId);
-  formData.append('file', request.file);
-
-  if (request.documentNumber) {
-    formData.append('document_number', request.documentNumber);
-  }
-  if (request.issueDate) {
-    formData.append('issue_date', request.issueDate);
-  }
-  if (request.expirationDate) {
-    formData.append('expiration_date', request.expirationDate);
-  }
-  if (request.notes) {
-    formData.append('notes', request.notes);
-  }
-
-  return gibbonClient.post<GovernmentDocument>(ENDPOINTS.GOVERNMENT_DOCUMENT_UPLOAD, formData);
-}
-
-/**
- * Get the file download URL for a government document.
- */
-export function getGovernmentDocumentFileUrl(documentId: string): string {
-  return `${process.env.NEXT_PUBLIC_GIBBON_URL || 'http://localhost:8080/gibbon'}${ENDPOINTS.GOVERNMENT_DOCUMENT_FILE(documentId)}`;
-}
-
-/**
- * Delete a government document.
- */
-export async function deleteGovernmentDocument(documentId: string): Promise<void> {
-  return gibbonClient.delete<void>(ENDPOINTS.GOVERNMENT_DOCUMENT(documentId));
-}
-
-/**
- * Get documents requiring attention (missing, expired, or expiring soon).
- */
-export async function getGovernmentDocumentsRequiringAttention(): Promise<GovernmentDocument[]> {
-  const [missing, expired, pendingVerification] = await Promise.all([
-    getGovernmentDocuments({ status: 'missing' }),
-    getGovernmentDocuments({ status: 'expired' }),
-    getGovernmentDocuments({ status: 'pending_verification' }),
-  ]);
-
-  return [...missing.items, ...expired.items, ...pendingVerification.items];
+export async function getPrimaryCaregivers(childId: string): Promise<StaffProfile[]> {
+  const response = await getChildStaff(childId);
+  return response.assignments.primaryCaregivers;
 }
 
 // ============================================================================
