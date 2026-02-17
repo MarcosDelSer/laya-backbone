@@ -127,6 +127,16 @@ async def verify_token_from_any_source(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
+            issuer=settings.jwt_issuer,
+            options={
+                "require": ["exp", "iat", "sub", "iss", "aud"],
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_iat": True,
+                "verify_aud": True,
+                "verify_iss": True,
+            },
         )
 
         # Validate required fields
