@@ -11,6 +11,10 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.logging import bind_request_id, get_logger
+
+logger = get_logger(__name__)
+
 
 class ErrorHandlerMiddleware(BaseHTTPMiddleware):
     """Middleware for catching and handling all unhandled exceptions.
@@ -40,27 +44,52 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
         # Store request_id in request state for access in route handlers
         request.state.request_id = request_id
 
+        # Bind request ID to logger for this request
+        request_logger = bind_request_id(logger, request_id)
+
         try:
+            # Log incoming request
+            request_logger.info(
+                "Incoming request",
+                method=request.method,
+                path=request.url.path,
+                client=request.client.host if request.client else None,
+            )
+
             # Process the request
             response = await call_next(request)
 
             # Add request ID to response headers
             response.headers["X-Request-ID"] = request_id
 
+            # Log successful response
+            request_logger.info(
+                "Request completed",
+                status_code=response.status_code,
+            )
+
             return response
 
         except Exception as exc:
+            # Log the exception
+            request_logger.error(
+                "Request failed with exception",
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
+                exc_info=True,
+            )
             # Handle any unhandled exceptions
-            return await self._handle_exception(exc, request_id)
+            return await self._handle_exception(exc, request_id, request_logger)
 
     async def _handle_exception(
-        self, exc: Exception, request_id: str
+        self, exc: Exception, request_id: str, request_logger
     ) -> JSONResponse:
         """Handle an unhandled exception and return structured error response.
 
         Args:
             exc: The exception that was raised
             request_id: The request ID for traceability
+            request_logger: Logger with bound request_id
 
         Returns:
             JSONResponse: Structured error response with request ID
@@ -73,11 +102,27 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
             status_code = exc.status_code
             error_type = "http_error"
             message = exc.detail
+            # Log HTTP exceptions at info level (expected errors)
+            request_logger.info(
+                "HTTP exception",
+                status_code=status_code,
+                error_type=error_type,
+                message=message,
+            )
         else:
             # Default to 500 for unhandled exceptions
             status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
             error_type = "internal_error"
             message = "An unexpected error occurred"
+            # Log unexpected exceptions at error level with full details
+            request_logger.error(
+                "Unhandled exception",
+                status_code=status_code,
+                error_type=error_type,
+                exception_type=type(exc).__name__,
+                exception_message=str(exc),
+                exc_info=True,
+            )
 
         # Build structured error response
         error_response = {
@@ -89,11 +134,12 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
         }
 
         # Add exception details for debugging (only for 500 errors in development)
-        # In production, this should be logged but not exposed to clients
+        # In production, details are logged but not exposed to clients
+        import os
         if status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            # TODO: Add proper logging here instead of exposing to client
-            # For now, keep the error details minimal for security
-            error_response["error"]["details"] = str(exc)
+            # Only expose details in development mode
+            if os.getenv("ENVIRONMENT", "development") == "development":
+                error_response["error"]["details"] = str(exc)
 
         return JSONResponse(
             status_code=status_code,

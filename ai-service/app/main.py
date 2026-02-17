@@ -1,10 +1,12 @@
 """FastAPI application entry point for LAYA AI Service."""
 
+import os
 from typing import Any
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.logging import configure_logging, get_logger
 from app.dependencies import get_current_user
 from app.middleware.error_handler import ErrorHandlerMiddleware
 from app.routers import coaching
@@ -13,11 +15,21 @@ from app.routers.analytics import router as analytics_router
 from app.routers.communication import router as communication_router
 from app.routers.webhooks import router as webhooks_router
 
+# Configure logging on application startup
+# Use JSON logs in production, human-readable in development
+log_level = os.getenv("LOG_LEVEL", "INFO")
+json_logs = os.getenv("JSON_LOGS", "true").lower() == "true"
+configure_logging(log_level=log_level, json_logs=json_logs)
+
+logger = get_logger(__name__, service="ai-service")
+
 app = FastAPI(
     title="LAYA AI Service",
     description="AI-powered features for LAYA platform including activity recommendations, coaching guidance, and analytics",
     version="0.1.0",
 )
+
+logger.info("Starting LAYA AI Service", version="0.1.0", log_level=log_level)
 
 # Configure error handler middleware (should be first to catch all exceptions)
 app.add_middleware(ErrorHandlerMiddleware)

@@ -17,6 +17,9 @@ httpx>=0.26.0
 # Configuration
 pydantic-settings>=2.1.0
 
+# Logging
+structlog>=24.1.0
+
 # Form data parsing
 python-multipart>=0.0.6
 
