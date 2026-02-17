@@ -85,39 +85,61 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         $quantity = $_POST['quantity'] ?? 'Some';
         $allergyAlert = $_POST['allergyAlert'] ?? 'N';
         $notes = $_POST['notes'] ?? null;
+        $menuItemID = $_POST['gibbonCareMenuItemID'] ?? null;
 
         if (!empty($mealType)) {
-            $result = $mealGateway->logMeal(
-                $childID,
-                $gibbonSchoolYearID,
-                $date,
-                $mealType,
-                $quantity,
-                $gibbonPersonID,
-                $allergyAlert === 'Y',
-                $notes
-            );
+            // Auto-flag allergens if menu item is selected
+            $autoAllergyAlert = false;
+            $allergenNote = null;
+            if (!empty($menuItemID)) {
+                $conflicts = $mealGateway->checkAllergenAlertForChild($childID, $menuItemID);
+                if (!empty($conflicts)) {
+                    $autoAllergyAlert = true;
+                    $allergenNames = array_column($conflicts, 'allergen');
+                    $allergenNote = __('Auto-flagged allergens: ') . implode(', ', $allergenNames);
+                    // Append allergen note to existing notes
+                    if (!empty($notes)) {
+                        $notes .= ' | ' . $allergenNote;
+                    } else {
+                        $notes = $allergenNote;
+                    }
+                }
+            }
+
+            // Use auto-flagged allergy alert if detected, otherwise use manual selection
+            $finalAllergyAlert = $autoAllergyAlert || $allergyAlert === 'Y';
+
+            // Log meal with or without menu item reference
+            if (!empty($menuItemID)) {
+                $result = $mealGateway->logMealWithMenuItem(
+                    $childID,
+                    $gibbonSchoolYearID,
+                    $date,
+                    $mealType,
+                    $menuItemID,
+                    $quantity,
+                    $gibbonPersonID,
+                    $finalAllergyAlert,
+                    $notes
+                );
+            } else {
+                $result = $mealGateway->logMeal(
+                    $childID,
+                    $gibbonSchoolYearID,
+                    $date,
+                    $mealType,
+                    $quantity,
+                    $gibbonPersonID,
+                    $finalAllergyAlert,
+                    $notes
+                );
+            }
 
             if ($result !== false) {
-                $page->addSuccess(__('Meal has been logged successfully.'));
-
-                // Trigger webhook for AI sync
-                if ($aiSyncService !== null) {
-                    try {
-                        $mealData = [
-                            'gibbonCareMealID' => $result,
-                            'gibbonPersonID' => $childID,
-                            'date' => $date,
-                            'mealType' => $mealType,
-                            'quantity' => $quantity,
-                            'allergyAlert' => $allergyAlert,
-                            'notes' => $notes,
-                            'recordedByID' => $gibbonPersonID,
-                        ];
-                        $aiSyncService->syncMealEvent($result, $mealData);
-                    } catch (Exception $e) {
-                        // Silently fail - don't break UX if webhook fails
-                    }
+                if ($autoAllergyAlert) {
+                    $page->addWarning(__('Meal logged with allergy alert! Allergens detected: {allergens}', ['allergens' => implode(', ', $allergenNames)]));
+                } else {
+                    $page->addSuccess(__('Meal has been logged successfully.'));
                 }
             } else {
                 $page->addError(__('Failed to log meal.'));
@@ -134,45 +156,81 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         $quantity = $_POST['quantity'] ?? 'Some';
         $allergyAlert = $_POST['allergyAlert'] ?? 'N';
         $notes = $_POST['notes'] ?? null;
+        $menuItemID = $_POST['gibbonCareMenuItemID'] ?? null;
 
         if (!empty($mealType) && !empty($childIDs)) {
             $successCount = 0;
+            $allergyAlertCount = 0;
+
+            // Pre-fetch children with allergies to menu item for bulk operations
+            $childrenWithAllergies = [];
+            if (!empty($menuItemID)) {
+                $childrenWithAllergies = $mealGateway->getChildrenWithAllergyToItem($menuItemID, $gibbonSchoolYearID);
+            }
+
             foreach ($childIDs as $childID) {
-                $result = $mealGateway->logMeal(
-                    $childID,
-                    $gibbonSchoolYearID,
-                    $date,
-                    $mealType,
-                    $quantity,
-                    $gibbonPersonID,
-                    $allergyAlert === 'Y',
-                    $notes
-                );
+                // Check if this child has allergies to the menu item
+                $autoAllergyAlert = false;
+                $childNotes = $notes;
+
+                if (!empty($menuItemID) && isset($childrenWithAllergies[$childID])) {
+                    $autoAllergyAlert = true;
+                    $conflicts = $childrenWithAllergies[$childID]['conflicts'] ?? [];
+                    $allergenNames = array_column($conflicts, 'allergen');
+                    $allergenNote = __('Auto-flagged allergens: ') . implode(', ', $allergenNames);
+                    if (!empty($childNotes)) {
+                        $childNotes .= ' | ' . $allergenNote;
+                    } else {
+                        $childNotes = $allergenNote;
+                    }
+                }
+
+                // Use auto-flagged allergy alert if detected, otherwise use manual selection
+                $finalAllergyAlert = $autoAllergyAlert || $allergyAlert === 'Y';
+
+                // Log meal with or without menu item reference
+                if (!empty($menuItemID)) {
+                    $result = $mealGateway->logMealWithMenuItem(
+                        $childID,
+                        $gibbonSchoolYearID,
+                        $date,
+                        $mealType,
+                        $menuItemID,
+                        $quantity,
+                        $gibbonPersonID,
+                        $finalAllergyAlert,
+                        $childNotes
+                    );
+                } else {
+                    $result = $mealGateway->logMeal(
+                        $childID,
+                        $gibbonSchoolYearID,
+                        $date,
+                        $mealType,
+                        $quantity,
+                        $gibbonPersonID,
+                        $finalAllergyAlert,
+                        $childNotes
+                    );
+                }
+
                 if ($result !== false) {
                     $successCount++;
-
-                    // Trigger webhook for AI sync
-                    if ($aiSyncService !== null) {
-                        try {
-                            $mealData = [
-                                'gibbonCareMealID' => $result,
-                                'gibbonPersonID' => $childID,
-                                'date' => $date,
-                                'mealType' => $mealType,
-                                'quantity' => $quantity,
-                                'allergyAlert' => $allergyAlert,
-                                'notes' => $notes,
-                                'recordedByID' => $gibbonPersonID,
-                            ];
-                            $aiSyncService->syncMealEvent($result, $mealData);
-                        } catch (Exception $e) {
-                            // Silently fail - don't break UX if webhook fails
-                        }
+                    if ($autoAllergyAlert) {
+                        $allergyAlertCount++;
                     }
                 }
             }
+
             if ($successCount > 0) {
-                $page->addSuccess(__('Meals logged for {count} children.', ['count' => $successCount]));
+                if ($allergyAlertCount > 0) {
+                    $page->addWarning(__('Meals logged for {count} children. {alerts} had allergy alerts auto-flagged.', [
+                        'count' => $successCount,
+                        'alerts' => $allergyAlertCount,
+                    ]));
+                } else {
+                    $page->addSuccess(__('Meals logged for {count} children.', ['count' => $successCount]));
+                }
             }
         } else {
             $page->addError(__('Please select a meal type and at least one child.'));

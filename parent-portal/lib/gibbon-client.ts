@@ -11,13 +11,15 @@ import type {
   ChildProtocolOverview,
   CreateProtocolAuthorizationRequest,
   DailyReport,
+  DietaryProfile,
   Document,
   DosingCalculationRequest,
   DosingCalculationResponse,
   Invoice,
-  MedicalProtocol,
+  MenuItem,
   Message,
   MessageThread,
+  NutritionalReport,
   PaginatedResponse,
   PaginationParams,
   ProtocolAdministration,
@@ -26,7 +28,8 @@ import type {
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
-  UpdateWeightRequest,
+  UpdateDietaryProfileRequest,
+  WeeklyMenu,
 } from './types';
 
 // ============================================================================
@@ -60,19 +63,11 @@ const ENDPOINTS = {
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
 
-  // Medical Protocols
-  MEDICAL_PROTOCOLS: '/api/v1/medical-protocols',
-  MEDICAL_PROTOCOL: (id: string) => `/api/v1/medical-protocols/${id}`,
-  PROTOCOL_AUTHORIZATIONS: '/api/v1/medical-protocols/authorizations',
-  PROTOCOL_AUTHORIZATION: (id: string) => `/api/v1/medical-protocols/authorizations/${id}`,
-  CHILD_AUTHORIZATIONS: (childId: string) => `/api/v1/medical-protocols/children/${childId}/authorizations`,
-  CHILD_PROTOCOL_OVERVIEW: (childId: string) => `/api/v1/medical-protocols/children/${childId}/overview`,
-  PROTOCOL_ADMINISTRATIONS: '/api/v1/medical-protocols/administrations',
-  CHILD_ADMINISTRATIONS: (childId: string) => `/api/v1/medical-protocols/children/${childId}/administrations`,
-  CALCULATE_DOSING: '/api/v1/medical-protocols/calculate-dosing',
-  UPDATE_WEIGHT: '/api/v1/medical-protocols/update-weight',
-  REVOKE_AUTHORIZATION: (id: string) => `/api/v1/medical-protocols/authorizations/${id}/revoke`,
-  ACKNOWLEDGE_ADMINISTRATION: (id: string) => `/api/v1/medical-protocols/administrations/${id}/acknowledge`,
+  // Menu
+  WEEKLY_MENU: '/api/v1/menu/weekly',
+  MENU_ITEMS: '/api/v1/menu/items',
+  DIETARY_PROFILE: (childId: string) => `/api/v1/children/${childId}/dietary-profile`,
+  NUTRITIONAL_REPORT: (childId: string) => `/api/v1/children/${childId}/nutritional-report`,
 } as const;
 
 // ============================================================================
@@ -352,200 +347,92 @@ export async function getPendingDocumentsCount(): Promise<number> {
 }
 
 // ============================================================================
-// Medical Protocols API
+// Menu API
 // ============================================================================
 
 /**
- * Fetch all available medical protocols.
+ * Parameters for fetching weekly menu.
  */
-export async function getMedicalProtocols(): Promise<MedicalProtocol[]> {
-  return gibbonClient.get<MedicalProtocol[]>(ENDPOINTS.MEDICAL_PROTOCOLS);
-}
-
-/**
- * Fetch a specific medical protocol by ID.
- */
-export async function getMedicalProtocol(protocolId: string): Promise<MedicalProtocol> {
-  return gibbonClient.get<MedicalProtocol>(ENDPOINTS.MEDICAL_PROTOCOL(protocolId));
-}
-
-/**
- * Parameters for fetching protocol authorizations.
- */
-export interface ProtocolAuthorizationParams extends PaginationParams {
+export interface WeeklyMenuParams {
+  weekStartDate?: string;
   childId?: string;
-  protocolId?: string;
-  status?: ProtocolAuthorizationStatus;
 }
 
 /**
- * Fetch protocol authorizations with optional filters.
+ * Fetch weekly menu with optional date filter.
+ * If childId is provided, includes allergen warnings specific to the child.
  */
-export async function getProtocolAuthorizations(
-  params?: ProtocolAuthorizationParams
-): Promise<PaginatedResponse<ProtocolAuthorization>> {
-  return gibbonClient.get<PaginatedResponse<ProtocolAuthorization>>(ENDPOINTS.PROTOCOL_AUTHORIZATIONS, {
+export async function getWeeklyMenu(params?: WeeklyMenuParams): Promise<WeeklyMenu> {
+  return gibbonClient.get<WeeklyMenu>(ENDPOINTS.WEEKLY_MENU, {
     params: {
-      skip: params?.skip,
-      limit: params?.limit,
+      week_start_date: params?.weekStartDate,
       child_id: params?.childId,
-      protocol_id: params?.protocolId,
-      status: params?.status,
     },
   });
 }
 
 /**
- * Fetch a specific protocol authorization by ID.
+ * Parameters for fetching menu items.
  */
-export async function getProtocolAuthorization(authorizationId: string): Promise<ProtocolAuthorization> {
-  return gibbonClient.get<ProtocolAuthorization>(ENDPOINTS.PROTOCOL_AUTHORIZATION(authorizationId));
+export interface MenuItemsParams extends PaginationParams {
+  category?: string;
+  isActive?: boolean;
 }
 
 /**
- * Fetch all protocol authorizations for a specific child.
+ * Fetch menu items with optional filters.
  */
-export async function getChildAuthorizations(childId: string): Promise<ProtocolAuthorization[]> {
-  return gibbonClient.get<ProtocolAuthorization[]>(ENDPOINTS.CHILD_AUTHORIZATIONS(childId));
-}
-
-/**
- * Fetch the protocol overview for a specific child.
- */
-export async function getChildProtocolOverview(childId: string): Promise<ChildProtocolOverview> {
-  return gibbonClient.get<ChildProtocolOverview>(ENDPOINTS.CHILD_PROTOCOL_OVERVIEW(childId));
-}
-
-/**
- * Create a new protocol authorization.
- */
-export async function createProtocolAuthorization(
-  request: CreateProtocolAuthorizationRequest
-): Promise<ProtocolAuthorization> {
-  return gibbonClient.post<ProtocolAuthorization>(ENDPOINTS.PROTOCOL_AUTHORIZATIONS, {
-    child_id: request.childId,
-    protocol_id: request.protocolId,
-    weight_kg: request.weightKg,
-    signature_data: request.signatureData,
-    agreement_text: request.agreementText,
-  });
-}
-
-/**
- * Update a child's weight for a protocol authorization.
- */
-export async function updateChildWeight(request: UpdateWeightRequest): Promise<ProtocolAuthorization> {
-  return gibbonClient.post<ProtocolAuthorization>(ENDPOINTS.UPDATE_WEIGHT, {
-    child_id: request.childId,
-    protocol_id: request.protocolId,
-    weight_kg: request.weightKg,
-  });
-}
-
-/**
- * Revoke request payload.
- */
-export interface RevokeAuthorizationRequest {
-  authorizationId: string;
-  reason?: string;
-}
-
-/**
- * Revoke a protocol authorization.
- */
-export async function revokeProtocolAuthorization(
-  request: RevokeAuthorizationRequest
-): Promise<ProtocolAuthorization> {
-  return gibbonClient.post<ProtocolAuthorization>(ENDPOINTS.REVOKE_AUTHORIZATION(request.authorizationId), {
-    reason: request.reason,
-  });
-}
-
-/**
- * Calculate dosing information for a given weight.
- */
-export async function calculateDosing(
-  request: DosingCalculationRequest
-): Promise<DosingCalculationResponse> {
-  return gibbonClient.post<DosingCalculationResponse>(ENDPOINTS.CALCULATE_DOSING, {
-    protocol_id: request.protocolId,
-    weight_kg: request.weightKg,
-    concentration: request.concentration,
-  });
-}
-
-/**
- * Parameters for fetching protocol administrations.
- */
-export interface ProtocolAdministrationParams extends PaginationParams {
-  childId?: string;
-  protocolId?: string;
-  startDate?: string;
-  endDate?: string;
-}
-
-/**
- * Fetch protocol administrations with optional filters.
- */
-export async function getProtocolAdministrations(
-  params?: ProtocolAdministrationParams
-): Promise<PaginatedResponse<ProtocolAdministration>> {
-  return gibbonClient.get<PaginatedResponse<ProtocolAdministration>>(ENDPOINTS.PROTOCOL_ADMINISTRATIONS, {
+export async function getMenuItems(
+  params?: MenuItemsParams
+): Promise<PaginatedResponse<MenuItem>> {
+  return gibbonClient.get<PaginatedResponse<MenuItem>>(ENDPOINTS.MENU_ITEMS, {
     params: {
       skip: params?.skip,
       limit: params?.limit,
-      child_id: params?.childId,
-      protocol_id: params?.protocolId,
-      start_date: params?.startDate,
-      end_date: params?.endDate,
+      category: params?.category,
+      is_active: params?.isActive,
     },
   });
 }
 
 /**
- * Fetch all protocol administrations for a specific child.
+ * Fetch dietary profile for a child.
  */
-export async function getChildAdministrations(
+export async function getDietaryProfile(childId: string): Promise<DietaryProfile> {
+  return gibbonClient.get<DietaryProfile>(ENDPOINTS.DIETARY_PROFILE(childId));
+}
+
+/**
+ * Update dietary profile for a child.
+ */
+export async function updateDietaryProfile(
   childId: string,
-  params?: PaginationParams
-): Promise<PaginatedResponse<ProtocolAdministration>> {
-  return gibbonClient.get<PaginatedResponse<ProtocolAdministration>>(ENDPOINTS.CHILD_ADMINISTRATIONS(childId), {
+  request: UpdateDietaryProfileRequest
+): Promise<DietaryProfile> {
+  return gibbonClient.put<DietaryProfile>(ENDPOINTS.DIETARY_PROFILE(childId), request);
+}
+
+/**
+ * Parameters for fetching nutritional report.
+ */
+export interface NutritionalReportParams {
+  startDate: string;
+  endDate: string;
+}
+
+/**
+ * Fetch nutritional report for a child over a date range.
+ */
+export async function getNutritionalReport(
+  childId: string,
+  params: NutritionalReportParams
+): Promise<NutritionalReport> {
+  return gibbonClient.get<NutritionalReport>(ENDPOINTS.NUTRITIONAL_REPORT(childId), {
     params: {
-      skip: params?.skip,
-      limit: params?.limit,
+      start_date: params.startDate,
+      end_date: params.endDate,
     },
   });
-}
-
-/**
- * Acknowledge a protocol administration as a parent.
- */
-export async function acknowledgeAdministration(administrationId: string): Promise<ProtocolAdministration> {
-  return gibbonClient.post<ProtocolAdministration>(ENDPOINTS.ACKNOWLEDGE_ADMINISTRATION(administrationId));
-}
-
-/**
- * Get the count of active protocol authorizations for the current parent.
- */
-export async function getActiveAuthorizationsCount(): Promise<number> {
-  const response = await getProtocolAuthorizations({ status: 'active', limit: 1 });
-  return response.total;
-}
-
-/**
- * Get the count of pending protocol authorizations requiring action.
- */
-export async function getPendingAuthorizationsCount(): Promise<number> {
-  const response = await getProtocolAuthorizations({ status: 'pending', limit: 1 });
-  return response.total;
-}
-
-/**
- * Get the count of unacknowledged administrations for a child.
- */
-export async function getUnacknowledgedAdministrationsCount(childId: string): Promise<number> {
-  const response = await getChildAdministrations(childId, { limit: 100 });
-  return response.items.filter((admin) => admin.parentNotified && !admin.parentAcknowledged).length;
 }
 
 // ============================================================================

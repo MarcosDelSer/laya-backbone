@@ -273,3 +273,94 @@ INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `val
 INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'notifyOnCheckOut', 'Notify Parents on Check-Out', 'Send notification to parents when child is checked out', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
 INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'notifyOnIncident', 'Notify Parents on Incident', 'Send notification to parents when incident is logged', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
 ";
+
+// v1.5.00 - Meal menu management and dietary tracking
+++$count;
+$sql[$count][0] = '1.5.00';
+$sql[$count][1] = "
+CREATE TABLE IF NOT EXISTS `gibbonCareMenuItem` (
+    `gibbonCareMenuItemID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(100) NOT NULL,
+    `description` TEXT NULL,
+    `category` ENUM('Main Course','Side Dish','Snack','Beverage','Dessert','Fruit','Vegetable','Dairy','Protein','Grain') NOT NULL,
+    `photoPath` VARCHAR(255) NULL,
+    `isActive` ENUM('Y','N') NOT NULL DEFAULT 'Y',
+    `createdByID` INT UNSIGNED NOT NULL COMMENT 'Staff who created',
+    `timestampCreated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY `category` (`category`),
+    KEY `isActive` (`isActive`),
+    KEY `name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonCareMenuItemAllergen` (
+    `gibbonCareMenuItemAllergenID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonCareMenuItemID` INT UNSIGNED NOT NULL,
+    `allergen` ENUM('Milk','Eggs','Peanuts','Tree Nuts','Fish','Shellfish','Wheat','Soy','Sesame','Gluten','Mustard','Celery','Lupin','Molluscs','Sulphites','Other') NOT NULL,
+    `severity` ENUM('Mild','Moderate','Severe') NOT NULL DEFAULT 'Moderate',
+    `notes` TEXT NULL,
+    `timestampCreated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    KEY `gibbonCareMenuItemID` (`gibbonCareMenuItemID`),
+    KEY `allergen` (`allergen`),
+    KEY `severity` (`severity`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonCareWeeklyMenu` (
+    `gibbonCareWeeklyMenuID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonSchoolYearID` INT UNSIGNED NOT NULL,
+    `date` DATE NOT NULL,
+    `mealType` ENUM('Breakfast','Morning Snack','Lunch','Afternoon Snack','Dinner') NOT NULL,
+    `gibbonCareMenuItemID` INT UNSIGNED NOT NULL,
+    `servingSize` VARCHAR(50) NULL COMMENT 'Portion size description',
+    `notes` TEXT NULL,
+    `createdByID` INT UNSIGNED NOT NULL COMMENT 'Staff who scheduled',
+    `timestampCreated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY `gibbonSchoolYearID` (`gibbonSchoolYearID`),
+    KEY `date` (`date`),
+    KEY `mealType` (`mealType`),
+    KEY `gibbonCareMenuItemID` (`gibbonCareMenuItemID`),
+    UNIQUE KEY `dateMenuItemMeal` (`date`, `gibbonCareMenuItemID`, `mealType`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonCareChildDietary` (
+    `gibbonCareChildDietaryID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonPersonID` INT UNSIGNED NOT NULL COMMENT 'Child with dietary profile',
+    `dietaryType` ENUM('None','Vegetarian','Vegan','Halal','Kosher','Medical','Other') NOT NULL DEFAULT 'None',
+    `allergies` TEXT NULL COMMENT 'JSON array of allergens with severity',
+    `restrictions` TEXT NULL COMMENT 'Other dietary restrictions',
+    `notes` TEXT NULL,
+    `parentNotified` ENUM('Y','N') NOT NULL DEFAULT 'N' COMMENT 'Parent confirmed dietary info',
+    `parentNotifiedTime` DATETIME NULL,
+    `lastUpdatedByID` INT UNSIGNED NOT NULL COMMENT 'Staff/parent who last updated',
+    `timestampCreated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `gibbonPersonID` (`gibbonPersonID`),
+    KEY `dietaryType` (`dietaryType`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+CREATE TABLE IF NOT EXISTS `gibbonCareNutritionalInfo` (
+    `gibbonCareNutritionalInfoID` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `gibbonCareMenuItemID` INT UNSIGNED NOT NULL,
+    `servingSize` VARCHAR(50) NOT NULL DEFAULT '1 serving',
+    `calories` DECIMAL(7,2) NULL COMMENT 'Calories per serving',
+    `protein` DECIMAL(6,2) NULL COMMENT 'Protein in grams',
+    `carbohydrates` DECIMAL(6,2) NULL COMMENT 'Carbs in grams',
+    `fat` DECIMAL(6,2) NULL COMMENT 'Fat in grams',
+    `fiber` DECIMAL(6,2) NULL COMMENT 'Fiber in grams',
+    `sugar` DECIMAL(6,2) NULL COMMENT 'Sugar in grams',
+    `sodium` DECIMAL(7,2) NULL COMMENT 'Sodium in mg',
+    `timestampCreated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    `timestampModified` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `gibbonCareMenuItemID` (`gibbonCareMenuItemID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;end
+
+ALTER TABLE `gibbonCareMeal` ADD COLUMN `gibbonCareMenuItemID` INT UNSIGNED NULL AFTER `mealType`;end
+ALTER TABLE `gibbonCareMeal` ADD KEY `gibbonCareMenuItemID` (`gibbonCareMenuItemID`);end
+
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'menuPlanningEnabled', 'Menu Planning Enabled', 'Enable weekly menu planning feature', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'allergenAlertEnabled', 'Allergen Alert Enabled', 'Automatically flag meals with allergen matches', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'nutritionalTrackingEnabled', 'Nutritional Tracking Enabled', 'Track and report on nutritional intake', 'Y') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'commonAllergens', 'Common Allergens', 'Comma-separated list of common allergens to track', 'Milk,Eggs,Peanuts,Tree Nuts,Fish,Shellfish,Wheat,Soy,Sesame') ON DUPLICATE KEY UPDATE scope=scope;end
+INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES ('Care Tracking', 'menuCategories', 'Menu Categories', 'Comma-separated list of menu item categories', 'Main Course,Side Dish,Snack,Beverage,Dessert,Fruit,Vegetable,Dairy,Protein,Grain') ON DUPLICATE KEY UPDATE scope=scope;end
+";
