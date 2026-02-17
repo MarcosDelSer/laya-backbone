@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
 from app.core.context import get_correlation_id, get_request_id
 from app.core.logging import configure_logging, get_logger
 from app.dependencies import get_current_user
@@ -19,9 +20,22 @@ from app.routers.webhooks import router as webhooks_router
 
 # Configure logging on application startup
 # Use JSON logs in production, human-readable in development
-log_level = os.getenv("LOG_LEVEL", "INFO")
-json_logs = os.getenv("JSON_LOGS", "true").lower() == "true"
-configure_logging(log_level=log_level, json_logs=json_logs)
+log_level = os.getenv("LOG_LEVEL", settings.log_level)
+json_logs = os.getenv("JSON_LOGS", str(settings.json_logs)).lower() == "true"
+log_file = os.getenv("LOG_FILE", settings.log_file)
+
+# Configure with log rotation support
+configure_logging(
+    log_level=log_level,
+    json_logs=json_logs,
+    log_file=log_file,
+    rotation_enabled=settings.log_rotation_enabled,
+    rotation_type=settings.log_rotation_type,
+    max_bytes=settings.log_max_bytes,
+    backup_count=settings.log_backup_count,
+    when=settings.log_rotation_when,
+    interval=settings.log_rotation_interval,
+)
 
 logger = get_logger(__name__, service="ai-service")
 

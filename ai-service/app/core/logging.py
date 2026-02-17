@@ -1,11 +1,12 @@
 """Structured JSON logging configuration for LAYA AI Service.
 
 This module provides structured JSON logging with request ID correlation,
-log levels, and both development and production configurations.
+log levels, log rotation, and both development and production configurations.
 """
 
 import logging
 import sys
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from typing import Any, Optional
 
 import structlog
@@ -58,17 +59,30 @@ def configure_logging(
     json_logs: bool = True,
     log_file: Optional[str] = None,
     stream: Optional[Any] = None,
+    rotation_enabled: bool = False,
+    rotation_type: str = "size",
+    max_bytes: int = 10 * 1024 * 1024,
+    backup_count: int = 5,
+    when: str = "midnight",
+    interval: int = 1,
 ) -> None:
     """Configure structured logging for the application.
 
     This sets up structlog with appropriate processors for either
     JSON output (production) or human-readable output (development).
+    Supports log rotation for file-based logging.
 
     Args:
         log_level: The minimum log level to capture (DEBUG/INFO/WARNING/ERROR/CRITICAL)
         json_logs: Whether to output logs in JSON format (True for production)
         log_file: Optional path to log file for file-based logging
         stream: Optional stream to write logs to (defaults to sys.stdout)
+        rotation_enabled: Enable log rotation for file handlers
+        rotation_type: Type of rotation ("size" or "time")
+        max_bytes: Maximum size of log file before rotation (for size-based rotation)
+        backup_count: Number of backup files to keep
+        when: When to rotate (for time-based rotation: "S", "M", "H", "D", "midnight")
+        interval: Interval for time-based rotation
     """
     # Convert log level string to logging constant
     log_level_value = getattr(logging, log_level.upper(), logging.INFO)
@@ -122,7 +136,32 @@ def configure_logging(
 
     # Add file handler if log_file is specified
     if log_file:
-        file_handler = logging.FileHandler(log_file)
+        file_handler: logging.Handler
+
+        if rotation_enabled:
+            if rotation_type == "size":
+                # Size-based rotation
+                file_handler = RotatingFileHandler(
+                    filename=log_file,
+                    maxBytes=max_bytes,
+                    backupCount=backup_count,
+                )
+            elif rotation_type == "time":
+                # Time-based rotation
+                file_handler = TimedRotatingFileHandler(
+                    filename=log_file,
+                    when=when,
+                    interval=interval,
+                    backupCount=backup_count,
+                )
+            else:
+                raise ValueError(
+                    f"Invalid rotation_type: {rotation_type}. Must be 'size' or 'time'"
+                )
+        else:
+            # No rotation
+            file_handler = logging.FileHandler(log_file)
+
         file_handler.setLevel(log_level_value)
         file_handler.setFormatter(
             logging.Formatter("%(message)s")
