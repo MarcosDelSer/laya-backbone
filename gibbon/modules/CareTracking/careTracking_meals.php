@@ -24,6 +24,7 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\CareTracking\Domain\MealGateway;
 use Gibbon\Module\CareTracking\Domain\AttendanceGateway;
+use Gibbon\Module\CareTracking\Service\MealService;
 use Gibbon\Module\AISync\AISyncService;
 use Gibbon\Domain\System\SettingGateway;
 
@@ -50,6 +51,9 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Get gateways via DI container
     $mealGateway = $container->get(MealGateway::class);
     $attendanceGateway = $container->get(AttendanceGateway::class);
+
+    // Initialize MealService
+    $mealService = new MealService($mealGateway);
 
     // Get AI Sync service for webhook notifications
     try {
@@ -87,7 +91,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         $notes = $_POST['notes'] ?? null;
 
         if (!empty($mealType)) {
-            $result = $mealGateway->logMeal(
+            $result = $mealService->logMeal(
                 $childID,
                 $gibbonSchoolYearID,
                 $date,
@@ -138,7 +142,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         if (!empty($mealType) && !empty($childIDs)) {
             $successCount = 0;
             foreach ($childIDs as $childID) {
-                $result = $mealGateway->logMeal(
+                $result = $mealService->logMeal(
                     $childID,
                     $gibbonSchoolYearID,
                     $date,
@@ -199,8 +203,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
     // Display formatted date
     echo '<p class="text-lg mb-4">' . __('Showing meals for') . ': <strong>' . Format::date($date) . '</strong></p>';
 
-    // Get summary statistics
-    $summary = $mealGateway->getMealSummaryByDate($gibbonSchoolYearID, $date);
+    // Get summary statistics using service
+    $summary = $mealService->getMealSummaryByDate($gibbonSchoolYearID, $date);
 
     // Display summary
     echo '<div class="bg-white rounded-lg shadow p-4 mb-4">';
@@ -284,7 +288,7 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
             $image = !empty($child['image_240']) ? $child['image_240'] : 'themes/Default/img/anonymous_240.jpg';
 
             // Check what meals this child has already had today
-            $childMeals = $mealGateway->selectMealsByPersonAndDate($child['gibbonPersonID'], $date);
+            $childMeals = $mealService->getMealsByPersonAndDate($child['gibbonPersonID'], $date);
             $mealsLogged = [];
             foreach ($childMeals as $meal) {
                 $mealsLogged[] = $meal['mealType'];
@@ -410,8 +414,8 @@ if (!isActionAccessible($guid, $connection2, '/modules/CareTracking/careTracking
         ->sortBy(['mealType', 'surname', 'preferredName'])
         ->fromPOST();
 
-    // Get meal data for the date
-    $meals = $mealGateway->queryMealsByDate($criteria, $gibbonSchoolYearID, $date);
+    // Get meal data for the date using service
+    $meals = $mealService->queryMealsByDate($criteria, $gibbonSchoolYearID, $date);
 
     // Build DataTable
     $table = DataTable::createPaginated('meals', $criteria);
