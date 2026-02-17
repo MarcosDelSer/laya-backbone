@@ -8,16 +8,34 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { EnhancedMessageComposer } from '@/components/EnhancedMessageComposer'
 import * as aiClient from '@/lib/ai-client'
+import * as AuthContext from '@/contexts/AuthContext'
 import type {
   MessageAnalysisResponse,
   QualityIssueDetail,
   RewriteSuggestion,
 } from '@/lib/types'
+import type { User } from '@/lib/auth'
 
 // Mock the AI client module
 vi.mock('@/lib/ai-client', () => ({
   analyzeMessageForComposer: vi.fn(),
 }))
+
+// Mock the AuthContext
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: vi.fn(),
+}))
+
+// Helper to create mock user
+function createMockUser(role: string): User {
+  return {
+    id: `user-${role}`,
+    email: `${role}@example.com`,
+    role,
+    firstName: 'Test',
+    lastName: 'User',
+  }
+}
 
 // Helper to create mock analysis data
 function createMockAnalysis(
@@ -72,10 +90,20 @@ function createMockRewrite(
 describe('EnhancedMessageComposer', () => {
   const mockOnSendMessage = vi.fn()
   const mockAnalyzeMessageForComposer = vi.mocked(aiClient.analyzeMessageForComposer)
+  const mockUseAuth = vi.mocked(AuthContext.useAuth)
 
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+
+    // Default: Mock as teacher user (authorized)
+    mockUseAuth.mockReturnValue({
+      user: createMockUser('teacher'),
+      isAuthenticated: true,
+      isLoading: false,
+      updateUser: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
   })
 
   afterEach(() => {
@@ -1101,6 +1129,100 @@ describe('EnhancedMessageComposer', () => {
         // French panel title should be rendered
         expect(screen.getByRole('heading', { name: 'Coach Qualité' })).toBeInTheDocument()
       })
+    })
+  })
+
+  describe('Role-Based Analytics Link', () => {
+    it('shows analytics link for admin role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('admin'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} />)
+      expect(screen.getByText('View Analytics')).toBeInTheDocument()
+    })
+
+    it('does not show analytics link for teacher role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('teacher'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} />)
+      expect(screen.queryByText('View Analytics')).not.toBeInTheDocument()
+    })
+
+    it('does not show analytics link for parent role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('parent'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} />)
+      expect(screen.queryByText('View Analytics')).not.toBeInTheDocument()
+    })
+
+    it('does not show analytics link for staff role', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('staff'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} />)
+      expect(screen.queryByText('View Analytics')).not.toBeInTheDocument()
+    })
+
+    it('does not show analytics link when showQualityCoach is false', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('admin'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} showQualityCoach={false} />)
+      expect(screen.queryByText('View Analytics')).not.toBeInTheDocument()
+    })
+
+    it('analytics link navigates to correct URL', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('admin'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} />)
+      const analyticsLink = screen.getByText('View Analytics').closest('a')
+      expect(analyticsLink).toHaveAttribute('href', '/message-quality/analytics')
+    })
+
+    it('displays French analytics link text for admin with French language', () => {
+      mockUseAuth.mockReturnValue({
+        user: createMockUser('admin'),
+        isAuthenticated: true,
+        isLoading: false,
+        updateUser: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<EnhancedMessageComposer onSendMessage={mockOnSendMessage} language="fr" />)
+      expect(screen.getByText('Voir les statistiques')).toBeInTheDocument()
     })
   })
 })
