@@ -387,14 +387,19 @@ class DevelopmentProfileService:
     async def get_skill_assessment_by_id(
         self,
         assessment_id: UUID,
+        user_id: UUID,
     ) -> Optional[SkillAssessmentResponse]:
         """Retrieve a skill assessment by ID.
 
         Args:
             assessment_id: Unique identifier of the assessment.
+            user_id: ID of the user requesting the assessment.
 
         Returns:
             Skill assessment if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(SkillAssessment).where(
             cast(SkillAssessment.id, String) == str(assessment_id)
@@ -404,6 +409,17 @@ class DevelopmentProfileService:
 
         if assessment is None:
             return None
+
+        # Get the parent profile to verify access
+        profile = await self._get_profile_model(assessment.profile_id)
+        if profile is None:
+            return None
+
+        # Verify user has access to the parent profile
+        if not self._user_has_profile_access(profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this skill assessment"
+            )
 
         return self._skill_assessment_to_response(assessment)
 
@@ -573,14 +589,19 @@ class DevelopmentProfileService:
     async def get_observation_by_id(
         self,
         observation_id: UUID,
+        user_id: UUID,
     ) -> Optional[ObservationResponse]:
         """Retrieve an observation by ID.
 
         Args:
             observation_id: Unique identifier of the observation.
+            user_id: ID of the user requesting the observation.
 
         Returns:
             Observation if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(Observation).where(
             cast(Observation.id, String) == str(observation_id)
@@ -590,6 +611,17 @@ class DevelopmentProfileService:
 
         if observation is None:
             return None
+
+        # Get the parent profile to verify access
+        profile = await self._get_profile_model(observation.profile_id)
+        if profile is None:
+            return None
+
+        # Verify user has access to the parent profile
+        if not self._user_has_profile_access(profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this observation"
+            )
 
         return self._observation_to_response(observation)
 
@@ -780,14 +812,19 @@ class DevelopmentProfileService:
     async def get_monthly_snapshot_by_id(
         self,
         snapshot_id: UUID,
+        user_id: UUID,
     ) -> Optional[MonthlySnapshotResponse]:
         """Retrieve a monthly snapshot by ID.
 
         Args:
             snapshot_id: Unique identifier of the snapshot.
+            user_id: ID of the user requesting the snapshot.
 
         Returns:
             Monthly snapshot if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(MonthlySnapshot).where(
             cast(MonthlySnapshot.id, String) == str(snapshot_id)
@@ -797,6 +834,17 @@ class DevelopmentProfileService:
 
         if snapshot is None:
             return None
+
+        # Get the parent profile to verify access
+        profile = await self._get_profile_model(snapshot.profile_id)
+        if profile is None:
+            return None
+
+        # Verify user has access to the parent profile
+        if not self._user_has_profile_access(profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this monthly snapshot"
+            )
 
         return self._monthly_snapshot_to_response(snapshot)
 
