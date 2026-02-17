@@ -462,21 +462,53 @@ class TestJWTSecurityProperties:
         assert exc_info.value.status_code == 401
 
     def test_token_algorithm_enforced(self):
-        """Test that only configured algorithm is accepted."""
-        # Create token with different algorithm
+        """Test that tokens with 'none' algorithm are explicitly rejected."""
+        # Create payload with all required claims
         payload = {
             "sub": "user123",
             "iat": int(datetime.now(timezone.utc).timestamp()),
             "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
         }
-        # Try to use 'none' algorithm (security vulnerability if allowed)
+        # Try to use 'none' algorithm (critical security vulnerability if allowed)
+        # PyJWT may not support 'none' algorithm encoding, but we can test the header check
         try:
             token = jwt.encode(payload, "", algorithm="none")
-            with pytest.raises(HTTPException):
+            # If encoding succeeds, decode_token should reject it
+            with pytest.raises(HTTPException) as exc_info:
                 decode_token(token)
+            assert exc_info.value.status_code == 401
+            assert "none" in exc_info.value.detail.lower()
         except jwt.exceptions.InvalidAlgorithmError:
-            # Some JWT libraries don't support 'none' algorithm
+            # PyJWT library doesn't support 'none' algorithm encoding
+            # This is actually good - the library prevents it at creation time
+            # But our decode_token has defense-in-depth to reject it
             pass
+
+    def test_token_with_wrong_algorithm_rejected(self):
+        """Test that tokens with wrong algorithm are rejected."""
+        # Create payload with all required claims
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
+        }
+
+        # Try to use HS512 instead of HS256
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm="HS512",
+        )
+
+        # decode_token should reject tokens with wrong algorithm
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "algorithm" in exc_info.value.detail.lower()
 
     def test_expiration_is_required(self):
         """Test that tokens without expiration are rejected."""
