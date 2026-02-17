@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS activities (
     max_age_months INTEGER,
     special_needs_adaptations TEXT,
     is_active INTEGER NOT NULL DEFAULT 1,
+    search_vector TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

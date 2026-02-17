@@ -9,7 +9,10 @@ Modules:
     analytics: Business intelligence and analytics schemas
     coaching: Special needs coaching guidance schemas
     communication: Parent communication schemas
-    portfolio: Educational portfolio schemas
+    pagination: Standardized pagination schemas
+    search: Full-text search schemas
+    filters: Filter schemas for list endpoints
+    sorting: Sort option schemas for list endpoints
 """
 
 from app.schemas.activity import (
@@ -73,34 +76,30 @@ from app.schemas.communication import (
     ParentReportResponse,
     ReportFrequency,
 )
-from app.schemas.portfolio import (
-    MilestoneBase,
-    MilestoneCategory,
-    MilestoneCreate,
-    MilestoneListResponse,
-    MilestoneResponse,
-    MilestoneStatus,
-    MilestoneUpdate,
-    ObservationBase,
-    ObservationCreate,
-    ObservationListResponse,
-    ObservationResponse,
-    ObservationType,
-    ObservationUpdate,
-    PortfolioItemBase,
-    PortfolioItemCreate,
-    PortfolioItemListResponse,
-    PortfolioItemResponse,
-    PortfolioItemType,
-    PortfolioItemUpdate,
-    PortfolioSummary,
-    PrivacyLevel,
-    WorkSampleBase,
-    WorkSampleCreate,
-    WorkSampleListResponse,
-    WorkSampleResponse,
-    WorkSampleType,
-    WorkSampleUpdate,
+from app.schemas.pagination import (
+    PaginatedRequest,
+    SortOrder,
+)
+from app.schemas.search import (
+    SearchRequest,
+    SearchResponse,
+    SearchResult,
+    SearchResultType,
+    SearchType,
+)
+from app.schemas.filters import (
+    ActivityFilters,
+    CoachingFilters,
+    DateRangeFilter,
+    StatusFilter,
+    TypeFilter,
+)
+from app.schemas.sorting import (
+    ActivitySortField,
+    CoachingSortField,
+    MultiSortOptions,
+    SearchSortField,
+    SortOptions,
 )
 
 __all__ = [
@@ -160,32 +159,25 @@ __all__ = [
     "HomeActivitiesListResponse",
     "CommunicationPreferenceResponse",
     "ParentReportListResponse",
-    # Portfolio schemas
-    "PortfolioItemType",
-    "PrivacyLevel",
-    "MilestoneCategory",
-    "MilestoneStatus",
-    "ObservationType",
-    "WorkSampleType",
-    "PortfolioItemBase",
-    "PortfolioItemCreate",
-    "PortfolioItemUpdate",
-    "PortfolioItemResponse",
-    "PortfolioItemListResponse",
-    "ObservationBase",
-    "ObservationCreate",
-    "ObservationUpdate",
-    "ObservationResponse",
-    "ObservationListResponse",
-    "MilestoneBase",
-    "MilestoneCreate",
-    "MilestoneUpdate",
-    "MilestoneResponse",
-    "MilestoneListResponse",
-    "WorkSampleBase",
-    "WorkSampleCreate",
-    "WorkSampleUpdate",
-    "WorkSampleResponse",
-    "WorkSampleListResponse",
-    "PortfolioSummary",
+    # Pagination schemas
+    "PaginatedRequest",
+    "SortOrder",
+    # Search schemas
+    "SearchType",
+    "SearchRequest",
+    "SearchResultType",
+    "SearchResult",
+    "SearchResponse",
+    # Filter schemas
+    "DateRangeFilter",
+    "StatusFilter",
+    "TypeFilter",
+    "ActivityFilters",
+    "CoachingFilters",
+    # Sort schemas
+    "ActivitySortField",
+    "CoachingSortField",
+    "SearchSortField",
+    "SortOptions",
+    "MultiSortOptions",
 ]

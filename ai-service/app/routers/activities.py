@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.pagination import build_paginated_response
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.schemas.activity import (
@@ -170,16 +171,16 @@ async def get_activity(
     description="List all activities with optional filtering and pagination.",
 )
 async def list_activities(
-    skip: int = Query(
-        default=0,
-        ge=0,
-        description="Number of records to skip for pagination",
+    page: int = Query(
+        default=1,
+        ge=1,
+        description="Page number to retrieve (1-indexed)",
     ),
-    limit: int = Query(
+    per_page: int = Query(
         default=20,
         ge=1,
         le=100,
-        description="Maximum number of records to return",
+        description="Number of items per page (max 100)",
     ),
     activity_type: Optional[str] = Query(
         default=None,
@@ -195,32 +196,38 @@ async def list_activities(
     """List activities with optional filtering and pagination.
 
     Args:
-        skip: Number of records to skip.
-        limit: Maximum number of records to return.
+        page: Page number to retrieve (1-indexed).
+        per_page: Number of items per page (max 100).
         activity_type: Optional filter by activity type.
         is_active: Optional filter by active status.
         db: Async database session (injected).
         current_user: Authenticated user information (injected).
 
     Returns:
-        ActivityListResponse with paginated list of activities.
+        ActivityListResponse with paginated list of activities including
+        total, page, per_page, and total_pages metadata.
 
     Raises:
         HTTPException: 401 if not authenticated.
     """
     service = ActivityService(db)
+
+    # Calculate skip for pagination
+    skip = (page - 1) * per_page
+
     activities, total = await service.list_activities(
         skip=skip,
-        limit=limit,
+        limit=per_page,
         activity_type=activity_type,
         is_active=is_active,
     )
 
     items = [service._activity_to_response(activity) for activity in activities]
 
-    return ActivityListResponse(
+    # Build paginated response with standardized metadata
+    return build_paginated_response(
         items=items,
         total=total,
-        skip=skip,
-        limit=limit,
+        page=page,
+        per_page=per_page,
     )

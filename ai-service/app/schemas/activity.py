@@ -12,7 +12,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.schemas.base import BaseResponse, BaseSchema, PaginatedResponse
+from app.schemas.base import BaseResponse, BaseSchema
+from app.schemas.pagination import PaginatedResponse
 
 
 class ActivityType(str, Enum):
@@ -236,14 +237,17 @@ class ActivityRecommendationResponse(BaseSchema):
     )
 
 
-class ActivityListResponse(PaginatedResponse):
+class ActivityListResponse(PaginatedResponse[ActivityResponse]):
     """Paginated list of activities.
+
+    Provides standardized pagination metadata with activity items.
 
     Attributes:
         items: List of activities
+        total: Total number of activities matching the query
+        page: Current page number (1-indexed)
+        per_page: Number of items per page
+        total_pages: Total number of pages
     """
 
-    items: list[ActivityResponse] = Field(
-        ...,
-        description="List of activities",
-    )
+    pass
