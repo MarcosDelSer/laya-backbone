@@ -1,0 +1,203 @@
+# iOS Simulator Appium Capability Configuration
+# Used for LLM-driven mobile exploratory QA on iOS simulators
+# Driver: XCUITest
+# Includes high-latency tuning for iOS simulator delay-aware testing
+
+# Base capabilities for iOS simulator testing
+capabilities:
+  # Platform identification
+  platformName: iOS
+  automationName: XCUITest
+
+  # Device configuration (defaults for iPhone 15 Pro simulator)
+  deviceName: iPhone 15 Pro
+  platformVersion: "17.2"
+
+  # Use simulator (not real device)
+  isSimulator: true
+  udid: ${IOS_SIMULATOR_UDID:-}
+
+  # App configuration (override per test session)
+  # Set via environment: IOS_APP_PATH, IOS_BUNDLE_ID
+  bundleId: ${IOS_BUNDLE_ID:-com.laya.teacherapp}
+  app: ${IOS_APP_PATH:-}
+
+  # Reset strategies
+  noReset: false
+  fullReset: false
+
+  # ==================================
+  # HIGH-LATENCY TUNING SECTION
+  # Critical for iOS simulator stability
+  # ==================================
+
+  # WebDriverAgent (WDA) Timeouts - Extended for simulator latency
+  wdaLaunchTimeout: 180000        # 3 min - WDA can be slow to start on simulators
+  wdaConnectionTimeout: 120000    # 2 min - Connection establishment timeout
+  wdaStartupRetries: 4            # Number of WDA restart attempts
+  wdaStartupRetryInterval: 30000  # 30s between WDA retry attempts
+  wdaLocalPort: ${WDA_LOCAL_PORT:-8100}
+
+  # Command execution timeouts (extended for simulator sluggishness)
+  newCommandTimeout: 600          # 10 min - Session timeout between commands
+  commandTimeouts:
+    implicit: 30000               # Default implicit wait
+    pageLoad: 60000               # Page load timeout
+    script: 60000                 # Script execution timeout
+
+  # Element location timeouts
+  locatorStrategy: id,accessibilityId,name,className,xpath
+  maxTypingFrequency: 30          # Slower typing to avoid missed keys
+  waitForIdleTimeout: 10          # Seconds to wait for app idle state
+  animationCoolOffTimeout: 3      # Seconds to wait after animations
+
+  # Snapshot and visibility settings
+  customSnapshotTimeout: 30       # Extended snapshot timeout for slow renders
+  snapshotMaxDepth: 50            # Increase for complex view hierarchies
+  simpleIsVisibleCheck: true      # Faster visibility checks
+  shouldUseCompactResponses: true # Reduce network payload
+  useJSONSource: false            # XML is more reliable on simulators
+
+  # XCUITest specific settings
+  usePrebuiltWDA: true            # Use cached WDA when available
+  derivedDataPath: ${DERIVED_DATA_PATH:-}
+  wdaBaseUrl: ""
+  showXcodeLog: false             # Enable for debugging WDA issues
+  xcodeOrgId: ${XCODE_ORG_ID:-}
+  xcodeSigningId: ${XCODE_SIGNING_ID:-iPhone Developer}
+  useNewWDA: false                # Reuse existing WDA to save time
+
+  # Keyboard settings
+  autoAcceptAlerts: false         # Handle alerts explicitly in tests
+  autoDismissAlerts: false
+  connectHardwareKeyboard: false  # Use soft keyboard for realistic testing
+
+  # Additional stability settings for high-latency scenarios
+  webviewConnectRetries: 8        # Retry webview connections
+  webviewConnectTimeout: 60000    # Extended webview timeout
+  safariLogAllCommunication: false
+  safariLogAllCommunicationHexDump: false
+
+  # Process launch arguments
+  processArguments:
+    args:
+      - "-AppleLanguages"
+      - "(en)"
+      - "-AppleLocale"
+      - "en_US"
+    env:
+      DYLD_INSERT_LIBRARIES: ""   # Clear for clean launch
+
+  # Wait strategies for flaky simulator
+  appLaunchWaitTimeout: 60000     # Wait for app launch
+  eventloopIdleDelaySec: 0.5      # Delay between event loop iterations
+
+# Evidence collection settings
+evidence:
+  # Enable video recording
+  video:
+    enabled: true
+    codec: mjpeg
+    fps: 10
+    quality: medium
+    forceRestart: true
+
+  # Screenshot capture on failures
+  screenshots:
+    enabled: true
+    onFailure: true
+    onStep: false
+    format: png
+
+  # Device log collection
+  logs:
+    enabled: true
+    includeCrashReports: true
+    includeSystemLog: true
+    deviceType: simulator
+    filterSpecs:
+      - "LaunchServices"
+      - "SpringBoard"
+      - "UIKitCore"
+      - "ReactNative"
+
+# App profiles for different test targets
+profiles:
+  teacher-app:
+    bundleId: com.laya.teacherapp
+    launchArguments:
+      - "--uitesting"
+      - "--reset-state"
+
+  parent-app:
+    bundleId: com.laya.parentapp
+    launchArguments:
+      - "--uitesting"
+      - "--reset-state"
+
+# Simulator device profiles
+simulators:
+  # Default simulator for CI (latest iPhone)
+  default:
+    deviceName: iPhone 15 Pro
+    platformVersion: "17.2"
+
+  # Larger screen for accessibility testing
+  large-screen:
+    deviceName: iPhone 15 Pro Max
+    platformVersion: "17.2"
+
+  # Smaller screen edge case
+  compact:
+    deviceName: iPhone SE (3rd generation)
+    platformVersion: "17.2"
+
+  # iPad for tablet testing
+  tablet:
+    deviceName: iPad Pro (12.9-inch) (6th generation)
+    platformVersion: "17.2"
+
+  # Older iOS version for compatibility
+  legacy:
+    deviceName: iPhone 14
+    platformVersion: "16.4"
+
+# High-latency specific retry configuration
+# More aggressive than Android due to simulator instability
+retry:
+  maxAttempts: 5                  # More retries for simulator flakiness
+  delayMs: 2000                   # Longer initial delay
+  exponentialBackoff: true
+  backoffMultiplier: 2.0          # More aggressive backoff
+  maxDelayMs: 30000               # Cap delay at 30 seconds
+
+# Delay-aware action configuration
+# Used by delayAwareActions.ts wrapper
+delayAwareActions:
+  # Default wait conditions before actions
+  waitConditions:
+    beforeTap: 500                # ms to wait before tap
+    beforeType: 500               # ms to wait before typing
+    afterNavigation: 2000         # ms to wait after navigation
+    afterAnimation: 1000          # ms to wait after animation
+
+  # Explicit wait timeouts
+  explicitWaits:
+    elementVisible: 30000         # Wait for element visible
+    elementClickable: 30000       # Wait for element clickable
+    textPresent: 20000            # Wait for text to appear
+    alertPresent: 15000           # Wait for alert dialogs
+    pageReady: 45000              # Wait for page fully loaded
+
+  # State-based wait polling
+  polling:
+    interval: 500                 # Check state every 500ms
+    timeout: 60000                # Max polling duration
+    stableIterations: 3           # Element must be stable for 3 checks
+
+  # iOS simulator specific quirks
+  iosQuirks:
+    tapDelay: 300                 # Extra delay between consecutive taps
+    scrollSettleTime: 800         # Wait after scroll completes
+    keyboardDelay: 1500           # Wait for keyboard to appear/dismiss
+    alertHandlingDelay: 500       # Wait before interacting with alerts
