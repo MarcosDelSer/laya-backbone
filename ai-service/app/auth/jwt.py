@@ -55,11 +55,14 @@ def create_token(
     payload = {
         "sub": subject,
         "iat": int(now.timestamp()),
-        "exp": int(expire.timestamp()),
     }
 
     if additional_claims:
         payload.update(additional_claims)
+
+    # CRITICAL: Always include 'exp' claim - set after additional_claims
+    # to prevent override
+    payload["exp"] = int(expire.timestamp())
 
     return jwt.encode(
         payload,

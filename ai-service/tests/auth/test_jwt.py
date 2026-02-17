@@ -133,9 +133,15 @@ class TestCreateToken:
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
-        # Additional claims update AFTER standard claims, so they override
-        # This documents current behavior - may want to change
-        assert payload["sub"] == "hacker"  # Currently overrides
+        # SECURITY: exp is always set AFTER additional_claims to prevent override
+        # sub and iat can still be overridden (may want to fix in future)
+        assert payload["sub"] == "hacker"  # Currently still overrides
+        # But exp should NOT be overridden - it should be ~3600 seconds from now
+        now = datetime.now(timezone.utc)
+        exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        delta = (exp - now).total_seconds()
+        assert 3500 < delta < 3700  # Should be ~3600, not 9999999999
+        assert payload["exp"] != 9999999999  # Malicious exp was prevented
 
     def test_create_token_empty_additional_claims(self):
         """Test create_token with empty additional claims dict."""
