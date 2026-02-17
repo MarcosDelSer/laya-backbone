@@ -429,7 +429,7 @@ class DocumentService:
         return documents, total
 
     async def update_document(
-        self, document_id: UUID, update_data: DocumentUpdate
+        self, document_id: UUID, update_data: DocumentUpdate, user_id: UUID
     ) -> Optional[Document | str]:
         """Update a document.
 
@@ -438,13 +438,17 @@ class DocumentService:
         Args:
             document_id: ID of the document to update.
             update_data: Fields to update.
+            user_id: ID of the user updating the document.
 
         Returns:
             Updated Document if found and updatable.
             None if document not found.
             "immutable" string if document is signed and cannot be modified.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
-        document = await self.get_document_by_id(document_id)
+        document = await self.get_document_by_id(document_id, user_id)
         if not document:
             return None
 
