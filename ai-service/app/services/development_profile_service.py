@@ -132,16 +132,21 @@ class DevelopmentProfileService:
     async def get_profile_by_id(
         self,
         profile_id: UUID,
+        user_id: UUID,
         include_relations: bool = True,
     ) -> Optional[DevelopmentProfileResponse]:
         """Retrieve a development profile by its ID.
 
         Args:
             profile_id: Unique identifier of the profile.
+            user_id: ID of the user requesting the profile.
             include_relations: Whether to include related data (assessments, observations).
 
         Returns:
             Development profile if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(DevelopmentProfile).where(
             cast(DevelopmentProfile.id, String) == str(profile_id)
@@ -160,21 +165,32 @@ class DevelopmentProfileService:
         if profile is None:
             return None
 
+        # Verify user has access to the profile
+        if not self._user_has_profile_access(profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this profile"
+            )
+
         return self._profile_to_response(profile)
 
     async def get_profile_by_child_id(
         self,
         child_id: UUID,
+        user_id: UUID,
         include_relations: bool = True,
     ) -> Optional[DevelopmentProfileResponse]:
         """Retrieve a development profile by child ID.
 
         Args:
             child_id: Unique identifier of the child.
+            user_id: ID of the user requesting the profile.
             include_relations: Whether to include related data.
 
         Returns:
             Development profile if found, None otherwise.
+
+        Raises:
+            UnauthorizedAccessError: When the user doesn't have access.
         """
         query = select(DevelopmentProfile).where(
             cast(DevelopmentProfile.child_id, String) == str(child_id)
@@ -192,6 +208,12 @@ class DevelopmentProfileService:
 
         if profile is None:
             return None
+
+        # Verify user has access to the profile
+        if not self._user_has_profile_access(profile, user_id):
+            raise UnauthorizedAccessError(
+                "User does not have permission to access this profile"
+            )
 
         return self._profile_to_response(profile)
 
