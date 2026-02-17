@@ -72,6 +72,14 @@ This document describes the security-related configuration options for the LAYA 
 - **`JWT_ACCESS_TOKEN_EXPIRE_MINUTES`**: JWT token expiration
   - Default: `60` minutes
 
+- **`JWT_ISSUER`**: JWT issuer claim (iss)
+  - Default: `laya-ai-service`
+  - Used to identify the token issuer and prevent token confusion attacks
+
+- **`JWT_AUDIENCE`**: JWT audience claim (aud)
+  - Default: `laya-platform`
+  - Used to identify intended token recipients and prevent cross-service attacks
+
 ## Security Features
 
 ### 1. CORS Lockdown
@@ -125,6 +133,166 @@ This document describes the security-related configuration options for the LAYA 
 - Provides detailed error messages for validation failures
 - Password strength checking with `get_password_strength()`
 - Prevents common weak passwords
+
+### 9. JWT Security & Token Revocation
+
+The LAYA AI Service implements comprehensive JWT security measures based on OWASP JWT Security Best Practices and RFC 8725 (JWT Best Current Practices).
+
+#### JWT Security Features
+
+**Signature Verification:**
+- All tokens are cryptographically signed using HMAC-SHA256 (HS256)
+- Signature verification prevents token tampering
+- Invalid signatures are immediately rejected
+
+**Standard Claims Enforcement:**
+- **Required Claims**: All tokens must include `sub`, `exp`, `iat`, `iss`, and `aud`
+- **Expiration (`exp`)**: Tokens expire after configured duration (default: 60 minutes)
+- **Issued At (`iat`)**: Timestamp when token was created
+- **Issuer (`iss`)**: Identifies the token issuer (`laya-ai-service`)
+- **Audience (`aud`)**: Identifies intended recipients (`laya-platform`)
+- **Subject (`sub`)**: User identifier (cannot be overridden)
+
+**Token Confusion Attack Prevention:**
+- Issuer (`iss`) and Audience (`aud`) validation prevents tokens from:
+  - Being used across different services
+  - Being accepted from staging/dev in production
+  - Cross-service token replay attacks
+- Additional claims cannot override standard claims for security
+
+**Algorithm Validation:**
+- Only HS256 algorithm allowed (configurable via `JWT_ALGORITHM`)
+- Prevents algorithm substitution attacks
+- "none" algorithm explicitly blocked by PyJWT
+
+**Protection Against Common JWT Vulnerabilities:**
+- ✅ Prevents additional claims from overriding standard claims
+- ✅ Enforces expiration claim requirement
+- ✅ Validates issuer and audience
+- ✅ Blocks algorithm confusion attacks
+- ✅ Implements secure error handling
+- ✅ Supports token revocation via blacklist
+
+#### Token Revocation (Blacklist) System
+
+The service implements a high-performance Redis-based token blacklist for immediate token revocation. This is critical for security events like:
+- User logout
+- Password changes
+- Account suspension
+- Security breaches
+- Compromised tokens
+
+**How Token Revocation Works:**
+
+1. **Blacklist Operation:**
+   ```python
+   # When a user logs out or token needs revocation
+   blacklist_service = TokenBlacklistService()
+   await blacklist_service.add_to_blacklist(
+       token="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+       user_id="user123",
+       expires_at=token_expiration_datetime
+   )
+   ```
+
+2. **Validation Check:**
+   - Every authenticated request checks Redis blacklist (< 5ms)
+   - Blacklisted tokens are immediately rejected with 401 Unauthorized
+   - No database query needed (Redis is in-memory)
+
+3. **Automatic Cleanup:**
+   - Tokens automatically expire from blacklist when JWT would naturally expire
+   - No manual cleanup needed (Redis TTL handles this)
+   - Memory-efficient: only stores active tokens
+
+**Performance Characteristics:**
+- Blacklist check: < 5ms (Redis GET operation)
+- Blacklist add: < 5ms (Redis SETEX operation)
+- Total auth overhead: < 10ms per request
+- Scales horizontally with Redis cluster
+
+**Storage Efficiency:**
+- Uses Redis TTL matching JWT expiration
+- Automatic memory cleanup (no manual intervention)
+- Namespace isolation with `blacklist:` prefix
+- Stores minimal metadata: user_id and timestamp
+
+**Production Deployment:**
+For production, configure Redis via `RATE_LIMIT_STORAGE_URI`:
+```bash
+# Use Redis for token blacklist
+RATE_LIMIT_STORAGE_URI=redis://:password@redis-host:6379/0
+```
+
+**Token Revocation Best Practices:**
+1. **Always revoke tokens on sensitive actions:**
+   - User logout (revoke current session)
+   - Password change (revoke all user tokens)
+   - Permission changes (revoke affected user tokens)
+   - Account suspension (revoke all user tokens)
+
+2. **Token expiration strategy:**
+   - Use short-lived access tokens (60 minutes default)
+   - Implement refresh tokens for longer sessions (not yet implemented)
+   - Balance security vs user experience
+
+3. **Security events requiring revocation:**
+   - Suspicious activity detected
+   - Token leaked in logs or errors
+   - User reports compromised account
+   - Admin-initiated security action
+
+4. **Monitoring and auditing:**
+   - Log all token blacklist operations
+   - Monitor blacklist size and growth
+   - Alert on unusual revocation patterns
+   - Track token usage after revocation attempts
+
+#### JWT Security Checklist
+
+Before deploying to production, verify:
+
+- [ ] `JWT_SECRET_KEY` is cryptographically secure (32+ characters)
+- [ ] `JWT_SECRET_KEY` is different for each environment
+- [ ] `JWT_ISSUER` is set correctly for your service
+- [ ] `JWT_AUDIENCE` matches your application identifier
+- [ ] Token expiration time is appropriate (not too long)
+- [ ] Redis is configured for token blacklist
+- [ ] Tokens are revoked on logout
+- [ ] Tokens are revoked on password change
+- [ ] All authenticated endpoints verify tokens
+- [ ] Token validation errors are logged
+- [ ] HTTPS is enforced (tokens only over encrypted connections)
+
+#### Common JWT Security Mistakes to Avoid
+
+**❌ DO NOT:**
+- Store sensitive data in JWT payload (it's base64, not encrypted)
+- Use weak or default secret keys
+- Allow tokens without expiration
+- Skip signature verification
+- Accept tokens from untrusted issuers
+- Use the same secret across environments
+- Forget to revoke tokens on sensitive actions
+- Store tokens in localStorage (XSS risk - use httpOnly cookies instead)
+
+**✅ DO:**
+- Use strong, randomly generated secret keys
+- Set appropriate expiration times
+- Validate all JWT claims (exp, iss, aud, etc.)
+- Implement token revocation for sensitive actions
+- Use different secrets per environment
+- Monitor token usage and anomalies
+- Store tokens securely (httpOnly cookies or secure storage)
+- Rotate secret keys periodically
+
+#### JWT Security References
+
+For more information on JWT security:
+- [OWASP JWT Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html)
+- [RFC 7519 - JSON Web Token (JWT)](https://datatracker.ietf.org/doc/html/rfc7519)
+- [RFC 8725 - JWT Best Current Practices](https://datatracker.ietf.org/doc/html/rfc8725)
+- Security Audit: `docs/jwt_security_audit.md`
 
 ## HTTPS Configuration
 
@@ -208,12 +376,18 @@ The HTTPS enforcement middleware works in two layers:
 
 Before deploying to production, ensure:
 
-- [ ] `JWT_SECRET_KEY` changed to cryptographically secure random value
+### Critical Security Settings
+- [ ] `JWT_SECRET_KEY` changed to cryptographically secure random value (32+ characters)
+- [ ] `JWT_SECRET_KEY` is unique per environment (dev, staging, production)
+- [ ] `JWT_ISSUER` configured correctly (default: `laya-ai-service`)
+- [ ] `JWT_AUDIENCE` configured correctly (default: `laya-platform`)
+- [ ] `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` set appropriately (default: 60)
 - [ ] `POSTGRES_PASSWORD` set to strong password
 - [ ] `ENVIRONMENT` set to `production`
 - [ ] `DEBUG` set to `false`
+
+### Network & CORS Security
 - [ ] `CORS_ORIGINS` configured with specific allowed origins (no wildcards)
-- [ ] `RATE_LIMIT_STORAGE_URI` configured to use Redis
 - [ ] `ENFORCE_HTTPS` set to `true` to enforce encrypted traffic
 - [ ] SSL/TLS certificates configured (use Let's Encrypt)
 - [ ] nginx reverse proxy configured with HTTPS (see nginx/https.conf.example)
@@ -221,6 +395,15 @@ Before deploying to production, ensure:
 - [ ] HTTPS redirect tested (curl -I http://yourdomain.com)
 - [ ] HSTS header verified (curl -I https://yourdomain.com)
 - [ ] SSL Labs test passed with A+ rating
+
+### Token Revocation & Performance
+- [ ] `RATE_LIMIT_STORAGE_URI` configured to use Redis (required for token blacklist)
+- [ ] Redis connection tested and verified
+- [ ] Token blacklist functionality tested (login/logout flow)
+- [ ] Token revocation works on password change
+- [ ] Token validation performance < 10ms verified
+
+### General Security
 - [ ] `.env` file is in `.gitignore` and never committed
 - [ ] All external API keys configured (OpenAI, etc.)
 - [ ] Webhook secrets configured if using webhooks
@@ -229,6 +412,9 @@ Before deploying to production, ensure:
 - [ ] All security headers reviewed
 - [ ] Firewall rules configured
 - [ ] Database backups configured
+- [ ] JWT security audit reviewed (see docs/jwt_security_audit.md)
+- [ ] Authentication flows tested end-to-end
+- [ ] Rate limiting verified for auth endpoints
 
 ## Security Best Practices
 
@@ -237,6 +423,8 @@ Before deploying to production, ensure:
    - Use environment variables for all sensitive configuration
    - Rotate secrets regularly (JWT keys, API keys, passwords)
    - Use different secrets for each environment
+   - Generate JWT secrets with: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+   - Store secrets in secure vaults (HashiCorp Vault, AWS Secrets Manager, etc.)
 
 2. **Access Control**
    - Use strong passwords (enforced via password complexity validation)
@@ -245,17 +433,34 @@ Before deploying to production, ensure:
    - Implement least-privilege access
    - Review and audit access logs regularly
 
-3. **Network Security**
+3. **JWT Token Management**
+   - **Token Expiration**: Use short-lived tokens (60 minutes or less)
+   - **Token Revocation**: Always revoke tokens on logout, password change, or security events
+   - **Token Storage**: Use httpOnly cookies (prevents XSS attacks) or secure storage
+   - **Token Transmission**: Only send tokens over HTTPS (never HTTP)
+   - **Token Validation**: Always validate all JWT claims (exp, iss, aud, sub)
+   - **Token Monitoring**: Track token usage patterns and anomalies
+   - **Blacklist Performance**: Ensure Redis is used for < 5ms blacklist checks
+   - **Secret Rotation**: Plan for JWT secret key rotation without service disruption
+
+4. **Network Security**
    - Always use HTTPS in production
    - Configure firewall rules to limit access
    - Use VPN or private networks for database access
    - Enable SSL/TLS for Redis and database connections
 
-4. **Monitoring**
+5. **Monitoring & Incident Response**
    - Monitor rate limit violations
    - Track authentication failures
-   - Set up alerts for security events
-   - Regular security audits
+   - Track token revocation events
+   - Monitor Redis blacklist size and performance
+   - Set up alerts for security events:
+     - Unusual token revocation patterns
+     - Multiple failed authentication attempts
+     - Tokens used after revocation attempts
+     - Redis connection failures
+   - Regular security audits (review docs/jwt_security_audit.md)
+   - Maintain incident response playbook for compromised tokens
 
 ## Need Help?
 
