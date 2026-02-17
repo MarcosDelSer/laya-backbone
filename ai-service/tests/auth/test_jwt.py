@@ -562,3 +562,103 @@ class TestJWTSecurityProperties:
         before_seconds = before.replace(microsecond=0)
         after_seconds = after.replace(microsecond=0) + timedelta(seconds=1)
         assert before_seconds <= iat <= after_seconds
+
+    def test_audience_is_validated_with_wrong_audience(self):
+        """Test that tokens with wrong audience are rejected."""
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": "wrong-audience",
+            "iss": settings.jwt_issuer,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token validates audience - should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "aud" in exc_info.value.detail.lower() or "audience" in exc_info.value.detail.lower()
+
+    def test_audience_is_required(self):
+        """Test that tokens without audience are rejected."""
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "iss": settings.jwt_issuer,
+            # No 'aud' claim
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token validates audience - should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "aud" in exc_info.value.detail.lower() or "audience" in exc_info.value.detail.lower()
+
+    def test_issuer_is_validated_with_wrong_issuer(self):
+        """Test that tokens with wrong issuer are rejected."""
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": "wrong-issuer",
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token validates issuer - should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "iss" in exc_info.value.detail.lower() or "issuer" in exc_info.value.detail.lower()
+
+    def test_issuer_is_required(self):
+        """Test that tokens without issuer are rejected."""
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            # No 'iss' claim
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token validates issuer - should raise HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(token)
+        assert exc_info.value.status_code == 401
+        assert "iss" in exc_info.value.detail.lower() or "issuer" in exc_info.value.detail.lower()
+
+    def test_valid_audience_and_issuer_accepted(self):
+        """Test that tokens with correct audience and issuer are accepted."""
+        payload = {
+            "sub": "user123",
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "aud": settings.jwt_audience,
+            "iss": settings.jwt_issuer,
+        }
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        # decode_token should succeed with valid audience and issuer
+        result = decode_token(token)
+        assert result["sub"] == "user123"
+        assert result["aud"] == settings.jwt_audience
+        assert result["iss"] == settings.jwt_issuer
