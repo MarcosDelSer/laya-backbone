@@ -147,90 +147,16 @@ export interface Invoice {
 // ============================================================================
 
 /**
- * Types of message senders.
- * Identifies the role of the user sending a message.
- */
-export type SenderType = 'parent' | 'educator' | 'director' | 'admin';
-
-/**
- * Types of message threads.
- * Categorizes conversation threads by their purpose.
- */
-export type ThreadType = 'daily_log' | 'urgent' | 'serious' | 'admin';
-
-/**
- * Content types for messages.
- * Defines the format of message content for proper rendering.
- */
-export type MessageContentType = 'text' | 'rich_text';
-
-/**
- * Types of notifications that can be sent to parents.
- */
-export type NotificationType = 'message' | 'daily_log' | 'urgent' | 'admin';
-
-/**
- * Channels through which notifications can be delivered.
- */
-export type NotificationChannelType = 'email' | 'push' | 'sms';
-
-/**
- * Frequency options for notification delivery.
- */
-export type NotificationFrequency = 'immediate' | 'hourly' | 'daily' | 'weekly';
-
-/**
- * Participant in a message thread.
- */
-export interface ThreadParticipant {
-  userId: string;
-  userType: SenderType;
-  displayName?: string;
-}
-
-/**
- * Attachment included with a message.
- */
-export interface MessageAttachment {
-  id: string;
-  messageId: string;
-  fileUrl: string;
-  fileType: string;
-  fileName: string;
-  fileSize?: number;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-/**
- * Request payload for creating an attachment.
- */
-export interface AttachmentCreate {
-  fileUrl: string;
-  fileType: string;
-  fileName: string;
-  fileSize?: number;
-}
-
-/**
  * Individual message in a conversation thread.
  */
 export interface Message {
   id: string;
   threadId: string;
   senderId: string;
-  senderType: SenderType;
-  senderName?: string;
+  senderName: string;
   content: string;
-  contentType: MessageContentType;
-  isRead: boolean;
-  attachments: MessageAttachment[];
-  createdAt?: string;
-  updatedAt?: string;
-  /** @deprecated Use isRead instead */
-  read?: boolean;
-  /** @deprecated Use createdAt instead */
-  timestamp?: string;
+  timestamp: string;
+  read: boolean;
 }
 
 /**
@@ -239,60 +165,17 @@ export interface Message {
 export interface MessageThread {
   id: string;
   subject: string;
-  threadType: ThreadType;
-  childId?: string;
-  createdBy: string;
-  participants: ThreadParticipant[];
-  isActive: boolean;
+  participants: string[];
+  lastMessage: Message;
   unreadCount: number;
-  lastMessage?: string;
-  lastMessageAt?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-/**
- * Thread with full list of messages.
- */
-export interface ThreadWithMessages extends MessageThread {
-  messages: Message[];
-}
-
-/**
- * Response for listing threads with pagination.
- */
-export interface ThreadListResponse {
-  threads: MessageThread[];
-  total: number;
-  skip: number;
-  limit: number;
-}
-
-/**
- * Response for listing messages with pagination.
- */
-export interface MessageListResponse {
-  messages: Message[];
-  total: number;
-  skip: number;
-  limit: number;
-}
-
-/**
- * Response for unread message count.
- */
-export interface UnreadCountResponse {
-  totalUnread: number;
-  threadsWithUnread: number;
 }
 
 /**
  * Request payload for sending a message.
  */
 export interface SendMessageRequest {
+  threadId: string;
   content: string;
-  contentType?: MessageContentType;
-  attachments?: AttachmentCreate[];
 }
 
 /**
@@ -300,62 +183,8 @@ export interface SendMessageRequest {
  */
 export interface CreateThreadRequest {
   subject: string;
-  threadType?: ThreadType;
-  childId?: string;
-  participants: ThreadParticipant[];
-  initialMessage?: string;
-}
-
-/**
- * Request payload for updating a thread.
- */
-export interface UpdateThreadRequest {
-  subject?: string;
-  isActive?: boolean;
-}
-
-/**
- * Request payload for marking messages as read.
- */
-export interface MarkAsReadRequest {
-  messageIds: string[];
-}
-
-/**
- * Notification preference configuration.
- */
-export interface NotificationPreference {
-  id: string;
-  parentId: string;
-  notificationType: NotificationType;
-  channel: NotificationChannelType;
-  isEnabled: boolean;
-  frequency: NotificationFrequency;
-  quietHoursStart?: string;
-  quietHoursEnd?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-/**
- * Request payload for creating/updating notification preferences.
- */
-export interface NotificationPreferenceRequest {
-  parentId: string;
-  notificationType: NotificationType;
-  channel: NotificationChannelType;
-  isEnabled?: boolean;
-  frequency?: NotificationFrequency;
-  quietHoursStart?: string;
-  quietHoursEnd?: string;
-}
-
-/**
- * Response for listing notification preferences.
- */
-export interface NotificationPreferenceListResponse {
-  parentId: string;
-  preferences: NotificationPreference[];
+  recipientIds: string[];
+  initialMessage: string;
 }
 
 // ============================================================================
@@ -387,140 +216,6 @@ export interface Document {
 export interface SignDocumentRequest {
   documentId: string;
   signatureData: string;
-}
-
-// ============================================================================
-// Government Document Types
-// ============================================================================
-
-/**
- * Categories of government documents.
- */
-export type GovernmentDocumentCategory =
-  | 'child_identity'
-  | 'parent_identity'
-  | 'health'
-  | 'immigration';
-
-/**
- * Types of government documents for Quebec childcare compliance.
- */
-export type GovernmentDocumentType =
-  | 'birth_certificate'
-  | 'citizenship_proof'
-  | 'health_card'
-  | 'immunization_record'
-  | 'parent_id'
-  | 'custody_agreement'
-  | 'immigration_document'
-  | 'work_permit'
-  | 'study_permit';
-
-/**
- * Verification status of a government document.
- */
-export type GovernmentDocumentStatus =
-  | 'missing'
-  | 'pending_verification'
-  | 'verified'
-  | 'rejected'
-  | 'expired';
-
-/**
- * Government document type definition.
- */
-export interface GovernmentDocumentTypeDefinition {
-  id: string;
-  name: string;
-  description: string;
-  category: GovernmentDocumentCategory;
-  isRequired: boolean;
-  appliesToChild: boolean;
-  appliesToParent: boolean;
-  hasExpiration: boolean;
-}
-
-/**
- * Government document record.
- */
-export interface GovernmentDocument {
-  id: string;
-  familyId: string;
-  personId: string;
-  personName: string;
-  documentTypeId: string;
-  documentTypeName: string;
-  category: GovernmentDocumentCategory;
-  status: GovernmentDocumentStatus;
-  documentNumber?: string;
-  issueDate?: string;
-  expirationDate?: string;
-  fileUrl?: string;
-  fileName?: string;
-  uploadedAt?: string;
-  verifiedAt?: string;
-  verifiedBy?: string;
-  rejectionReason?: string;
-  notes?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * Request payload for uploading a government document.
- */
-export interface GovernmentDocumentUploadRequest {
-  personId: string;
-  documentTypeId: string;
-  documentNumber?: string;
-  issueDate?: string;
-  expirationDate?: string;
-  notes?: string;
-  file: File;
-}
-
-/**
- * Family document checklist item.
- */
-export interface GovernmentDocumentChecklistItem {
-  documentType: GovernmentDocumentTypeDefinition;
-  personId: string;
-  personName: string;
-  status: GovernmentDocumentStatus;
-  document?: GovernmentDocument;
-  daysUntilExpiration?: number;
-}
-
-/**
- * Family document checklist grouped by member.
- */
-export interface GovernmentDocumentChecklist {
-  familyId: string;
-  children: {
-    personId: string;
-    personName: string;
-    items: GovernmentDocumentChecklistItem[];
-  }[];
-  parents: {
-    personId: string;
-    personName: string;
-    items: GovernmentDocumentChecklistItem[];
-  }[];
-  complianceRate: number;
-  criticalDocumentsMissing: boolean;
-  missingCriticalDocuments: string[];
-}
-
-/**
- * Summary statistics for government documents.
- */
-export interface GovernmentDocumentStats {
-  total: number;
-  verified: number;
-  pendingVerification: number;
-  missing: number;
-  expired: number;
-  expiringWithin30Days: number;
 }
 
 // ============================================================================
@@ -696,168 +391,6 @@ export interface CoachingGuidanceResponse {
 }
 
 // ============================================================================
-// Message Quality Types
-// ============================================================================
-
-/**
- * Types of quality issues detected in messages.
- * Based on Quebec 'Bonne Message' communication standards.
- */
-export type QualityIssue =
-  | 'accusatory_you'
-  | 'judgmental_label'
-  | 'blame_shame'
-  | 'exaggeration'
-  | 'alarmist'
-  | 'comparison'
-  | 'negative_tone'
-  | 'missing_positive'
-  | 'missing_solution'
-  | 'multiple_objectives';
-
-/**
- * Severity levels for quality issues.
- */
-export type IssueSeverity = 'low' | 'medium' | 'high' | 'critical';
-
-/**
- * Context types for messages being analyzed.
- */
-export type MessageContext =
-  | 'daily_report'
-  | 'incident_report'
-  | 'milestone_update'
-  | 'general_update'
-  | 'behavior_concern'
-  | 'health_update';
-
-/**
- * Supported languages for message analysis.
- * Quebec compliance requires both English and French support.
- */
-export type MessageLanguage = 'en' | 'fr';
-
-/**
- * Categories for message templates.
- */
-export type TemplateCategory =
-  | 'positive_opening'
-  | 'factual_observation'
-  | 'solution_oriented'
-  | 'full_message'
-  | 'behavior_concern'
-  | 'milestone_celebration';
-
-/**
- * Detailed information about a detected quality issue.
- */
-export interface QualityIssueDetail {
-  issueType: QualityIssue;
-  severity: IssueSeverity;
-  description: string;
-  originalText: string;
-  positionStart: number;
-  positionEnd: number;
-  suggestion?: string;
-}
-
-/**
- * A suggested rewrite for improving message quality.
- * Implements 'I' language transformation and sandwich method.
- */
-export interface RewriteSuggestion {
-  originalText: string;
-  suggestedText: string;
-  explanation: string;
-  usesILanguage: boolean;
-  hasSandwichStructure: boolean;
-  confidenceScore: number;
-}
-
-/**
- * Request payload for analyzing message quality.
- */
-export interface MessageAnalysisRequest {
-  messageText: string;
-  language?: MessageLanguage;
-  context?: MessageContext;
-  childId?: string;
-  includeRewrites?: boolean;
-}
-
-/**
- * Response payload for message quality analysis.
- */
-export interface MessageAnalysisResponse {
-  id: string;
-  messageText: string;
-  language: MessageLanguage;
-  qualityScore: number;
-  isAcceptable: boolean;
-  issues: QualityIssueDetail[];
-  rewriteSuggestions: RewriteSuggestion[];
-  hasPositiveOpening: boolean;
-  hasFactualBasis: boolean;
-  hasSolutionFocus: boolean;
-  analysisNotes?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-/**
- * Request payload for creating a message template.
- */
-export interface MessageTemplateRequest {
-  title: string;
-  content: string;
-  category: TemplateCategory;
-  language?: MessageLanguage;
-  description?: string;
-}
-
-/**
- * Message template response.
- */
-export interface MessageTemplateResponse {
-  id: string;
-  title: string;
-  content: string;
-  category: TemplateCategory;
-  language: MessageLanguage;
-  description?: string;
-  isSystem: boolean;
-  usageCount: number;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-/**
- * Request payload for creating a training example.
- */
-export interface TrainingExampleRequest {
-  originalMessage: string;
-  improvedMessage: string;
-  issuesDemonstrated: QualityIssue[];
-  explanation: string;
-  language?: MessageLanguage;
-}
-
-/**
- * Training example response.
- */
-export interface TrainingExampleResponse {
-  id: string;
-  originalMessage: string;
-  improvedMessage: string;
-  issuesDemonstrated: QualityIssue[];
-  explanation: string;
-  language: MessageLanguage;
-  difficultyLevel: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-// ============================================================================
 // API Response Types
 // ============================================================================
 
@@ -879,132 +412,192 @@ export interface ApiErrorResponse {
 }
 
 // ============================================================================
-// Staff Types
+// Medical Protocol Types
 // ============================================================================
 
 /**
- * Staff employment status.
+ * Types of medical protocols supported.
+ * - medication: Acetaminophen protocol (FO-0647)
+ * - topical: Insect repellent protocol (FO-0646)
  */
-export type StaffStatus = 'active' | 'on_leave' | 'terminated' | 'suspended';
+export type ProtocolType = 'medication' | 'topical';
 
 /**
- * Staff employment type.
+ * Authorization status for a medical protocol.
  */
-export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'substitute';
+export type ProtocolAuthorizationStatus = 'active' | 'pending' | 'expired' | 'revoked';
 
 /**
- * Quebec qualification levels for childcare staff.
+ * Acetaminophen concentration options per FO-0647.
  */
-export type QualificationLevel =
-  | 'unqualified'
-  | 'in_training'
-  | 'qualified_assistant'
-  | 'qualified_educator'
-  | 'specialized_educator'
-  | 'director';
+export type AcetaminophenConcentration = '80mg/mL' | '80mg/5mL' | '160mg/5mL';
 
 /**
- * Age group categories for childcare.
+ * Medical protocol definition (Acetaminophen FO-0647, Insect Repellent FO-0646).
  */
-export type AgeGroup = 'infant' | 'toddler' | 'preschool' | 'school_age' | 'mixed';
-
-/**
- * Staff certification status.
- */
-export type CertificationStatus = 'valid' | 'pending' | 'expired' | 'expiring_soon';
-
-/**
- * Staff certification type.
- */
-export type CertificationType =
-  | 'first_aid'
-  | 'cpr'
-  | 'early_childhood_education'
-  | 'food_handling'
-  | 'background_check'
-  | 'other';
-
-/**
- * Individual staff certification record.
- */
-export interface StaffCertification {
+export interface MedicalProtocol {
   id: string;
-  type: CertificationType;
   name: string;
-  issuingOrganization?: string;
-  certificateNumber?: string;
-  issueDate: string;
+  formCode: string;
+  type: ProtocolType;
+  description: string;
+  minimumAgeMonths?: number;
+  requiresWeight: boolean;
+  requiresTemperature: boolean;
+  minimumIntervalHours?: number;
+  maxDailyDoses?: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Dosing information for a specific weight and concentration.
+ */
+export interface DosingInfo {
+  protocolId: string;
+  concentration: AcetaminophenConcentration;
+  minWeightKg: number;
+  maxWeightKg: number;
+  minDoseMg: number;
+  maxDoseMg: number;
+  minDoseMl: number;
+  maxDoseMl: number;
+  displayLabel: string;
+}
+
+/**
+ * Weight record for a child (used for dosing calculations).
+ */
+export interface WeightRecord {
+  weightKg: number;
+  recordedAt: string;
+  expiresAt: string;
+  isExpired: boolean;
+}
+
+/**
+ * Parent authorization for a medical protocol.
+ */
+export interface ProtocolAuthorization {
+  id: string;
+  childId: string;
+  childName: string;
+  protocolId: string;
+  protocolName: string;
+  protocolFormCode: string;
+  protocolType: ProtocolType;
+  status: ProtocolAuthorizationStatus;
+  weightKg: number;
+  weightDate: string;
+  weightExpiryDate: string;
+  isWeightExpired: boolean;
+  signatureDate: string;
+  signatureData?: string;
+  agreementText: string;
   expiryDate?: string;
-  status: CertificationStatus;
-  isRequired: boolean;
+  revokedAt?: string;
+  revokedReason?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /**
- * Staff profile information visible to parents.
- * Contains only parent-appropriate fields (excludes sensitive HR data).
+ * Administration record for a medical protocol.
  */
-export interface StaffProfile {
+export interface ProtocolAdministration {
   id: string;
-  gibbonPersonID: string;
-  firstName: string;
-  lastName: string;
-  preferredName?: string;
-  position: string;
-  department?: string;
-  profilePhotoUrl?: string;
-  qualificationLevel: QualificationLevel;
-  status: StaffStatus;
-  bio?: string;
-  specializations?: string[];
-  certifications?: StaffCertification[];
-}
-
-/**
- * Staff assignment to a classroom or age group.
- */
-export interface StaffAssignment {
-  id: string;
-  staffId: string;
-  staff: StaffProfile;
-  classroomId?: string;
-  classroomName?: string;
-  ageGroup: AgeGroup;
-  roomName?: string;
-  role: string;
-  isPrimaryCaregiver: boolean;
-  startDate: string;
-  endDate?: string;
-}
-
-/**
- * Staff currently working in a room/classroom.
- */
-export interface StaffOnDuty {
-  staff: StaffProfile;
-  clockedInAt: string;
-  assignedRoom?: string;
-  ageGroup?: AgeGroup;
-  isOnBreak: boolean;
-}
-
-/**
- * Staff assigned to a specific child.
- */
-export interface ChildStaffAssignment {
   childId: string;
-  primaryCaregivers: StaffProfile[];
-  classroomStaff: StaffProfile[];
-  specialists?: StaffProfile[];
+  childName: string;
+  protocolId: string;
+  protocolName: string;
+  protocolFormCode: string;
+  administeredAt: string;
+  administeredById: string;
+  administeredByName: string;
+  doseMg?: number;
+  doseMl?: number;
+  concentration?: AcetaminophenConcentration;
+  weightKg: number;
+  temperatureCelsius?: number;
+  temperatureMethod?: string;
+  notes?: string;
+  witnessId?: string;
+  witnessName?: string;
+  followUpTime?: string;
+  followUpCompleted?: boolean;
+  followUpCompletedAt?: string;
+  parentNotified?: boolean;
+  parentNotifiedAt?: string;
+  parentAcknowledged?: boolean;
+  parentAcknowledgedAt?: string;
+  createdAt?: string;
 }
 
 /**
- * Response for fetching staff assigned to a child.
+ * Request payload for creating a protocol authorization.
  */
-export interface ChildStaffResponse {
+export interface CreateProtocolAuthorizationRequest {
   childId: string;
-  classroomName: string;
-  ageGroup: AgeGroup;
-  assignments: ChildStaffAssignment;
-  staffOnDuty?: StaffOnDuty[];
-  lastUpdated: string;
+  protocolId: string;
+  weightKg: number;
+  signatureData: string;
+  agreementText: string;
+}
+
+/**
+ * Request payload for updating a child's weight.
+ */
+export interface UpdateWeightRequest {
+  childId: string;
+  protocolId: string;
+  weightKg: number;
+}
+
+/**
+ * Dosing calculation request for acetaminophen.
+ */
+export interface DosingCalculationRequest {
+  protocolId: string;
+  weightKg: number;
+  concentration?: AcetaminophenConcentration;
+}
+
+/**
+ * Dosing calculation response with all available concentrations.
+ */
+export interface DosingCalculationResponse {
+  weightKg: number;
+  isInRange: boolean;
+  dosingOptions: DosingInfo[];
+  recommendedConcentration?: AcetaminophenConcentration;
+  warningMessage?: string;
+}
+
+/**
+ * Medical protocol summary for dashboard display.
+ */
+export interface ProtocolSummary {
+  protocolId: string;
+  protocolName: string;
+  protocolFormCode: string;
+  protocolType: ProtocolType;
+  authorizationStatus: ProtocolAuthorizationStatus | null;
+  lastAuthorizedAt?: string;
+  weightKg?: number;
+  isWeightExpired?: boolean;
+  lastAdministeredAt?: string;
+  canAdminister: boolean;
+  nextAllowedAdministrationAt?: string;
+}
+
+/**
+ * Child's medical protocol overview.
+ */
+export interface ChildProtocolOverview {
+  childId: string;
+  childName: string;
+  protocols: ProtocolSummary[];
+  pendingActions: number;
+  activeAuthorizations: number;
 }
