@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "036-error-handling-logging",
+  "spec": "201-backend-python-security-performance",
   "state": "building",
   "subtasks": {
     "completed": 6,
-    "total": 8,
+    "total": 26,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Phase 3: Testing and Validation",
+    "current": "Lifespan Context Manager Migration",
     "id": null,
-    "total": 4
+    "total": 3
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 2,
-    "started_at": "2026-02-17T10:42:44.231189"
+    "number": 1,
+    "started_at": "2026-02-17T23:14:10.044310"
   },
-  "last_update": "2026-02-17T10:57:21.029974"
+  "last_update": "2026-02-17T23:14:10.116797"
 }
