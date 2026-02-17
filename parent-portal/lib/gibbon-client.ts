@@ -9,15 +9,20 @@ import { gibbonClient, ApiError } from './api';
 import type {
   Child,
   DailyReport,
+  DietaryProfile,
   Document,
   Invoice,
+  MenuItem,
   Message,
   MessageThread,
+  NutritionalReport,
   PaginatedResponse,
   PaginationParams,
   SendMessageRequest,
   CreateThreadRequest,
   SignDocumentRequest,
+  UpdateDietaryProfileRequest,
+  WeeklyMenu,
 } from './types';
 
 // ============================================================================
@@ -50,6 +55,12 @@ const ENDPOINTS = {
   DOCUMENT: (id: string) => `/api/v1/documents/${id}`,
   SIGN_DOCUMENT: (id: string) => `/api/v1/documents/${id}/sign`,
   DOCUMENT_PDF: (id: string) => `/api/v1/documents/${id}/pdf`,
+
+  // Menu
+  WEEKLY_MENU: '/api/v1/menu/weekly',
+  MENU_ITEMS: '/api/v1/menu/items',
+  DIETARY_PROFILE: (childId: string) => `/api/v1/children/${childId}/dietary-profile`,
+  NUTRITIONAL_REPORT: (childId: string) => `/api/v1/children/${childId}/nutritional-report`,
 } as const;
 
 // ============================================================================
@@ -326,6 +337,95 @@ export function getDocumentPdfUrl(documentId: string): string {
 export async function getPendingDocumentsCount(): Promise<number> {
   const response = await getDocuments({ status: 'pending', limit: 1 });
   return response.total;
+}
+
+// ============================================================================
+// Menu API
+// ============================================================================
+
+/**
+ * Parameters for fetching weekly menu.
+ */
+export interface WeeklyMenuParams {
+  weekStartDate?: string;
+  childId?: string;
+}
+
+/**
+ * Fetch weekly menu with optional date filter.
+ * If childId is provided, includes allergen warnings specific to the child.
+ */
+export async function getWeeklyMenu(params?: WeeklyMenuParams): Promise<WeeklyMenu> {
+  return gibbonClient.get<WeeklyMenu>(ENDPOINTS.WEEKLY_MENU, {
+    params: {
+      week_start_date: params?.weekStartDate,
+      child_id: params?.childId,
+    },
+  });
+}
+
+/**
+ * Parameters for fetching menu items.
+ */
+export interface MenuItemsParams extends PaginationParams {
+  category?: string;
+  isActive?: boolean;
+}
+
+/**
+ * Fetch menu items with optional filters.
+ */
+export async function getMenuItems(
+  params?: MenuItemsParams
+): Promise<PaginatedResponse<MenuItem>> {
+  return gibbonClient.get<PaginatedResponse<MenuItem>>(ENDPOINTS.MENU_ITEMS, {
+    params: {
+      skip: params?.skip,
+      limit: params?.limit,
+      category: params?.category,
+      is_active: params?.isActive,
+    },
+  });
+}
+
+/**
+ * Fetch dietary profile for a child.
+ */
+export async function getDietaryProfile(childId: string): Promise<DietaryProfile> {
+  return gibbonClient.get<DietaryProfile>(ENDPOINTS.DIETARY_PROFILE(childId));
+}
+
+/**
+ * Update dietary profile for a child.
+ */
+export async function updateDietaryProfile(
+  childId: string,
+  request: UpdateDietaryProfileRequest
+): Promise<DietaryProfile> {
+  return gibbonClient.put<DietaryProfile>(ENDPOINTS.DIETARY_PROFILE(childId), request);
+}
+
+/**
+ * Parameters for fetching nutritional report.
+ */
+export interface NutritionalReportParams {
+  startDate: string;
+  endDate: string;
+}
+
+/**
+ * Fetch nutritional report for a child over a date range.
+ */
+export async function getNutritionalReport(
+  childId: string,
+  params: NutritionalReportParams
+): Promise<NutritionalReport> {
+  return gibbonClient.get<NutritionalReport>(ENDPOINTS.NUTRITIONAL_REPORT(childId), {
+    params: {
+      start_date: params.startDate,
+      end_date: params.endDate,
+    },
+  });
 }
 
 // ============================================================================
