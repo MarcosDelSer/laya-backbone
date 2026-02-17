@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "013-task-l-desktop-app",
+  "spec": "041-health-checks-monitoring",
   "state": "building",
   "subtasks": {
-    "completed": 10,
-    "total": 12,
+    "completed": 2,
+    "total": 9,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Integration Verification",
+    "current": "Phase 2: Service Integration",
     "id": null,
-    "total": 3
+    "total": 2
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 4,
-    "started_at": "2026-02-15T05:15:00.899192"
+    "number": 3,
+    "started_at": "2026-02-17T02:56:22.044294"
   },
-  "last_update": "2026-02-15T05:19:32.125362"
+  "last_update": "2026-02-17T03:03:40.970945"
 }
