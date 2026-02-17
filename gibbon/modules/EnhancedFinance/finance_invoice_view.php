@@ -36,6 +36,9 @@ use Gibbon\Tables\DataTable;
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Module\EnhancedFinance\Domain\InvoiceGateway;
 use Gibbon\Module\EnhancedFinance\Domain\PaymentGateway;
+use Gibbon\Module\EnhancedFinance\Service\InvoiceService;
+use Gibbon\Module\EnhancedFinance\Service\PaymentService;
+use Gibbon\Module\EnhancedFinance\Validator\InvoiceValidator;
 
 // Access check
 if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_invoice_view.php') == false) {
@@ -52,10 +55,15 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
         return;
     }
 
-    // Get gateways and settings
+    // Get gateways and services
     $invoiceGateway = $container->get(InvoiceGateway::class);
     $paymentGateway = $container->get(PaymentGateway::class);
     $settingGateway = $container->get(SettingGateway::class);
+
+    // Initialize services
+    $invoiceValidator = new InvoiceValidator();
+    $invoiceService = new InvoiceService($settingGateway, $invoiceGateway, $invoiceValidator);
+    $paymentService = new PaymentService($settingGateway, $paymentGateway, $invoiceGateway);
 
     // Get invoice details
     $invoice = $invoiceGateway->selectInvoiceByID($gibbonEnhancedFinanceInvoiceID);
@@ -82,12 +90,15 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
 
     // Get settings
     $currency = $settingGateway->getSettingByScope('System', 'currency') ?: 'CAD';
-    $gstRate = $settingGateway->getSettingByScope('Enhanced Finance', 'gstRate') ?: '0.05';
-    $qstRate = $settingGateway->getSettingByScope('Enhanced Finance', 'qstRate') ?: '0.09975';
 
-    // Calculate amounts
+    // Get tax rates from service
+    $taxRates = $invoiceService->getTaxRates();
+    $gstRate = $taxRates['gst'];
+    $qstRate = $taxRates['qst'];
+
+    // Calculate amounts using service
     $balanceRemaining = (float)$invoice['balanceRemaining'];
-    $isOverdue = in_array($invoice['status'], ['Issued', 'Partial']) && $invoice['dueDate'] < date('Y-m-d');
+    $isOverdue = $invoiceService->isOverdue($invoice['dueDate'], $invoice['status']);
     $canRecordPayment = in_array($invoice['status'], ['Issued', 'Partial']);
 
     // Determine status display
@@ -165,7 +176,8 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
     $dueDateClass = $isOverdue ? 'text-red-600 font-semibold' : 'font-medium';
     echo '<div class="' . $dueDateClass . '">' . Format::date($invoice['dueDate']) . '</div>';
     if ($isOverdue) {
-        $daysOverdue = floor((time() - strtotime($invoice['dueDate'])) / (60 * 60 * 24));
+        // Calculate days overdue using service
+        $daysOverdue = $invoiceService->getDaysOverdue($invoice['dueDate']);
         echo '<span class="text-xs text-red-500">' . sprintf(__('%d days overdue'), $daysOverdue) . '</span>';
     }
     echo '</div>';
@@ -234,7 +246,8 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
     echo '<div class="text-center p-4 bg-gray-50 rounded-lg">';
     echo '<div class="text-sm text-gray-500 mb-1">' . __('Tax') . '</div>';
     echo '<div class="text-xl font-semibold">' . Format::currency($invoice['taxAmount']) . '</div>';
-    $taxRate = number_format(((float)$gstRate + (float)$qstRate) * 100, 3);
+    // Get combined tax rate from service
+    $taxRate = number_format($invoiceService->getCombinedTaxRate() * 100, 3);
     echo '<div class="text-xs text-gray-400">(' . $taxRate . '%)</div>';
     echo '</div>';
 
@@ -371,15 +384,8 @@ if (isActionAccessible($guid, $connection2, '/modules/EnhancedFinance/finance_in
                 ->placeholder(number_format($balanceRemaining, 2))
                 ->required();
 
-        // Payment Method
-        $methodOptions = [
-            'Cash'       => __('Cash'),
-            'Cheque'     => __('Cheque'),
-            'ETransfer'  => __('E-Transfer'),
-            'CreditCard' => __('Credit Card'),
-            'DebitCard'  => __('Debit Card'),
-            'Other'      => __('Other'),
-        ];
+        // Payment Method (using service)
+        $methodOptions = $paymentService->getPaymentMethods();
         $row = $form->addRow();
             $row->addLabel('method', __('Payment Method'));
             $row->addSelect('method')

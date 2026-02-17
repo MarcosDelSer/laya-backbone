@@ -15,6 +15,9 @@
         <testsuite name="AISync Module Tests">
             <directory>modules/AISync/tests</directory>
         </testsuite>
+        <testsuite name="EnhancedFinance Module Tests">
+            <directory>modules/EnhancedFinance/tests</directory>
+        </testsuite>
         <testsuite name="NotificationEngine Module Tests">
             <directory>modules/NotificationEngine/tests</directory>
         </testsuite>
@@ -29,9 +32,13 @@
         <include>
             <directory suffix=".php">modules/System/Domain</directory>
             <directory suffix=".php">modules/AISync/Domain</directory>
+            <directory suffix=".php">modules/EnhancedFinance/src</directory>
             <directory suffix=".php">modules/NotificationEngine/Domain</directory>
+            <directory suffix=".php">modules/NotificationEngine/src</directory>
             <directory suffix=".php">modules/PhotoManagement/Domain</directory>
+            <directory suffix=".php">modules/PhotoManagement/src</directory>
             <directory suffix=".php">modules/CareTracking/Domain</directory>
+            <directory suffix=".php">modules/CareTracking/src</directory>
         </include>
         <exclude>
             <directory>modules/*/tests</directory>
