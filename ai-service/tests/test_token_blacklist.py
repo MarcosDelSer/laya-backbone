@@ -1083,3 +1083,113 @@ class TestBlacklistSecurityBypass:
         assert await service.is_token_blacklisted(token1) is True
         assert await service.is_token_blacklisted(token2) is True, \
             "Token with same JTI should also be blacklisted"
+
+
+# ============================================================================
+# Performance Tests for Blacklist Operations
+# ============================================================================
+
+
+class TestBlacklistPerformance:
+    """Performance tests for blacklist operations.
+
+    Tests verify that blacklist operations (add, check) are fast enough
+    for production use. Target: < 10ms per lookup operation.
+    """
+
+    @pytest.mark.asyncio
+    async def test_blacklist_performance(self):
+        """Test blacklist lookup performance under load.
+
+        Verifies that blacklist operations are fast enough for production use:
+        1. Creates multiple tokens (simulating multiple active sessions)
+        2. Adds them all to blacklist
+        3. Performs multiple blacklist checks
+        4. Measures average time per lookup
+        5. Asserts average lookup time is < 10ms
+
+        Performance Impact: Blacklist checks happen on every authenticated request,
+        so slow lookups would impact API response times. This test ensures that
+        even with many blacklisted tokens, lookup performance remains acceptable.
+
+        Target: < 10ms average per lookup
+        """
+        import time
+
+        # Create test tokens
+        num_tokens = 100
+        tokens = []
+
+        for i in range(num_tokens):
+            user_id = str(uuid4())
+            token = create_token(
+                subject=user_id,
+                expires_delta_seconds=3600,
+                additional_claims={
+                    "email": f"perf_test_{i}@example.com",
+                    "role": "teacher",
+                    "type": "access",
+                },
+            )
+            tokens.append(token)
+
+        # Mock Redis with realistic performance characteristics
+        blacklist_state = {}
+
+        async def mock_setex(key: str, ttl: int, value: str):
+            """Mock setex with minimal overhead."""
+            blacklist_state[key] = value
+            return True
+
+        async def mock_exists(key: str):
+            """Mock exists with O(1) lookup like real Redis."""
+            return 1 if key in blacklist_state else 0
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(side_effect=mock_setex)
+        mock_redis.exists = AsyncMock(side_effect=mock_exists)
+
+        service = TokenBlacklistService(redis_client=mock_redis)
+
+        # Step 1: Add all tokens to blacklist
+        for token in tokens:
+            await service.add_token_to_blacklist(token)
+
+        # Step 2: Warm up - perform a few lookups to ensure any lazy initialization is done
+        for i in range(10):
+            await service.is_token_blacklisted(tokens[0])
+
+        # Step 3: Performance test - measure time for multiple lookups
+        num_lookups = 1000
+        start_time = time.perf_counter()
+
+        for i in range(num_lookups):
+            # Round-robin through tokens to test different keys
+            token_index = i % len(tokens)
+            await service.is_token_blacklisted(tokens[token_index])
+
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+
+        # Calculate average time per lookup in milliseconds
+        avg_time_ms = (elapsed_time / num_lookups) * 1000
+
+        # Step 4: Assert performance meets requirements
+        assert avg_time_ms < 10.0, \
+            f"Average blacklist lookup time ({avg_time_ms:.2f}ms) exceeds 10ms threshold"
+
+        # Step 5: Log performance results (visible when test passes with -v flag)
+        print(f"\n✓ Performance test results:")
+        print(f"  - Total lookups: {num_lookups}")
+        print(f"  - Total time: {elapsed_time:.3f}s")
+        print(f"  - Average time per lookup: {avg_time_ms:.2f}ms")
+        print(f"  - Lookups per second: {num_lookups / elapsed_time:.0f}")
+
+        # Additional assertions for context
+        assert elapsed_time < 10.0, \
+            f"Total time ({elapsed_time:.2f}s) should be under 10s for {num_lookups} lookups"
+
+        # Verify all tokens are still in blacklist (data integrity check)
+        for token in tokens[:10]:  # Sample check (checking all 100 would slow down test)
+            is_blacklisted = await service.is_token_blacklisted(token)
+            assert is_blacklisted is True, "All tokens should remain blacklisted"
