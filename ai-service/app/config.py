@@ -4,6 +4,7 @@ Loads environment variables with sensible defaults for local development.
 All configuration values can be overridden via environment variables or .env file.
 """
 
+from functools import lru_cache
 from typing import Literal, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -118,5 +119,18 @@ class Settings(BaseSettings):
     )
 
 
-# Global settings instance
-settings = Settings()
+@lru_cache()
+def get_settings() -> Settings:
+    """Get cached settings instance.
+
+    Uses lru_cache to ensure settings are loaded only once,
+    avoiding repeated .env file reads.
+
+    Returns:
+        Settings: Cached settings instance
+    """
+    return Settings()
+
+
+# Global settings instance for backward compatibility
+settings = get_settings()
