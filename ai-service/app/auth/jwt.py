@@ -13,8 +13,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.config import get_settings
 
+
+# Get cached settings instance
+settings = get_settings()
 
 # HTTPBearer security scheme for token extraction
 security = HTTPBearer()
