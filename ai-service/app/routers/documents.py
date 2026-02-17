@@ -28,7 +28,10 @@ from app.schemas.document import (
     SignatureRequestResponse,
     SignatureResponse,
 )
-from app.services.document_service import DocumentService
+from app.services.document_service import (
+    DocumentService,
+    UnauthorizedAccessError,
+)
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
@@ -711,18 +714,31 @@ async def get_document(
 
     Raises:
         HTTPException: 404 if document not found.
+        HTTPException: 403 if user does not have access to the document.
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
-    document = await service.get_document_by_id(document_id)
 
-    if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with id {document_id} not found",
+    try:
+        user_id = UUID(current_user["sub"])
+
+        document = await service.get_document_by_id(
+            document_id=document_id,
+            user_id=user_id,
         )
 
-    return service._document_to_response(document)
+        if document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document with id {document_id} not found",
+            )
+
+        return service._document_to_response(document)
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 @router.patch(
@@ -750,26 +766,40 @@ async def update_document(
 
     Raises:
         HTTPException: 404 if document not found.
+        HTTPException: 403 if user does not have access to the document.
         HTTPException: 400 if document is signed (immutable).
         HTTPException: 401 if not authenticated.
     """
     service = DocumentService(db)
-    result = await service.update_document(document_id, update_data)
 
-    if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document with id {document_id} not found",
+    try:
+        user_id = UUID(current_user["sub"])
+
+        result = await service.update_document(
+            document_id=document_id,
+            update_data=update_data,
+            user_id=user_id,
         )
 
-    # Check if update was rejected due to immutability
-    if isinstance(result, str) and result == "immutable":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot update a signed document. Signed documents are immutable.",
-        )
+        if result is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document with id {document_id} not found",
+            )
 
-    return service._document_to_response(result)
+        # Check if update was rejected due to immutability
+        if isinstance(result, str) and result == "immutable":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot update a signed document. Signed documents are immutable.",
+            )
+
+        return service._document_to_response(result)
+    except UnauthorizedAccessError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
 
 
 # Signature Endpoints (sub-resources of documents)
