@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.cache_warming import warm_all_caches
 from app.dependencies import get_current_user
-from app.redis_client import close_redis
+from app.redis_client import close_redis, ping_redis
 from app.routers import coaching
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
@@ -73,16 +73,60 @@ async def shutdown_event() -> None:
 
 
 @app.get("/")
-async def health_check() -> dict:
-    """Health check endpoint.
+async def root_health_check() -> dict:
+    """Root endpoint with basic health check.
 
     Returns:
-        dict: Service status information
+        dict: Basic service status information
     """
     return {
         "status": "healthy",
         "service": "ai-service",
         "version": "0.1.0",
+    }
+
+
+@app.get("/health")
+async def health_check() -> dict:
+    """Comprehensive health check endpoint with dependency checks.
+
+    Checks the health of the AI service and its dependencies:
+    - Overall service status
+    - Redis connectivity and responsiveness
+
+    Returns:
+        dict: Service status information including:
+            - status: Overall service health ("healthy" or "degraded")
+            - service: Service name
+            - version: Service version
+            - redis: Redis connection status
+                - connected: Boolean indicating if Redis is reachable
+                - responsive: Boolean indicating if Redis responds to ping
+
+    Note:
+        Redis unavailability results in "degraded" status rather than failure,
+        as the service can still function without caching.
+    """
+    # Check Redis health - handle exceptions gracefully
+    try:
+        redis_healthy = await ping_redis()
+    except Exception as e:
+        # Log the error but don't fail the health check
+        logger.warning(f"Redis health check failed with exception: {e}")
+        redis_healthy = False
+
+    # Determine overall status
+    # Service is "degraded" if Redis is unavailable, but still functional
+    overall_status = "healthy" if redis_healthy else "degraded"
+
+    return {
+        "status": overall_status,
+        "service": "ai-service",
+        "version": "0.1.0",
+        "redis": {
+            "connected": redis_healthy,
+            "responsive": redis_healthy,
+        },
     }
 
 
