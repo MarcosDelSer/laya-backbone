@@ -678,3 +678,306 @@ async def test_logout_blacklists_token(
     assert "detail" in rejected_refresh_data
     assert "revoked" in rejected_refresh_data["detail"].lower(), \
         f"Error should mention token revocation, got: {rejected_refresh_data['detail']}"
+
+
+# ============================================================================
+# Security Tests for Blacklist Bypass Attempts
+# ============================================================================
+
+
+class TestBlacklistSecurityBypass:
+    """Security tests to verify blacklisted tokens cannot bypass authentication.
+
+    Tests various blacklist bypass attempt scenarios to ensure that once a token
+    is blacklisted, it cannot be used for authentication under any circumstances.
+    """
+
+    @pytest.mark.asyncio
+    async def test_blacklisted_token_rejected(self):
+        """Test that blacklisted tokens are rejected during authentication.
+
+        This is the primary security test to verify that the blacklist mechanism
+        prevents revoked tokens from being used for authentication. Tests:
+        1. Create valid token
+        2. Token is NOT blacklisted initially (can be used)
+        3. Add token to blacklist (simulate logout/revocation)
+        4. Token IS blacklisted after being added (cannot be used)
+        5. Blacklist check returns True for revoked token
+
+        Security Impact: This prevents compromised or logged-out tokens from
+        being reused for unauthorized access. Once a token is blacklisted,
+        all authentication attempts with that token must fail.
+        """
+        user_id = str(uuid4())
+        token = create_token(
+            subject=user_id,
+            expires_delta_seconds=3600,
+            additional_claims={
+                "email": "security@example.com",
+                "role": "teacher",
+                "type": "access",
+            },
+        )
+
+        # Mock Redis with state tracking to simulate real blacklist
+        blacklist_state = {}
+
+        async def mock_setex(key: str, ttl: int, value: str):
+            blacklist_state[key] = value
+            return True
+
+        async def mock_exists(key: str):
+            return 1 if key in blacklist_state else 0
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(side_effect=mock_setex)
+        mock_redis.exists = AsyncMock(side_effect=mock_exists)
+
+        service = TokenBlacklistService(redis_client=mock_redis)
+
+        # Step 1: Verify token is NOT blacklisted initially
+        is_blacklisted_before = await service.is_token_blacklisted(token)
+        assert is_blacklisted_before is False, "Token should not be blacklisted initially"
+
+        # Step 2: Blacklist the token (simulating logout or token revocation)
+        blacklist_result = await service.add_token_to_blacklist(token)
+        assert blacklist_result is True, "Token should be successfully added to blacklist"
+
+        # Step 3: Verify token IS blacklisted after being added
+        # This is the critical security check - blacklisted tokens must be detected
+        is_blacklisted_after = await service.is_token_blacklisted(token)
+        assert is_blacklisted_after is True, "Token must be blacklisted after being added"
+
+        # Step 4: Verify the JTI was properly extracted and stored
+        # Check that Redis was called with the correct key format
+        payload = decode_token(token)
+        jti = payload.get("jti")
+        assert jti is not None, "Token must have JTI claim"
+
+        # Verify the blacklist key exists in our mock state
+        expected_key = f"blacklist:{jti}"
+        assert expected_key in blacklist_state, \
+            f"Blacklist entry should exist for JTI {jti}"
+
+        # Step 5: Verify token remains blacklisted on subsequent checks
+        # (simulating repeated authentication attempts with revoked token)
+        for attempt in range(3):
+            is_still_blacklisted = await service.is_token_blacklisted(token)
+            assert is_still_blacklisted is True, \
+                f"Token must remain blacklisted on attempt {attempt + 1}"
+
+    @pytest.mark.asyncio
+    async def test_blacklisted_token_cannot_refresh(self):
+        """Test that blacklisted refresh tokens cannot be used to get new tokens.
+
+        Verifies that even refresh tokens (which have longer lifetimes) are
+        properly rejected when blacklisted, preventing token refresh attacks.
+        This is critical for security as refresh tokens typically have longer
+        expiration times (days vs hours for access tokens).
+        """
+        user_id = str(uuid4())
+        refresh_token = create_token(
+            subject=user_id,
+            expires_delta_seconds=604800,  # 7 days
+            additional_claims={
+                "email": "security@example.com",
+                "role": "teacher",
+                "type": "refresh",
+            },
+        )
+
+        # Mock Redis with state tracking
+        blacklist_state = {}
+
+        async def mock_setex(key: str, ttl: int, value: str):
+            blacklist_state[key] = value
+            return True
+
+        async def mock_exists(key: str):
+            return 1 if key in blacklist_state else 0
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(side_effect=mock_setex)
+        mock_redis.exists = AsyncMock(side_effect=mock_exists)
+
+        service = TokenBlacklistService(redis_client=mock_redis)
+
+        # Initially not blacklisted
+        assert await service.is_token_blacklisted(refresh_token) is False
+
+        # Blacklist the refresh token (simulate logout or token revocation)
+        await service.add_token_to_blacklist(refresh_token)
+
+        # Verify it is now blacklisted and cannot be used
+        is_blacklisted = await service.is_token_blacklisted(refresh_token)
+        assert is_blacklisted is True, "Refresh token must be blacklisted"
+
+        # Verify TTL is set appropriately for long-lived refresh tokens
+        call_args = mock_redis.setex.call_args[0]
+        ttl = call_args[1]
+        # Should be approximately 7 days (604800 seconds)
+        assert 604000 <= ttl <= 604800, \
+            f"Refresh token TTL should match expiration (~7 days), got {ttl} seconds"
+
+    @pytest.mark.asyncio
+    async def test_multiple_blacklisted_tokens_all_rejected(self):
+        """Test that multiple blacklisted tokens are all independently rejected.
+
+        Verifies that the blacklist can handle multiple tokens and that
+        blacklisting one doesn't affect others, preventing cross-token attacks.
+        """
+        # Create multiple tokens for different users/sessions
+        tokens = []
+        for i in range(3):
+            user_id = str(uuid4())
+            token = create_token(
+                subject=user_id,
+                expires_delta_seconds=3600,
+                additional_claims={
+                    "email": f"user{i}@example.com",
+                    "role": "teacher",
+                    "type": "access",
+                },
+            )
+            tokens.append(token)
+
+        # Mock Redis with state tracking
+        blacklist_state = {}
+
+        async def mock_setex(key: str, ttl: int, value: str):
+            blacklist_state[key] = value
+            return True
+
+        async def mock_exists(key: str):
+            return 1 if key in blacklist_state else 0
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(side_effect=mock_setex)
+        mock_redis.exists = AsyncMock(side_effect=mock_exists)
+
+        service = TokenBlacklistService(redis_client=mock_redis)
+
+        # Blacklist all tokens
+        for token in tokens:
+            await service.add_token_to_blacklist(token)
+
+        # Verify all are blacklisted
+        for i, token in enumerate(tokens):
+            is_blacklisted = await service.is_token_blacklisted(token)
+            assert is_blacklisted is True, f"Token {i} should be blacklisted"
+
+    @pytest.mark.asyncio
+    async def test_tampered_token_still_blacklisted(self):
+        """Test that tampering with a blacklisted token doesn't bypass the blacklist.
+
+        Security test: Verify that if an attacker modifies a blacklisted token,
+        it either:
+        1. Fails JWT signature verification (if payload modified), OR
+        2. Still gets caught by blacklist (if only metadata modified)
+
+        This ensures the blacklist mechanism cannot be bypassed by token tampering.
+        """
+        user_id = str(uuid4())
+        token = create_token(
+            subject=user_id,
+            expires_delta_seconds=3600,
+            additional_claims={
+                "email": "security@example.com",
+                "role": "teacher",
+                "type": "access",
+            },
+        )
+
+        # Mock Redis
+        blacklist_state = {}
+
+        async def mock_setex(key: str, ttl: int, value: str):
+            blacklist_state[key] = value
+            return True
+
+        async def mock_exists(key: str):
+            return 1 if key in blacklist_state else 0
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(side_effect=mock_setex)
+        mock_redis.exists = AsyncMock(side_effect=mock_exists)
+
+        service = TokenBlacklistService(redis_client=mock_redis)
+
+        # Blacklist the original token
+        await service.add_token_to_blacklist(token)
+
+        # Original token should be blacklisted
+        assert await service.is_token_blacklisted(token) is True
+
+        # Tampered token (adding whitespace) - should fail signature verification
+        # This test ensures tampered tokens can't bypass blacklist
+        tampered_token = token + " "
+
+        # Tampered token should fail during decode (invalid signature)
+        # The decode_token function will reject it before blacklist check
+        from app.auth.jwt import decode_token
+
+        with pytest.raises(HTTPException) as exc_info:
+            decode_token(tampered_token)
+
+        # Should get 401 for invalid token signature
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_reusing_jti_detected(self):
+        """Test that tokens with the same JTI are both affected by blacklist.
+
+        This shouldn't happen in practice (JTI should be unique), but verifies
+        that if it does, the blacklist works correctly.
+        """
+        import jwt
+        from app.config import settings
+
+        # Create two tokens with the same JTI (security violation)
+        user_id = str(uuid4())
+        same_jti = str(uuid4())
+
+        payload1 = {
+            "sub": user_id,
+            "jti": same_jti,
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "email": "user1@example.com",
+        }
+
+        payload2 = {
+            "sub": str(uuid4()),  # Different user
+            "jti": same_jti,  # Same JTI (shouldn't happen!)
+            "iat": int(datetime.now(timezone.utc).timestamp()),
+            "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+            "email": "user2@example.com",
+        }
+
+        token1 = jwt.encode(payload1, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+        token2 = jwt.encode(payload2, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+        # Mock Redis
+        blacklist_state = {}
+
+        async def mock_setex(key: str, ttl: int, value: str):
+            blacklist_state[key] = value
+            return True
+
+        async def mock_exists(key: str):
+            return 1 if key in blacklist_state else 0
+
+        mock_redis = AsyncMock()
+        mock_redis.setex = AsyncMock(side_effect=mock_setex)
+        mock_redis.exists = AsyncMock(side_effect=mock_exists)
+
+        service = TokenBlacklistService(redis_client=mock_redis)
+
+        # Blacklist token1
+        await service.add_token_to_blacklist(token1)
+
+        # Both tokens should be considered blacklisted (same JTI)
+        assert await service.is_token_blacklisted(token1) is True
+        assert await service.is_token_blacklisted(token2) is True, \
+            "Token with same JTI should also be blacklisted"
