@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as redis
 
 from app.auth.schemas import (
     LoginRequest,
@@ -25,6 +26,7 @@ from app.auth.service import AuthService
 from app.auth.dependencies import get_current_user, require_role
 from app.auth.models import UserRole
 from app.database import get_db
+from app.core.redis import get_redis
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 
@@ -149,6 +151,7 @@ async def refresh(
 async def logout(
     logout_request: LogoutRequest,
     db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
 ) -> LogoutResponse:
     """Logout user by invalidating their tokens.
 
@@ -160,9 +163,13 @@ async def logout(
     the access token is provided, it will be blacklisted and the refresh token
     (if it exists) will remain valid until it's used or expires.
 
+    Tokens are blacklisted in both PostgreSQL (persistent) and Redis (fast cache)
+    with TTL matching the token expiration time.
+
     Args:
         logout_request: Request containing tokens to invalidate
         db: Async database session (injected)
+        redis_client: Async Redis client (injected)
 
     Returns:
         LogoutResponse containing:
@@ -188,7 +195,7 @@ async def logout(
             "tokens_invalidated": 2
         }
     """
-    service = AuthService(db)
+    service = AuthService(db, redis_client)
     return await service.logout(logout_request)
 
 
@@ -410,36 +417,38 @@ async def financial_staff_test(
 @router.post(
     "/admin/revoke-token",
     response_model=TokenRevocationResponse,
-    summary="Revoke a token (Admin only)",
-    description="Revoke a specific JWT token by adding it to the blacklist.",
+    summary="Revoke a JWT token",
+    description="Manually revoke any JWT token (admin-only). Used for compromised account scenarios.",
 )
 async def revoke_token(
     revocation_request: TokenRevocationRequest,
     db: AsyncSession = Depends(get_db),
+    redis_client: redis.Redis = Depends(get_redis),
     current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN)),
 ) -> TokenRevocationResponse:
-    """Revoke a JWT token (admin only).
+    """Manually revoke a JWT token (admin-only).
 
-    This endpoint allows administrators to revoke any JWT token by adding it
-    to the Redis blacklist. This is useful for security incidents where a token
-    needs to be immediately invalidated (e.g., compromised credentials, suspicious
-    activity, or terminated employees).
+    This endpoint allows administrators to manually revoke any JWT token
+    (access or refresh) by adding it to the blacklist. This is useful for
+    handling compromised accounts or emergency token revocation scenarios.
 
-    The token is validated before being added to the blacklist. Once blacklisted,
-    the token cannot be used for authentication until it expires naturally.
+    The token is added to both PostgreSQL (persistent) and Redis (fast cache)
+    with TTL matching the token expiration time. Once revoked, the token
+    cannot be used for authentication.
 
     Args:
         revocation_request: Request containing the token to revoke
         db: Async database session (injected)
-        current_user: Current admin user from JWT token (injected)
+        redis_client: Async Redis client (injected)
+        current_user: Current user from JWT token (injected, must be admin)
 
     Returns:
         TokenRevocationResponse containing:
-            - message: Confirmation message
-            - revoked: Boolean indicating successful revocation
+            - message: Success confirmation message
+            - token_revoked: Whether the token was successfully revoked
 
     Raises:
-        HTTPException: 401 Unauthorized if token is invalid or malformed
+        HTTPException: 401 Unauthorized if token is invalid or expired
         HTTPException: 403 Forbidden if user is not an admin
 
     Example:
@@ -452,8 +461,8 @@ async def revoke_token(
         Response:
         {
             "message": "Token has been successfully revoked",
-            "revoked": true
+            "token_revoked": true
         }
     """
-    service = AuthService(db)
+    service = AuthService(db, redis_client)
     return await service.revoke_token(revocation_request)

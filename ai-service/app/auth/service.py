@@ -11,6 +11,7 @@ import secrets
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as redis
 
 from app.auth.models import User, TokenBlacklist, PasswordResetToken
 from app.auth.schemas import (
@@ -27,7 +28,6 @@ from app.auth.schemas import (
     TokenRevocationResponse,
 )
 from app.auth.jwt import create_token as create_jwt_token, decode_token
-from app.auth.blacklist import TokenBlacklistService
 from app.core.security import verify_password, hash_password, hash_token
 from app.config import settings
 
@@ -39,6 +39,7 @@ class AuthService:
 
     Attributes:
         db: Async database session for database operations.
+        redis_client: Optional async Redis client for token blacklist caching.
     """
 
     # Token expiration times (in seconds)
@@ -46,13 +47,15 @@ class AuthService:
     REFRESH_TOKEN_EXPIRE_SECONDS = 7 * 24 * 60 * 60  # 7 days
     PASSWORD_RESET_TOKEN_EXPIRE_SECONDS = 60 * 60  # 1 hour
 
-    def __init__(self, db: AsyncSession) -> None:
-        """Initialize AuthService with database session.
+    def __init__(self, db: AsyncSession, redis_client: Optional[redis.Redis] = None) -> None:
+        """Initialize AuthService with database session and optional Redis client.
 
         Args:
             db: Async database session for database operations.
+            redis_client: Optional async Redis client for token blacklist caching.
         """
         self.db = db
+        self.redis_client = redis_client
 
     async def authenticate_user(
         self, email: str, password: str
@@ -253,16 +256,14 @@ class AuthService:
         Returns:
             bool: True if token is blacklisted, False otherwise
         """
-        blacklist_service = TokenBlacklistService()
-        try:
-            return await blacklist_service.is_token_blacklisted(token)
-        finally:
-            await blacklist_service.close()
+        stmt = select(TokenBlacklist).where(TokenBlacklist.token == token)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none() is not None
 
     async def logout(self, logout_request: LogoutRequest) -> LogoutResponse:
         """Logout user by invalidating their tokens.
 
-        This method adds the provided tokens to a Redis blacklist to prevent their
+        This method adds the provided tokens to a blacklist to prevent their
         further use. Both access and refresh tokens can be invalidated.
 
         Args:
@@ -316,34 +317,70 @@ class AuthService:
         expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
         tokens_invalidated = 0
 
-        # Use Redis blacklist service
-        blacklist_service = TokenBlacklistService()
-        try:
-            # Blacklist access token
-            await blacklist_service.add_token_to_blacklist(
-                logout_request.access_token, expires_at
-            )
-            tokens_invalidated += 1
+        # Blacklist access token in PostgreSQL
+        access_blacklist = TokenBlacklist(
+            token=logout_request.access_token,
+            user_id=user_id,
+            expires_at=expires_at,
+        )
+        self.db.add(access_blacklist)
+        tokens_invalidated += 1
 
-            # Blacklist refresh token if provided
-            if logout_request.refresh_token:
-                try:
-                    refresh_payload = decode_token(logout_request.refresh_token)
-                    refresh_exp_timestamp = refresh_payload.get("exp")
-                    if refresh_exp_timestamp:
-                        refresh_expires_at = datetime.fromtimestamp(
-                            refresh_exp_timestamp, tz=timezone.utc
-                        )
-                        await blacklist_service.add_token_to_blacklist(
-                            logout_request.refresh_token, refresh_expires_at
-                        )
-                        tokens_invalidated += 1
-                except HTTPException:
-                    # If refresh token is invalid, we just skip blacklisting it
-                    # The access token is still blacklisted, which is sufficient
-                    pass
-        finally:
-            await blacklist_service.close()
+        # Blacklist access token in Redis with TTL
+        if self.redis_client:
+            try:
+                # Calculate TTL in seconds (time until token expires)
+                ttl_seconds = int((expires_at - datetime.now(timezone.utc)).total_seconds())
+                if ttl_seconds > 0:
+                    # Store token in Redis with key prefix for organization
+                    await self.redis_client.setex(
+                        f"blacklist:{logout_request.access_token}",
+                        ttl_seconds,
+                        "1"
+                    )
+            except Exception:
+                # If Redis fails, continue - PostgreSQL blacklist is still active
+                pass
+
+        # Blacklist refresh token if provided
+        if logout_request.refresh_token:
+            try:
+                refresh_payload = decode_token(logout_request.refresh_token)
+                refresh_exp_timestamp = refresh_payload.get("exp")
+                if refresh_exp_timestamp:
+                    refresh_expires_at = datetime.fromtimestamp(
+                        refresh_exp_timestamp, tz=timezone.utc
+                    )
+
+                    # Blacklist refresh token in PostgreSQL
+                    refresh_blacklist = TokenBlacklist(
+                        token=logout_request.refresh_token,
+                        user_id=user_id,
+                        expires_at=refresh_expires_at,
+                    )
+                    self.db.add(refresh_blacklist)
+                    tokens_invalidated += 1
+
+                    # Blacklist refresh token in Redis with TTL
+                    if self.redis_client:
+                        try:
+                            refresh_ttl_seconds = int((refresh_expires_at - datetime.now(timezone.utc)).total_seconds())
+                            if refresh_ttl_seconds > 0:
+                                await self.redis_client.setex(
+                                    f"blacklist:{logout_request.refresh_token}",
+                                    refresh_ttl_seconds,
+                                    "1"
+                                )
+                        except Exception:
+                            # If Redis fails, continue - PostgreSQL blacklist is still active
+                            pass
+            except HTTPException:
+                # If refresh token is invalid, we just skip blacklisting it
+                # The access token is still blacklisted, which is sufficient
+                pass
+
+        # Commit changes
+        await self.db.commit()
 
         return LogoutResponse(
             message="Successfully logged out",
@@ -505,8 +542,12 @@ class AuthService:
     ) -> TokenRevocationResponse:
         """Revoke a token by adding it to the blacklist.
 
-        This method is intended for admin use to revoke compromised or suspicious tokens.
-        The token is validated and then added to the Redis blacklist.
+        This method allows administrators to manually revoke any JWT token
+        (access or refresh) by adding it to the blacklist. This is useful for
+        handling compromised accounts or emergency token revocation scenarios.
+
+        The token is added to both PostgreSQL (persistent) and Redis (fast cache)
+        with TTL matching the token expiration time.
 
         Args:
             revocation_request: Request containing the token to revoke
@@ -515,16 +556,26 @@ class AuthService:
             TokenRevocationResponse confirming successful revocation
 
         Raises:
-            HTTPException: 401 Unauthorized if token is invalid
+            HTTPException: 401 Unauthorized if token is invalid or expired
         """
-        # Decode and validate the token
-        try:
-            payload = decode_token(revocation_request.token)
-        except HTTPException as e:
-            # Re-raise with more specific message for admin context
+        # Decode and validate token
+        payload = decode_token(revocation_request.token)
+
+        # Extract user ID from token
+        user_id_str = payload.get("sub")
+        if not user_id_str:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: cannot revoke malformed token",
+                detail="Invalid token: missing subject",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        try:
+            user_id = UUID(user_id_str)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: invalid user ID",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -539,17 +590,41 @@ class AuthService:
 
         expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
 
-        # Use Redis blacklist service
-        blacklist_service = TokenBlacklistService()
-        try:
-            # Add token to blacklist
-            await blacklist_service.add_token_to_blacklist(
-                revocation_request.token, expires_at
+        # Check if token is already blacklisted
+        if await self.is_token_blacklisted(revocation_request.token):
+            return TokenRevocationResponse(
+                message="Token has already been revoked",
+                token_revoked=False,
             )
-        finally:
-            await blacklist_service.close()
+
+        # Blacklist token in PostgreSQL
+        token_blacklist = TokenBlacklist(
+            token=revocation_request.token,
+            user_id=user_id,
+            expires_at=expires_at,
+        )
+        self.db.add(token_blacklist)
+
+        # Blacklist token in Redis with TTL
+        if self.redis_client:
+            try:
+                # Calculate TTL in seconds (time until token expires)
+                ttl_seconds = int((expires_at - datetime.now(timezone.utc)).total_seconds())
+                if ttl_seconds > 0:
+                    # Store token in Redis with key prefix for organization
+                    await self.redis_client.setex(
+                        f"blacklist:{revocation_request.token}",
+                        ttl_seconds,
+                        "1"
+                    )
+            except Exception:
+                # If Redis fails, continue - PostgreSQL blacklist is still active
+                pass
+
+        # Commit changes
+        await self.db.commit()
 
         return TokenRevocationResponse(
             message="Token has been successfully revoked",
-            revoked=True,
+            token_revoked=True,
         )
