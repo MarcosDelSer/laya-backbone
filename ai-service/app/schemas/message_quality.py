@@ -334,6 +334,46 @@ class MessageRewriteRequest(BaseSchema):
     )
 
 
+class MessageQualitySettingsRequest(BaseSchema):
+    """Request schema for updating message quality configuration.
+
+    Directors can configure quality thresholds, enable/disable features,
+    and set notification preferences for the message quality system.
+
+    Attributes:
+        quality_threshold: Minimum quality score to be considered acceptable (0-100)
+        enable_auto_suggestions: Whether to automatically show suggestions
+        enable_notifications: Whether to send quality notifications to educators
+        notification_threshold: Quality score below which to send notifications (0-100)
+        strict_mode: Whether to enforce strict quality checks before sending
+    """
+
+    quality_threshold: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Minimum quality score to be considered acceptable (0-100)",
+    )
+    enable_auto_suggestions: Optional[bool] = Field(
+        default=None,
+        description="Whether to automatically show suggestions",
+    )
+    enable_notifications: Optional[bool] = Field(
+        default=None,
+        description="Whether to send quality notifications to educators",
+    )
+    notification_threshold: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Quality score below which to send notifications (0-100)",
+    )
+    strict_mode: Optional[bool] = Field(
+        default=None,
+        description="Whether to enforce strict quality checks before sending",
+    )
+
+
 class TrainingExampleRequest(BaseSchema):
     """Request schema for creating a training example.
 
@@ -539,6 +579,55 @@ class MessageRewriteResponse(BaseResponse):
     rewrite: RewriteSuggestion = Field(
         ...,
         description="The suggested rewrite with explanation",
+    )
+
+
+class MessageQualitySettingsResponse(BaseResponse):
+    """Response schema for message quality configuration.
+
+    Contains the current message quality system configuration settings.
+
+    Attributes:
+        quality_threshold: Minimum quality score to be considered acceptable (0-100)
+        enable_auto_suggestions: Whether to automatically show suggestions
+        enable_notifications: Whether to send quality notifications to educators
+        notification_threshold: Quality score below which to send notifications (0-100)
+        strict_mode: Whether to enforce strict quality checks before sending
+        updated_at: Timestamp when settings were last updated
+        updated_by: ID of the user who last updated the settings
+    """
+
+    quality_threshold: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Minimum quality score to be considered acceptable (0-100)",
+    )
+    enable_auto_suggestions: bool = Field(
+        ...,
+        description="Whether to automatically show suggestions",
+    )
+    enable_notifications: bool = Field(
+        ...,
+        description="Whether to send quality notifications to educators",
+    )
+    notification_threshold: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Quality score below which to send notifications (0-100)",
+    )
+    strict_mode: bool = Field(
+        ...,
+        description="Whether to enforce strict quality checks before sending",
+    )
+    updated_at: datetime = Field(
+        ...,
+        description="Timestamp when settings were last updated",
+    )
+    updated_by: UUID = Field(
+        ...,
+        description="ID of the user who last updated the settings",
     )
 
 

@@ -25,6 +25,8 @@ from app.schemas.message_quality import (
     MessageAnalysisRequest,
     MessageAnalysisResponse,
     MessageQualityHistoryResponse,
+    MessageQualitySettingsRequest,
+    MessageQualitySettingsResponse,
     MessageRewriteRequest,
     MessageRewriteResponse,
     MessageTemplateListResponse,
@@ -516,6 +518,73 @@ async def get_message_quality_history(
             limit=limit,
             offset=offset,
         )
+    except MessageQualityServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Message quality service error: {str(e)}",
+        )
+
+
+@router.put("/settings", response_model=MessageQualitySettingsResponse)
+async def update_message_quality_settings(
+    request: MessageQualitySettingsRequest,
+    http_request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN)),
+) -> MessageQualitySettingsResponse:
+    """Update message quality configuration settings.
+
+    Allows directors (admins) to configure quality thresholds, enable/disable
+    features, and set notification preferences for the message quality system.
+    This endpoint is restricted to directors only.
+
+    Configuration options include:
+    - quality_threshold: Minimum score to be considered acceptable
+    - enable_auto_suggestions: Auto-show suggestions to educators
+    - enable_notifications: Send notifications for low-quality messages
+    - notification_threshold: Score below which to send notifications
+    - strict_mode: Enforce quality checks before sending messages
+
+    Args:
+        request: The settings update request containing:
+            - quality_threshold: Optional quality threshold (0-100)
+            - enable_auto_suggestions: Optional auto-suggestions flag
+            - enable_notifications: Optional notifications flag
+            - notification_threshold: Optional notification threshold (0-100)
+            - strict_mode: Optional strict mode flag
+        http_request: FastAPI Request for audit logging
+        db: Async database session (injected)
+        current_user: Authenticated admin user from JWT token (injected)
+
+    Returns:
+        MessageQualitySettingsResponse containing:
+        - quality_threshold: Current quality threshold
+        - enable_auto_suggestions: Auto-suggestions status
+        - enable_notifications: Notifications status
+        - notification_threshold: Current notification threshold
+        - strict_mode: Strict mode status
+        - updated_at: Timestamp of last update
+        - updated_by: ID of user who updated settings
+
+    Raises:
+        HTTPException 401: When JWT token is missing or invalid
+        HTTPException 403: When user is not an admin/director
+        HTTPException 400: When settings data is invalid
+        HTTPException 500: When an unexpected error occurs
+    """
+    # Audit logging
+    audit_logger.log_message_quality_access(
+        action="update_settings",
+        current_user=current_user,
+        ip_address=get_client_ip(http_request),
+        user_agent=get_user_agent(http_request),
+        endpoint=get_endpoint(http_request),
+    )
+
+    service = MessageQualityService(db)
+
+    try:
+        return await service.update_settings(request, current_user)
     except MessageQualityServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

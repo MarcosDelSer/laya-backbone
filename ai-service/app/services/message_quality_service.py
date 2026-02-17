@@ -25,6 +25,8 @@ from app.schemas.message_quality import (
     MessageContext,
     MessageQualityHistoryItem,
     MessageQualityHistoryResponse,
+    MessageQualitySettingsRequest,
+    MessageQualitySettingsResponse,
     MessageTemplateListResponse,
     MessageTemplateRequest,
     MessageTemplateResponse,
@@ -2093,4 +2095,69 @@ class MessageQualityService:
             total=total,
             skip=offset,
             limit=limit,
+        )
+
+    async def update_settings(
+        self,
+        request: MessageQualitySettingsRequest,
+        current_user: dict,
+    ) -> MessageQualitySettingsResponse:
+        """Update message quality configuration settings.
+
+        Allows directors (admins) to configure quality thresholds, enable/disable
+        features, and set notification preferences for the message quality system.
+        This method is only accessible to users with admin role.
+
+        Args:
+            request: Settings update request with optional field updates
+            current_user: Current user payload from JWT token (must be admin)
+
+        Returns:
+            MessageQualitySettingsResponse with updated settings
+
+        Raises:
+            MessageQualityServiceError: If settings update fails
+
+        Note:
+            This is a placeholder implementation that returns default settings.
+            In production, this would persist settings to the database and apply
+            them to the message quality analysis system.
+        """
+        # Extract user information
+        user_id = UUID(current_user["sub"])
+
+        # Get current settings (placeholder - in production, would fetch from database)
+        current_settings = {
+            "quality_threshold": 70,
+            "enable_auto_suggestions": True,
+            "enable_notifications": True,
+            "notification_threshold": 60,
+            "strict_mode": False,
+        }
+
+        # Update settings with provided values
+        if request.quality_threshold is not None:
+            current_settings["quality_threshold"] = request.quality_threshold
+        if request.enable_auto_suggestions is not None:
+            current_settings["enable_auto_suggestions"] = request.enable_auto_suggestions
+        if request.enable_notifications is not None:
+            current_settings["enable_notifications"] = request.enable_notifications
+        if request.notification_threshold is not None:
+            current_settings["notification_threshold"] = request.notification_threshold
+        if request.strict_mode is not None:
+            current_settings["strict_mode"] = request.strict_mode
+
+        # In production, would save to database here
+        # For now, just return the updated settings
+
+        return MessageQualitySettingsResponse(
+            id=user_id,  # Placeholder ID
+            quality_threshold=current_settings["quality_threshold"],
+            enable_auto_suggestions=current_settings["enable_auto_suggestions"],
+            enable_notifications=current_settings["enable_notifications"],
+            notification_threshold=current_settings["notification_threshold"],
+            strict_mode=current_settings["strict_mode"],
+            updated_at=datetime.utcnow(),
+            updated_by=user_id,
+            created_at=datetime.utcnow(),
         )
