@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.dependencies import get_current_user
-from app.routers import coaching
+from app.routers import coaching, rbac
 from app.routers.activities import router as activities_router
 from app.routers.analytics import router as analytics_router
 from app.routers.communication import router as communication_router
@@ -29,6 +29,7 @@ app.add_middleware(
 
 # Register API routers
 app.include_router(coaching.router, prefix="/api/v1/coaching", tags=["coaching"])
+app.include_router(rbac.router, prefix="/api/v1/rbac", tags=["rbac"])
 app.include_router(activities_router)
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(communication_router, prefix="/api/v1/communication", tags=["communication"])
