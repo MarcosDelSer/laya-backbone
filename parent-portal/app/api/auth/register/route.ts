@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { aiServiceClient } from '@/lib/api';
 import { setAuthTokens } from '@/lib/auth';
+import { withCsrfProtection } from '@/lib/csrf';
 
 /**
  * Registration request payload interface.
@@ -35,10 +36,14 @@ interface RegisterResponse {
  * Forwards the request to the AI service registration endpoint.
  * Sets the access token in an httpOnly cookie for security.
  *
+ * CSRF Protection: This endpoint requires a valid CSRF token to prevent
+ * cross-site request forgery attacks. The token must be included in the
+ * X-CSRF-Token header or in the request body as 'csrf_token'.
+ *
  * @param request - Next.js request object
  * @returns Registration response with user data
  */
-export async function POST(request: NextRequest) {
+async function handleRegister(request: NextRequest) {
   try {
     // Parse request body
     const body: RegisterRequest = await request.json();
@@ -140,3 +145,9 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+/**
+ * Export POST handler wrapped with CSRF protection.
+ * This ensures that all registration requests are validated for CSRF tokens.
+ */
+export const POST = withCsrfProtection(handleRegister);
