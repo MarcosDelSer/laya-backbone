@@ -18,6 +18,8 @@ from app.auth.schemas import (
     PasswordResetRequestResponse,
     PasswordResetConfirm,
     PasswordResetConfirmResponse,
+    RevokeTokenRequest,
+    RevokeTokenResponse,
 )
 from app.auth.service import AuthService
 from app.auth.dependencies import get_current_user, require_role
@@ -403,3 +405,71 @@ async def financial_staff_test(
         "user": current_user.get("email", "unknown"),
         "role": current_user.get("role", "unknown"),
     }
+
+
+@router.post(
+    "/admin/revoke-token",
+    response_model=RevokeTokenResponse,
+    summary="Revoke a token (Admin only)",
+    description="Revoke any user's authentication token, immediately invalidating it.",
+)
+async def revoke_token(
+    revoke_request: RevokeTokenRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict[str, Any] = Depends(require_role(UserRole.ADMIN)),
+) -> RevokeTokenResponse:
+    """Revoke a user's authentication token.
+
+    This endpoint allows administrators to forcibly revoke any user's token,
+    immediately invalidating it and preventing further use. This is useful for:
+    - Responding to security incidents
+    - Revoking tokens for compromised accounts
+    - Force-logging out specific users
+    - Compliance with access revocation requirements
+
+    The token is added to a Redis blacklist with TTL matching its expiration time.
+    Once revoked, the token cannot be used for any authenticated operations.
+
+    Only users with the ADMIN role can access this endpoint.
+
+    Args:
+        revoke_request: Request containing token to revoke and reason
+        db: Async database session (injected)
+        current_user: Current admin user from JWT token (injected)
+
+    Returns:
+        RevokeTokenResponse containing:
+            - message: Confirmation message
+            - token_id: Identifier of the revoked token (first 10 chars)
+            - revoked_at: ISO 8601 timestamp when token was revoked
+
+    Raises:
+        HTTPException: 401 Unauthorized if:
+            - Token to revoke is invalid or malformed
+            - Token format is incorrect
+        HTTPException: 403 Forbidden if:
+            - User is not an admin
+
+    Example:
+        POST /api/v1/auth/admin/revoke-token
+        Authorization: Bearer <admin_access_token>
+        {
+            "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            "reason": "Security incident - account compromised"
+        }
+
+        Response:
+        {
+            "message": "Token has been revoked",
+            "token_id": "eyJhbGciOi...",
+            "revoked_at": "2026-02-17T16:30:00.000000+00:00"
+        }
+
+    Security:
+        - Requires admin role for access
+        - Reason is logged for audit trail
+        - Token becomes invalid immediately
+        - Automatic expiration via Redis TTL (< 5ms operation)
+    """
+    service = AuthService(db)
+    return await service.revoke_token(revoke_request)
