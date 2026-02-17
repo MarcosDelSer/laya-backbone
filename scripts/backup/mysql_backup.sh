@@ -43,6 +43,9 @@ TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_FILE="${BACKUP_DIR}/${MYSQL_DATABASE}_${TIMESTAMP}.sql.gz"
 LOG_FILE="${BACKUP_DIR}/mysql_backup.log"
 
+# Ensure backup directory exists for logging (created early to allow logging to work)
+mkdir -p "$BACKUP_DIR" 2>/dev/null || true
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -122,11 +125,16 @@ main() {
         FROM information_schema.tables
         WHERE table_schema = '$MYSQL_DATABASE'
     " -N)
+    # Handle NULL/empty result for empty databases
+    if [ -z "$DB_SIZE" ] || [ "$DB_SIZE" = "NULL" ]; then
+        DB_SIZE="0"
+    fi
     log "Database size: ${DB_SIZE} MB"
 
     # Check available disk space
     AVAILABLE_SPACE=$(df -m "$BACKUP_DIR" | tail -1 | awk '{print $4}')
-    REQUIRED_SPACE=$((DB_SIZE * 2)) # Rough estimate with compression
+    # Convert DB_SIZE (which may be decimal) to integer for arithmetic
+    REQUIRED_SPACE=$(echo "$DB_SIZE" | awk '{printf "%.0f", $1 * 2}') # Rough estimate with compression
 
     if [ "$AVAILABLE_SPACE" -lt "$REQUIRED_SPACE" ]; then
         warning "Low disk space: ${AVAILABLE_SPACE}MB available, ~${REQUIRED_SPACE}MB required"
