@@ -2116,3 +2116,149 @@ async def test_initial_version_has_snapshot_data(
     assert version.version_number == 1, "Initial version should be version 1"
     assert version.snapshot_data is not None, "Version 1 snapshot_data should not be None"
     assert version.change_summary == "Initial plan creation", "Should have initial creation message"
+
+
+@pytest.mark.asyncio
+async def test_version_history_preserved(
+    mock_db_session: AsyncMock,
+    mock_user_id: UUID,
+    mock_plan_id: UUID,
+    mock_child_id: UUID,
+) -> None:
+    """Test that multiple updates create multiple versions with unique snapshot_data.
+
+    Verifies that when a plan is updated multiple times, each update
+    creates a new version record with unique snapshot data, preserving
+    the complete version history of the plan.
+    """
+    service = InterventionPlanService(mock_db_session)
+
+    # Track what gets added to the session
+    added_objects = []
+
+    def track_add(obj: Any) -> None:
+        """Track objects added to session."""
+        added_objects.append(obj)
+
+    mock_db_session.add.side_effect = track_add
+
+    # Create a mock plan that will be updated
+    plan = MagicMock()
+    plan.id = mock_plan_id
+    plan.child_id = mock_child_id
+    plan.created_by = mock_user_id
+    plan.title = "Original Title"
+    plan.status = "draft"
+    plan.version = 1
+    plan.child_name = "Test Child"
+    plan.date_of_birth = date(2020, 1, 1)
+    plan.diagnosis = ["autism"]
+    plan.medical_history = None
+    plan.educational_history = None
+    plan.family_context = None
+    plan.review_schedule = "quarterly"
+    plan.next_review_date = date.today() + timedelta(days=90)
+    plan.effective_date = date.today()
+    plan.end_date = None
+    plan.parent_signed = False
+    plan.created_at = datetime.utcnow()
+    plan.updated_at = datetime.utcnow()
+    plan.strengths = []
+    plan.needs = []
+    plan.goals = []
+    plan.strategies = []
+    plan.monitoring = []
+    plan.parent_involvements = []
+    plan.consultations = []
+
+    # Mock the database query to return the plan
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = plan
+    mock_db_session.execute.return_value = mock_result
+
+    # Mock the get_plan method to return a response
+    mock_plan_response = MagicMock()
+
+    # Perform first update
+    with patch.object(service, "get_plan", return_value=mock_plan_response):
+        with patch.object(
+            service,
+            "_create_plan_snapshot",
+            return_value={
+                "title": "Original Title",
+                "version": 1,
+                "created_by": str(mock_user_id),
+            },
+        ):
+            update_request_1 = InterventionPlanUpdate(title="Updated Title 1")
+            await service.update_plan(mock_plan_id, update_request_1, mock_user_id)
+
+    # Update the plan title for the second update
+    plan.title = "Updated Title 1"
+    plan.version = 2
+
+    # Perform second update
+    with patch.object(service, "get_plan", return_value=mock_plan_response):
+        with patch.object(
+            service,
+            "_create_plan_snapshot",
+            return_value={
+                "title": "Updated Title 1",
+                "version": 2,
+                "created_by": str(mock_user_id),
+            },
+        ):
+            update_request_2 = InterventionPlanUpdate(title="Updated Title 2")
+            await service.update_plan(mock_plan_id, update_request_2, mock_user_id)
+
+    # Update the plan title for the third update
+    plan.title = "Updated Title 2"
+    plan.version = 3
+
+    # Perform third update
+    with patch.object(service, "get_plan", return_value=mock_plan_response):
+        with patch.object(
+            service,
+            "_create_plan_snapshot",
+            return_value={
+                "title": "Updated Title 2",
+                "version": 3,
+                "created_by": str(mock_user_id),
+            },
+        ):
+            update_request_3 = InterventionPlanUpdate(
+                status=InterventionPlanStatus.ACTIVE
+            )
+            await service.update_plan(mock_plan_id, update_request_3, mock_user_id)
+
+    # Find all InterventionVersion objects that were added
+    from app.models.intervention_plan import InterventionVersion
+
+    version_objects = [
+        obj for obj in added_objects if isinstance(obj, InterventionVersion)
+    ]
+
+    # Verify that 3 versions were created
+    assert len(version_objects) == 3, "Should create exactly three version records"
+
+    # Verify each version has unique snapshot_data
+    snapshot_data_values = [v.snapshot_data for v in version_objects]
+    assert all(
+        s is not None for s in snapshot_data_values
+    ), "All versions should have snapshot_data"
+
+    # Verify snapshots are different (each update captures different state)
+    assert (
+        snapshot_data_values[0] != snapshot_data_values[1]
+    ), "Version 1 and 2 should have different snapshots"
+    assert (
+        snapshot_data_values[1] != snapshot_data_values[2]
+    ), "Version 2 and 3 should have different snapshots"
+    assert (
+        snapshot_data_values[0] != snapshot_data_values[2]
+    ), "Version 1 and 3 should have different snapshots"
+
+    # Verify version numbers are incrementing
+    assert version_objects[0].version_number == 2, "First update creates version 2"
+    assert version_objects[1].version_number == 3, "Second update creates version 3"
+    assert version_objects[2].version_number == 4, "Third update creates version 4"
