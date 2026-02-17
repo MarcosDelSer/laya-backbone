@@ -56,6 +56,23 @@ from app.schemas.development_profile import (
 )
 
 
+# =============================================================================
+# Exception Classes
+# =============================================================================
+
+
+class DevelopmentProfileServiceError(Exception):
+    """Base exception for development profile service errors."""
+
+    pass
+
+
+class UnauthorizedAccessError(DevelopmentProfileServiceError):
+    """Raised when the user does not have permission to access a resource."""
+
+    pass
+
+
 class DevelopmentProfileService:
     """Service class for development profile management and tracking.
 
